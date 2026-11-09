@@ -1,0 +1,21 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="opssh" Manufacturer="opssh contributors" Version="$(var.Version)"
+          UpgradeCode="{93B28357-F0AD-4D07-8959-F18BFDE560E9}"
+          Compressed="yes" DisableModify="yes" DisableRemove="yes">
+    <util:ProductSearch Id="InstalledOpssh" UpgradeCode="$(var.MsiUpgradeCode)"
+                        Variable="OpsshInstalledVersion" Result="version" />
+    <bal:Condition Condition="OpsshInstalledVersion &lt;= WixBundleVersion"
+                   Message="A newer version of opssh is already installed." />
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="rtfLicense"
+          LicenseFile="!(bindpath.work)\License.rtf" SuppressOptionsUI="yes" SuppressRepair="yes" />
+    </BootstrapperApplication>
+    <Chain>
+      <!-- The visible MSI owns maintenance, including when installed by this bundle. -->
+      <MsiPackage Id="OpsshMsi" SourceFile="!(bindpath.packages)\$(var.MsiName)"
+                  Compressed="yes" Permanent="yes" Visible="yes" Cache="remove" />
+    </Chain>
+  </Bundle>
+</Wix>

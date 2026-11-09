@@ -32,4 +32,10 @@ About offers a manual update check and a startup check toggle, enabled by defaul
 
 The Go core wipes application-owned mutable buffers and disposes private key references when they expire. SDK response strings, parser allocations, and cryptographic internals can retain copies outside that control. The app does not write a cleartext private key to disk. This is not protection from paging, dumps or malicious same-account processes. The [desktop validation procedure](../references/1password-desktop-validation.md) records the remaining vendor checks.
 
+## Windows distribution
+
+The tray project Version defines the triplet for the published tray assembly, Go core greeting and Windows packages. The Windows x64 release has a per-user MSI, a Burn EXE containing the same MSI, and a portable ZIP containing the same application payload. The first-party binaries and installers are unsigned.
+
+The MSI owns the app directory under `%LOCALAPPDATA%\Programs\opssh` and the current user's Start menu shortcut. The shared Programs parent and `%LOCALAPPDATA%\opssh` data remain outside the installed application's ownership. The MSI manages maintenance for installations from either entry point. Installer operations refuse to proceed when the tray or core is running so the user can shut down the signing session through Tray Quit. The installer leaves SSH client configuration and process startup settings under user control.
+
 References: [SSH agent protocol](https://www.rfc-editor.org/rfc/rfc9987.html), [named pipe access rights](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights), [Windows recorded parent process attribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute), [1Password desktop SDK security](https://www.1password.dev/sdks/desktop-app-integrations).

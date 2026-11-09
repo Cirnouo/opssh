@@ -1,0 +1,47 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="opssh" Manufacturer="opssh contributors" Version="$(var.Version)"
+           ProductCode="$(var.ProductCode)" UpgradeCode="$(var.MsiUpgradeCode)"
+           Language="1033" Scope="perUser">
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of opssh is already installed." />
+    <Launch Condition="NOT ALLUSERS" Message="opssh installs only for the current user." />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+    <Property Id="REBOOT" Value="ReallySuppress" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Use WiX only to detect the process names. The user closes opssh. -->
+    <util:CloseApplication Id="DetectOpsshTray" Target="opssh-tray.exe"
+                           Property="OpsshTrayRunning" RebootPrompt="no" />
+    <util:CloseApplication Id="DetectOpsshCore" Target="opssh-core.exe"
+                           Property="OpsshCoreRunning" RebootPrompt="no" />
+    <CustomAction Id="OpsshInUse" Error="Quit opssh before installing, repairing, or removing it." />
+    <InstallExecuteSequence>
+      <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" After="CostFinalize" />
+      <Custom Action="OpsshInUse" After="Wix4CloseApplications_$(sys.BUILDARCHSHORT)"
+              Condition="OpsshTrayRunning OR OpsshCoreRunning" />
+      <Custom Action="override Wix4CheckRebootRequired_$(sys.BUILDARCHSHORT)" Suppress="yes" />
+    </InstallExecuteSequence>
+
+    <!-- Bind the application directory before costing. The shared Programs folder has no Directory row. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="OpsshInstallDir" Name="opssh" />
+    </StandardDirectory>
+    <SetProperty Id="OpsshInstallDir" Before="CostInitialize" Sequence="both"
+                 Value="[LocalAppDataFolder]Programs\opssh\" />
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="OpsshShortcut" Guid="{595E6F0E-D1D2-481C-B6F2-88FFBE624ED6}" Bitness="always64">
+        <Shortcut Id="StartOpssh" Name="opssh" Advertise="no"
+                  Target="[OpsshInstallDir]opssh-tray.exe" WorkingDirectory="OpsshInstallDir" />
+        <RegistryValue Root="HKCU" Key="Software\opssh\Installer\Components"
+                       Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="opssh">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentRef Id="OpsshShortcut" />
+    </Feature>
+  </Package>
+</Wix>

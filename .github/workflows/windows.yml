@@ -14,6 +14,10 @@ jobs:
     name: Windows offline build and tests
     runs-on: windows-2025
     timeout-minutes: 25
+    outputs:
+      release-artifact-id: ${{ steps.release-artifact.outputs.artifact-id }}
+      interop-artifact-id: ${{ steps.interop-artifact.outputs.artifact-id }}
+      provenance-sha256: ${{ steps.provenance.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,16 +30,127 @@ jobs:
           dotnet-version: 10.0.403
       - name: Verify agent and distributable
         shell: pwsh
-        run: ./tools/Test-Windows.ps1 -OutputDirectory .artifacts/ci
+        run: ./tools/Test-Windows.ps1 -OutputDirectory .artifacts/ci -ReportPath .artifacts/ci/release-report.json
       - name: Exercise staged validation in disposable repositories
         shell: pwsh
         run: |
           ./tools/tests/Test-StagedSnapshot.ps1
           ./tools/tests/Test-ValidationProcess.ps1
           ./tools/tests/Test-CommitGate.ps1
+      - name: Bind the validated Release and handshake inputs
+        id: provenance
+        shell: pwsh
+        run: |
+          ./tools/Test-WindowsArtifactHandoff.ps1 -Create -Directory .artifacts/ci
+          $path = '.artifacts/ci/interop/artifact-provenance.json'
+          "sha256=$((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash)" >> $env:GITHUB_OUTPUT
       - name: Preserve the validated release folder
+        id: release-artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: opssh-windows-x64
+          name: ${{ github.run_attempt == 1 && 'opssh-windows-x64' || format('opssh-windows-x64-attempt-{0}', github.run_attempt) }}
           path: .artifacts/ci/release
           if-no-files-found: error
+      - name: Preserve the offline core handshake driver
+        id: interop-artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: opssh-offline-handshake-${{ github.run_attempt }}
+          path: |
+            .artifacts/ci/interop/opssh-core.dll
+            .artifacts/ci/interop/opssh-core.deps.json
+            .artifacts/ci/interop/opssh-core.runtimeconfig.json
+            .artifacts/ci/interop/artifact-provenance.json
+          if-no-files-found: error
+
+  distributables:
+    name: Windows distributables
+    needs: offline
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.403
+      - name: Download the exact validated Windows Release folder
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.offline.outputs.release-artifact-id }}
+          path: .artifacts/ci/release
+      - name: Download the exact offline handshake driver
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.offline.outputs.interop-artifact-id }}
+          path: .artifacts/ci/interop
+      - name: Verify the downloaded build inputs
+        shell: pwsh
+        env:
+          PROVENANCE_SHA256: ${{ needs.offline.outputs.provenance-sha256 }}
+        run: ./tools/Test-WindowsArtifactHandoff.ps1 -Verify -Directory .artifacts/ci -ExpectedSha256 $env:PROVENANCE_SHA256
+      - name: Restore the pinned Windows packaging tools
+        id: wix
+        shell: pwsh
+        run: |
+          $tooling = Join-Path $env:RUNNER_TEMP 'opssh-wix-7.0.1'
+          dotnet tool install wix --tool-path $tooling --version 7.0.1 --source https://api.nuget.org/v3/index.json
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned WiX restore failed.' }
+          $wix = Join-Path $tooling 'wix.exe'
+          foreach ($extension in @('WixToolset.Util.wixext/7.0.1', 'WixToolset.BootstrapperApplications.wixext/7.0.1')) {
+              & $wix extension add -acceptEula wix7 $extension
+              if ($LASTEXITCODE -ne 0) { throw "Pinned WiX extension restore failed for $extension." }
+          }
+          "path=$wix" >> $env:GITHUB_OUTPUT
+      - name: Build and verify the Windows packages
+        id: packages
+        shell: pwsh
+        env:
+          WIX_PATH: ${{ steps.wix.outputs.path }}
+        run: |
+          $release = (Get-Item -LiteralPath .artifacts/ci/release).FullName
+          $version = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $release 'opssh-tray.dll')).Version.ToString(3)
+          foreach ($name in @('opssh-tray.exe', 'opssh-tray.dll', 'opssh-core.exe')) {
+              if ((Get-AuthenticodeSignature -LiteralPath (Join-Path $release $name)).Status -ne 'NotSigned') {
+                  throw "The first-party Windows binary has an unexpected signature state: $name"
+              }
+          }
+          ./tools/Test-DistributionNotices.ps1 -ReleaseDirectory $release
+          ./tools/New-WindowsPackageLegalPayload.ps1 -OutputDirectory .artifacts/ci/legal
+          ./tools/Build-WindowsPackages.ps1 -ReleaseDirectory $release -Version $version `
+              -OutputDirectory .artifacts/ci/packages -WixPath $env:WIX_PATH -LegalDirectory .artifacts/ci/legal
+          ./tools/Test-WindowsPackages.ps1 -ReleaseDirectory $release -Version $version `
+              -PackageDirectory .artifacts/ci/packages -VerificationDirectory .artifacts/ci/package-verification `
+              -WixPath $env:WIX_PATH -LegalDirectory .artifacts/ci/legal
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Test the installer lifecycle as a standard user
+        shell: pwsh
+        env:
+          WIX_PATH: ${{ steps.wix.outputs.path }}
+          PACKAGE_VERSION: ${{ steps.packages.outputs.version }}
+        run: |
+          ./tools/Test-WindowsDistributionLifecycle.ps1 -PackageDirectory .artifacts/ci/packages `
+              -Version $env:PACKAGE_VERSION -InteropDirectory .artifacts/ci/interop `
+              -OutputDirectory .artifacts/ci/lifecycle -WixPath $env:WIX_PATH -LegalDirectory .artifacts/ci/legal
+      - name: Preserve sanitized installer lifecycle evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: opssh-installer-lifecycle-${{ github.run_attempt }}
+          path: .artifacts/ci/lifecycle/lifecycle-report.json
+          if-no-files-found: ignore
+      - name: Preserve the verified Windows distributables
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: opssh-windows-x64-packages-${{ github.run_attempt }}
+          path: |
+            .artifacts/ci/packages/opssh-*-windows-x64.msi
+            .artifacts/ci/packages/opssh-*-windows-x64.exe
+            .artifacts/ci/packages/opssh-*-windows-x64.zip
+          if-no-files-found: error
+          compression-level: 0

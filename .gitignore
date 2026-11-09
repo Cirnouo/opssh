@@ -12,3 +12,4 @@
 *.exe
 *.test
 *.log
+/.wix/

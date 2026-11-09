@@ -11,6 +11,12 @@ opssh 是面向 Windows x64 系统 OpenSSH 的 SSH agent。Go 核心按需通过
 
 当前版本的离线验收使用生成密钥和 mock 存储。生产版使用真实 Desktop SDK 适配器，实际 1Password 条目读取须按[单独的联调步骤](docs/references/1password-desktop-validation.md)验证。
 
+## 从正式发行版安装
+
+正式发行版发布后，可下载 Windows x64 MSI、离线 EXE 安装器和便携 ZIP。MSI 和 EXE 按当前用户安装至 `%LOCALAPPDATA%\Programs\opssh`，可从开始菜单打开 **opssh**。使用 ZIP 时，解压后运行其中的 `opssh-tray.exe`。安装器和项目自带的二进制文件均为未签名状态。 [GitHub 发行版](https://github.com/Cirnouo/opssh/releases)
+
+如果 opssh 正在运行，请在安装、修复、升级或卸载前，从托盘菜单选择 **退出 opssh**。两种安装器装好的程序都由 Windows **已安装的应用** 管理。卸载会移除程序和快捷方式，保留 `%LOCALAPPDATA%\opssh` 中的设置和公钥索引。
+
 ## 构建和使用
 
 安装 Go 1.27.3、.NET 10 SDK 10.0.403 和 PowerShell 7。在 Windows x64 的检出中执行以下命令。

@@ -11,6 +11,12 @@ opssh is an SSH agent for the built-in Windows x64 OpenSSH client. Its Go core f
 
 Offline verification uses generated keys and a mock provider. Production builds use the Desktop SDK adapter. Reading real 1Password items requires the [separate integration procedure](docs/references/1password-desktop-validation.md).
 
+## Install from a stable release
+
+When a stable release is available, download the Windows x64 MSI, offline installer EXE, or portable ZIP. The MSI and EXE install for the current user under `%LOCALAPPDATA%\Programs\opssh`. Open **opssh** from the Start menu. For the ZIP, extract the folder and launch `opssh-tray.exe` inside it. The installers and first-party binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
+
+If opssh is running, choose **Quit opssh** from the tray before installing, repairing, upgrading, or uninstalling. Windows **Installed apps** manages the installed copy from either installer. Uninstall removes the program and shortcut and preserves settings and the public key index under `%LOCALAPPDATA%\opssh`.
+
 ## Build and use
 
 Install Go 1.27.3, .NET 10 SDK 10.0.403, and PowerShell 7. Run this command in a Windows x64 checkout.
