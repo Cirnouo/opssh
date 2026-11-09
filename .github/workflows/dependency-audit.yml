@@ -1,0 +1,50 @@
+name: Dependency audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  supply-chain-security:
+    name: Supply chain security
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.403
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Audit every tracked .NET project in locked mode
+        shell: pwsh
+        run: ./tools/Test-NuGetAudit.ps1
+      - name: Audit reachable Go symbols for Windows amd64
+        shell: pwsh
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=readonly
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOBIN: ${{ runner.temp }}/opssh-audit-bin
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned govulncheck installation failed.' }
+          & (Join-Path $env:GOBIN 'govulncheck.exe') -mode=source -scan=symbol -format=text -db=https://vuln.go.dev ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Go dependency audit failed.' }
+          git diff --quiet HEAD -- go.mod go.sum
+          if ($LASTEXITCODE -ne 0) { throw 'Go audit changed the tracked dependency graph.' }
