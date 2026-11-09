@@ -31,16 +31,32 @@ internal static class AppearanceChecks
         var directory = Path.Combine(Path.GetTempPath(), "opssh-preferences-" + Guid.NewGuid().ToString("N"));
         var path = Path.Combine(directory, "tray-settings.json");
         var simplified = CultureInfo.GetCultureInfo("zh-CN");
+        var englishCulture = CultureInfo.GetCultureInfo("en-GB");
+        var traditional = CultureInfo.GetCultureInfo("zh-TW");
         try
         {
-            Require(UiPreferences.Load(path, simplified) == new UiPreferences("zh-Hans", "system"), "first-run Simplified Chinese");
-            Require(UiPreferences.Load(path, CultureInfo.GetCultureInfo("en-GB")) == new UiPreferences("en", "system"), "first-run English");
-            var preference = new UiPreferences("zh-Hans", "dark");
-            Require(preference.TrySave(path), "save language and theme");
-            Require(UiPreferences.Load(path, CultureInfo.InvariantCulture) == preference, "preference persists after reload");
+            var defaults = UiPreferences.Load(path);
+            Require(defaults == new UiPreferences("system", "system", true), "first-run preferences use system appearance and check for updates");
+            Require(defaults.ResolveLanguage(simplified) == "zh-Hans", "system language follows Simplified Chinese");
+            Require(defaults.ResolveLanguage(englishCulture) == "en", "system language follows English");
+            Require(defaults.ResolveLanguage(traditional) == "en", "system language falls back to English for Traditional Chinese");
+
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path, "{\"language\":\"en\",\"theme\":\"dark\"}");
+            var legacy = UiPreferences.Load(path);
+            Require(legacy == new UiPreferences("en", "dark", true), "legacy preferences preserve explicit appearance and enable update checks");
+            Require(legacy.ResolveLanguage(simplified) == "en", "explicit English overrides the system language");
+            Require(new UiPreferences("zh-Hans", "system").ResolveLanguage(englishCulture) == "zh-Hans",
+                "explicit Simplified Chinese overrides the system language");
+
+            var preference = new UiPreferences("system", "dark", false);
+            Require(preference.TrySave(path), "save system language, dark theme and disabled update checks");
+            Require(UiPreferences.Load(path) == preference, "appearance and update preferences persist after reload");
             Require(!new UiPreferences("zh-Hant", "dark").TrySave(path), "reject an unsupported locale");
             File.WriteAllText(path, "{\"language\":\"en\",\"theme\":\"invalid\"}");
-            Require(UiPreferences.Load(path, simplified) == new UiPreferences("zh-Hans", "system"), "fallback for invalid preferences");
+            Require(UiPreferences.Load(path) == defaults, "fallback for invalid appearance preferences");
+            File.WriteAllText(path, "{\"language\":\"en\",\"theme\":\"dark\",\"autoCheckUpdates\":\"false\"}");
+            Require(UiPreferences.Load(path) == defaults, "fallback for a non-boolean update preference");
         }
         finally
         {

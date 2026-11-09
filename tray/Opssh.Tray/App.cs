@@ -10,6 +10,8 @@ namespace Opssh.Tray;
 
 public sealed partial class App : Application
 {
+    internal static Version InstalledVersion { get; } = typeof(App).Assembly.GetName().Version!;
+
     private readonly Queue<Approval> waiting = new();
     private DispatcherQueue dispatcher = null!;
     private DispatcherQueueTimer? statusTimer;
@@ -23,6 +25,10 @@ public sealed partial class App : Application
     private CoreState? state;
     private bool? locked;
     private UiPreferences preferences = null!;
+    private HttpClient? releaseClient;
+    private CancellationTokenSource? updateCancellation;
+    private bool checkingAtStartup;
+    private ReleaseCheckResult releaseCheck = new(ReleaseCheckStatus.Idle);
     private string availability = "App.Starting";
     private string? message;
     private CancellationTokenSource? operation;
@@ -49,12 +55,14 @@ public sealed partial class App : Application
         DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
         preferences = UiPreferences.Load();
-        Strings.Use(preferences.Language);
+        Strings.Use(preferences.ResolveLanguage());
         icon = new TrayIcon();
         icon.OpenRequested += OpenSettings;
         icon.RestartRequested += () => _ = StartCoreAsync();
         icon.QuitRequested += () => _ = QuitAsync();
         _ = StartCoreAsync();
+        if (preferences.AutoCheckUpdates)
+            _ = CheckForUpdatesAsync(atStartup: true);
     }
 
     private static Mutex? ClaimLogonInstance()
@@ -121,8 +129,10 @@ public sealed partial class App : Application
             return;
         if (settings is null)
         {
-            settings = new SettingsWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance);
+            settings = new SettingsWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance,
+                () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates);
             settings.Closed += SettingsClosed;
+            settings.ShowReleaseCheck(releaseCheck);
             settings.SetAvailability(hello is not null, icon.CanRestart, Strings.Get(availability));
             if (hello is not null)
                 settings.SetHello(hello);
@@ -184,7 +194,19 @@ public sealed partial class App : Application
     private static RectInt32 WindowBounds(AppWindow window) =>
         new(window.Position.X, window.Position.Y, window.Size.Width, window.Size.Height);
 
-    private bool ApplyAppearance(UiPreferences next)
+    private bool ApplyAppearance(string language, string theme) =>
+        ApplyPreferences(preferences with { Language = language, Theme = theme });
+
+    private bool SetAutoCheckUpdates(bool enabled)
+    {
+        if (!ApplyPreferences(preferences with { AutoCheckUpdates = enabled }))
+            return false;
+        if (!enabled && checkingAtStartup)
+            updateCancellation?.Cancel();
+        return true;
+    }
+
+    private bool ApplyPreferences(UiPreferences next)
     {
         if (next == preferences)
             return true;
@@ -198,15 +220,59 @@ public sealed partial class App : Application
             settings?.ApplyTheme(next.Theme);
             prompt?.ApplyTheme(next.Theme);
         }
-        if (next.Language != previous.Language)
+        var language = next.ResolveLanguage();
+        if (language != Strings.Language)
         {
-            Strings.Use(next.Language);
+            Strings.Use(language);
             icon.RefreshLanguage();
             prompt?.ApplyLanguage();
             if (settings is { } current)
                 dispatcher.TryEnqueue(() => ReopenAppearance(current));
         }
         return true;
+    }
+
+    private async Task CheckForUpdatesAsync(bool atStartup)
+    {
+        if (quitting || updateCancellation is not null)
+            return;
+
+        using var check = new CancellationTokenSource();
+        updateCancellation = check;
+        checkingAtStartup = atStartup;
+        ShowReleaseCheck(new(ReleaseCheckStatus.Checking));
+        try
+        {
+            releaseClient ??= new HttpClient(new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                MaxResponseDrainSize = 0
+            });
+            var result = await new ReleaseCheck(releaseClient).CheckAsync(InstalledVersion, check.Token);
+            if (quitting)
+                return;
+            check.Token.ThrowIfCancellationRequested();
+            ShowReleaseCheck(result);
+            if (atStartup && result is { Status: ReleaseCheckStatus.Available, Latest: { } latest })
+                icon.ShowUpdateAvailable(latest);
+        }
+        catch (OperationCanceledException) when (check.IsCancellationRequested)
+        {
+            if (!quitting)
+                ShowReleaseCheck(new(ReleaseCheckStatus.Idle));
+        }
+        finally
+        {
+            updateCancellation = null;
+            checkingAtStartup = false;
+        }
+    }
+
+    private void ShowReleaseCheck(ReleaseCheckResult result)
+    {
+        releaseCheck = result;
+        settings?.ShowReleaseCheck(result);
     }
 
     private void ReopenAppearance(SettingsWindow current)
@@ -596,6 +662,8 @@ public sealed partial class App : Application
         if (quitting)
             return;
         quitting = true;
+        updateCancellation?.Cancel();
+        releaseClient?.Dispose();
         icon.CanRestart = false;
         settings?.Close();
         // If CreateProcess is in progress, let its bounded bootstrap return so

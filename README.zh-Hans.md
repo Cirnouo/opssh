@@ -1,6 +1,6 @@
 # opssh
 
-[English](README.en.md) · **简体中文**
+[English](README.md) · **简体中文**
 
 opssh 是面向 Windows x64 系统 OpenSSH 的 SSH agent。Go 核心按需通过官方 1Password Go SDK 从已登录的桌面应用取得选定密钥，并在内存中签名。C# WinUI 3 托盘常驻，显示进程链和密钥指纹，并管理具体请求的批准。
 
@@ -23,12 +23,18 @@ opssh 是面向 Windows x64 系统 OpenSSH 的 SSH agent。Go 核心按需通过
 
 连接后，opssh 自动读取范围内 SSH Key 条目的公钥。可设置账户默认范围，并通过密码库和 SSH Key 条目名称调整范围。条目规则优先于密码库规则，未设规则时继承上一级。新配置默认包含全部，旧版手工登记的配置保留原有条目范围。
 
+重启后，opssh 会恢复已保存的账户和公钥索引，可以直接使用 SSH，无需再次打开设置点击 **连接**。签名获准后，如果需要读取私钥，opssh 会向 1Password 发起请求。SDK 需要重新授权时，请在 1Password 官方窗口确认。
+
 在要使用 opssh 的 PowerShell 会话里，先记录当前 `$env:SSH_AUTH_SOCK`，然后执行 **设置 → 概览 → SSH 客户端设置 → PowerShell → 显示命令** 中的命令。用系统 OpenSSH 的 `ssh-add -L` 查看公钥。如果当前 SSH 配置设置了 `IdentityAgent`，该设置可能覆盖环境变量选择。回退时关闭这个 shell，或恢复之前的变量值。切换命令只影响当前进程及其子进程。
 
 关闭设置窗口会释放窗口并返回托盘。退出 opssh 会结束两个进程。锁定 opssh 会清除本地签名批准及私钥缓存。在 1Password 中新增、轮换、归档或删除条目后，请在托盘中刷新公钥索引。
 
 ## 语言和主题
 
-在设置的 **外观** 页面选择英语（`en`）或简体中文（`zh-Hans`），以及浅色、深色或跟随系统。初次启动时，托盘根据 Windows 界面语言选择简体中文或英语，主题默认跟随系统。选择会在托盘重启后保留。
+在设置的 **外观** 页面选择英语（`en`）、简体中文（`zh-Hans`）或 **跟随系统**。默认在托盘启动时读取 Windows 显示语言，其他语言回退到英语。主题可以选择浅色、深色或跟随系统。两项偏好都会在托盘重启后保留。
+
+## 更新
+
+在 **关于** 页点击 **检查更新**，可以在 GitHub 上查找更新的正式发行版。**自动检查更新** 默认开启，每次启动托盘时检查一次，发现新版会显示 Windows 通知。可从 **关于** 打开发行页查看。
 
 [行为与安全边界](docs/specs/windows-agent.md) · [开发和验证](CONTRIBUTING.md) · [离线性能实测](docs/references/windows-offline-performance.md)
