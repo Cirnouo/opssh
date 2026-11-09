@@ -40,3 +40,5 @@ In **About**, select **Check for updates** to look for a newer stable GitHub rel
 [Behavior and security boundaries](docs/specs/windows-agent.md) · [Development and verification](CONTRIBUTING.md) · [Offline performance measurements](docs/references/windows-offline-performance.md)
 
 [Support](SUPPORT.md) · [Security reporting](SECURITY.md)
+
+[Apache-2.0 license](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)

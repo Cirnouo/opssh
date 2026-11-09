@@ -1,0 +1,374 @@
+{
+  "wix": {
+    "source": "https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip",
+    "version": "7.0.1",
+    "sourceSize": 12884597,
+    "sourceSha256": "b1ddefd9e957c219cdb945855282462c377d839039d2942e745babef3f44c722"
+  },
+  "go": [
+    {
+      "name": "github.com/1password/onepassword-sdk-go",
+      "version": "v0.4.1",
+      "directory": "go/github.com_1password_onepassword-sdk-go"
+    },
+    {
+      "name": "github.com/dylibso/observe-sdk/go",
+      "version": "v0.0.0-20240828172851-9145d8ad07e1",
+      "directory": "go/github.com_dylibso_observe-sdk_go"
+    },
+    {
+      "name": "github.com/extism/go-sdk",
+      "version": "v1.7.1",
+      "directory": "go/github.com_extism_go-sdk"
+    },
+    {
+      "name": "github.com/gobwas/glob",
+      "version": "v0.2.3",
+      "directory": "go/github.com_gobwas_glob"
+    },
+    {
+      "name": "github.com/ianlancetaylor/demangle",
+      "version": "v0.0.0-20251118225945-96ee0021ea0f",
+      "directory": "go/github.com_ianlancetaylor_demangle"
+    },
+    {
+      "name": "github.com/Microsoft/go-winio",
+      "version": "v0.6.4",
+      "directory": "go/github.com_Microsoft_go-winio"
+    },
+    {
+      "name": "github.com/tetratelabs/wabin",
+      "version": "v0.0.0-20230304001439-f6f874872834",
+      "directory": "go/github.com_tetratelabs_wabin"
+    },
+    {
+      "name": "github.com/tetratelabs/wazero",
+      "version": "v1.11.0",
+      "directory": "go/github.com_tetratelabs_wazero"
+    },
+    {
+      "name": "go.opentelemetry.io/proto/otlp",
+      "version": "v1.9.0",
+      "directory": "go/go.opentelemetry.io_proto_otlp"
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "version": "v0.58.0",
+      "directory": "go/golang.org_x_crypto"
+    },
+    {
+      "name": "golang.org/x/sys",
+      "version": "v0.49.0",
+      "directory": "go/golang.org_x_sys"
+    },
+    {
+      "name": "google.golang.org/protobuf",
+      "version": "v1.36.11",
+      "directory": "go/google.golang.org_protobuf"
+    },
+    {
+      "name": "Go standard library",
+      "version": "go1.27.3",
+      "directory": "go/stdlib"
+    }
+  ],
+  "nuget": [
+    {
+      "name": "Microsoft.NETCore.App.Runtime.win-x64",
+      "version": "10.0.14",
+      "directory": "nuget/microsoft.netcore.app.runtime.win-x64"
+    },
+    {
+      "name": "Microsoft.Web.WebView2",
+      "version": "1.0.3179.45",
+      "directory": "nuget/microsoft.web.webview2"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK",
+      "version": "1.8.260804001",
+      "directory": "nuget/microsoft.windowsappsdk"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.AI",
+      "version": "1.8.79",
+      "directory": "nuget/microsoft.windowsappsdk.ai"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.Base",
+      "version": "1.8.251216001",
+      "directory": "nuget/microsoft.windowsappsdk.base"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.DWrite",
+      "version": "1.8.25122902",
+      "directory": "nuget/microsoft.windowsappsdk.dwrite"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.Foundation",
+      "version": "1.8.260803002",
+      "directory": "nuget/microsoft.windowsappsdk.foundation"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.InteractiveExperiences",
+      "version": "1.8.260708001",
+      "directory": "nuget/microsoft.windowsappsdk.interactiveexperiences"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.ML",
+      "version": "1.8.2197",
+      "directory": "nuget/microsoft.windowsappsdk.ml"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.Runtime",
+      "version": "1.8.260804001",
+      "directory": "nuget/microsoft.windowsappsdk.runtime"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.Widgets",
+      "version": "1.8.251231004",
+      "directory": "nuget/microsoft.windowsappsdk.widgets"
+    },
+    {
+      "name": "Microsoft.WindowsAppSDK.WinUI",
+      "version": "1.8.260803003",
+      "directory": "nuget/microsoft.windowsappsdk.winui"
+    },
+    {
+      "name": "System.Numerics.Tensors",
+      "version": "9.0.0",
+      "directory": "nuget/system.numerics.tensors"
+    },
+    {
+      "name": "Microsoft.Windows.SDK.NET.Ref",
+      "version": "10.0.19041.57",
+      "directory": "nuget/microsoft.windows.sdk.net.ref"
+    }
+  ],
+  "schema": 1,
+  "files": [
+    {
+      "path": "go/github.com_1password_onepassword-sdk-go/LICENSE",
+      "size": 1066,
+      "sha256": "73640cd487337718201bbec4ae0b9bcdac152192ddf263d927e27a98a30da6b1"
+    },
+    {
+      "path": "go/github.com_1password_onepassword-sdk-go/LICENSE-icu_normalizer-v2.1.1",
+      "size": 2195,
+      "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+    },
+    {
+      "path": "go/github.com_dylibso_observe-sdk_go/LICENSE",
+      "size": 11350,
+      "sha256": "3232046a5fce355338637b40a95c60e029e23b281421d0809570d9c8ab7b098f"
+    },
+    {
+      "path": "go/github.com_extism_go-sdk/LICENSE",
+      "size": 1493,
+      "sha256": "ba1246a778c0fa3d8d8e2e63c3334d88e004743c8bb7f069b1b640d2e3f6476f"
+    },
+    {
+      "path": "go/github.com_extism_go-sdk/LICENSE-Extism-kernel-v1.7.0",
+      "size": 1457,
+      "sha256": "d01e60805075b591cbecc63b8582788e54e190f699037f1af19fb5294b7a47ab"
+    },
+    {
+      "path": "go/github.com_gobwas_glob/LICENSE",
+      "size": 1081,
+      "sha256": "e4d63d6f9b65f053ce5beb8c5225a83c7be73010cef4fb849aca0c52d92b9236"
+    },
+    {
+      "path": "go/github.com_ianlancetaylor_demangle/LICENSE",
+      "size": 1479,
+      "sha256": "b73277f7730993ef8e7f80aed83e5309762fed4d77eced982abb2c00657c074d"
+    },
+    {
+      "path": "go/github.com_Microsoft_go-winio/LICENSE",
+      "size": 1077,
+      "sha256": "cf248820bf1178370bb4f1670a59f8748d46bc96d0f64080cd631511c6046409"
+    },
+    {
+      "path": "go/github.com_tetratelabs_wabin/LICENSE",
+      "size": 11349,
+      "sha256": "5d6687371c33901443a366627cf4025618f1ab99006ab494381ccae6e37bcbbe"
+    },
+    {
+      "path": "go/github.com_tetratelabs_wazero/LICENSE",
+      "size": 11349,
+      "sha256": "c46f033d017a5af71a1de0105ec56c41bd47f81a0bbdf779fffe316336dc7c1f"
+    },
+    {
+      "path": "go/github.com_tetratelabs_wazero/NOTICE",
+      "size": 42,
+      "sha256": "e6f0c5c151a3ff1eba8f5930a31ec084ca6d7adda43c8675ab81f7d36af50b4f"
+    },
+    {
+      "path": "go/go.opentelemetry.io_proto_otlp/LICENSE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "go/golang.org_x_crypto/LICENSE",
+      "size": 1453,
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "path": "go/golang.org_x_crypto/PATENTS",
+      "size": 1303,
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "path": "go/golang.org_x_sys/LICENSE",
+      "size": 1453,
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "path": "go/golang.org_x_sys/PATENTS",
+      "size": 1303,
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "path": "go/google.golang.org_protobuf/LICENSE",
+      "size": 1479,
+      "sha256": "4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20"
+    },
+    {
+      "path": "go/google.golang.org_protobuf/PATENTS",
+      "size": 1303,
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "path": "go/stdlib/LICENSE",
+      "size": 1453,
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "path": "go/stdlib/PATENTS",
+      "size": 1303,
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "path": "nuget/microsoft.netcore.app.runtime.win-x64/LICENSE.TXT",
+      "size": 1139,
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+    },
+    {
+      "path": "nuget/microsoft.netcore.app.runtime.win-x64/THIRD-PARTY-NOTICES.TXT",
+      "size": 78041,
+      "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21"
+    },
+    {
+      "path": "nuget/microsoft.web.webview2/LICENSE.txt",
+      "size": 1487,
+      "sha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55"
+    },
+    {
+      "path": "nuget/microsoft.web.webview2/NOTICE.txt",
+      "size": 3894,
+      "sha256": "106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90"
+    },
+    {
+      "path": "nuget/microsoft.windows.sdk.net.ref/sdk_license.rtf",
+      "size": 246945,
+      "sha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.ai/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.base/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.base/NOTICE.txt",
+      "size": 2061,
+      "sha256": "e25393c0d340a1821827b093fa4dbbfcccd8feb7bf769e7fa773e3955cd5314b"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.dwrite/license.txt",
+      "size": 12402,
+      "sha256": "f9ed00147604bdc48c7e62d127d73245781ce53903cef9c3863f8a7ef8120cc2"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.foundation/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.interactiveexperiences/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.ml/license.txt",
+      "size": 14033,
+      "sha256": "656aab74c15aa9f9964bcdcc993eb2755cbdb4822d5e0e3bc61d2e281897f758"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.ml/ThirdPartyNotices.txt",
+      "size": 333022,
+      "sha256": "e00f828e0a33de591a355ae6606d2625f5758da7d2c844db7821c9dd3e3647b6"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.runtime/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.runtime/NOTICE.txt",
+      "size": 2061,
+      "sha256": "e25393c0d340a1821827b093fa4dbbfcccd8feb7bf769e7fa773e3955cd5314b"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.widgets/license.txt",
+      "size": 12402,
+      "sha256": "f9ed00147604bdc48c7e62d127d73245781ce53903cef9c3863f8a7ef8120cc2"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.winui/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk.winui/NOTICE.txt",
+      "size": 2061,
+      "sha256": "e25393c0d340a1821827b093fa4dbbfcccd8feb7bf769e7fa773e3955cd5314b"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk/license.txt",
+      "size": 12637,
+      "sha256": "5b11e6347756e40fe0274bc08c97f89201b94f0d50181a09a00f1f4740840501"
+    },
+    {
+      "path": "nuget/microsoft.windowsappsdk/NOTICE.txt",
+      "size": 2061,
+      "sha256": "e25393c0d340a1821827b093fa4dbbfcccd8feb7bf769e7fa773e3955cd5314b"
+    },
+    {
+      "path": "nuget/system.numerics.tensors/LICENSE.TXT",
+      "size": 1139,
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+    },
+    {
+      "path": "nuget/system.numerics.tensors/THIRD-PARTY-NOTICES.TXT",
+      "size": 75640,
+      "sha256": "40686c6447a7d5b5d3693068e4571b5f483d7ed335aeee773ef662440de4c5d5"
+    },
+    {
+      "path": "wix/LICENSE.TXT",
+      "size": 3341,
+      "sha256": "dfdf2048787635215a6baf3b9d461dee89a2904d246787258a44f072a98d4786"
+    }
+  ],
+  "onePasswordWasm": {
+    "module": "github.com/1password/onepassword-sdk-go",
+    "moduleVersion": "v0.4.1",
+    "build": "0040102",
+    "size": 9509477,
+    "sha256": "23d115f4ac7519b48172df3e8615945572dbda7033d51b44c9490fd533ae0f23",
+    "upstreamRevision": "f60aea196b471a9c35ddad5f9096e5fd2b5c939c",
+    "attribution": null
+  }
+}
