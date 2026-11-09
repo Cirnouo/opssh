@@ -16,7 +16,7 @@ import (
 
 const maxFile = 256 * 1024
 
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 const (
 	MaxKeys   = 64
@@ -151,7 +151,7 @@ func ValidLabel(value string) bool {
 
 func (p Policy) Valid() bool {
 	switch p.Mode {
-	case "off", "until-lock", "until-exit":
+	case "off", "until-exit":
 		return p.Seconds == 0
 	case "fixed", "idle":
 		return p.Seconds > 0 && p.Seconds <= 30*24*60*60
@@ -236,6 +236,16 @@ func Read(path string) (Settings, error) {
 	}
 	if s.Version == 0 {
 		migrateUnversioned(&s, len(wire.Scope) != 0)
+	}
+	if s.Version == 1 {
+		defaults := Default()
+		if s.KeyCache == (Policy{Mode: "until-lock"}) {
+			s.KeyCache = defaults.KeyCache
+		}
+		if s.ApprovalCache == (Policy{Mode: "until-lock"}) {
+			s.ApprovalCache = defaults.ApprovalCache
+		}
+		s.Version = 2
 	}
 	if s.Keys == nil {
 		s.Keys = []Key{}

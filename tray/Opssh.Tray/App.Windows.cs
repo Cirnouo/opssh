@@ -80,7 +80,7 @@ public sealed partial class App
             return false;
         try
         {
-            var response = await current.RequestAsync("default-agent", new { enabled }, token);
+            var response = await RequestNormalAsync(current, "default-agent", new { enabled }, token);
             if (current != session || !response.Ok)
                 return false;
             defaultAgentActive = enabled;
@@ -117,8 +117,8 @@ public sealed partial class App
             if (quitting || session != current || startupWait != wait)
                 return;
             using var statusTimeout = CancellationTokenSource.CreateLinkedTokenSource(wait.Token);
-            statusTimeout.CancelAfter(TimeSpan.FromSeconds(5));
-            var response = await current.RequestAsync("status", null, statusTimeout.Token);
+            statusTimeout.CancelAfter(TimeSpan.FromSeconds(45));
+            var response = await RequestNormalAsync(current, "status", null, statusTimeout.Token);
             if (quitting || session != current || startupWait != wait || response.State is not { } status)
                 return;
 
@@ -174,7 +174,7 @@ public sealed partial class App
         try
         {
             var deadline = DateTimeOffset.UtcNow.AddSeconds(40).ToUnixTimeMilliseconds();
-            var response = await current.RequestAsync("authorize-desktop", new { account, deadline }, timeout.Token);
+            var response = await RequestNormalAsync(current, "authorize-desktop", new { account, deadline }, timeout.Token);
             if (current == session && !quitting && !response.Ok)
                 ShowMessage(CoreFeedback.ResultKey(response.ErrorCode, response.Error));
         }

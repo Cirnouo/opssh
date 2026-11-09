@@ -11,3 +11,31 @@ Before shipping a change to a toolchain or dependency, compare the actual Window
 The Windows App SDK and Windows SDK package terms also have distribution requirements for downstream distributors and end users. Before a public release, review how those terms apply to each of the MSI, EXE and ZIP. See the [pinned Windows App SDK license](licenses/nuget/microsoft.windowsappsdk/license.txt) and the Windows SDK terms in the NuGet notice inventory.
 
 The 1Password Go SDK v0.4.1 embeds WASM core build `0040102`. The SDK license and the identified ICU normalizer notice are in the SDK's notice directory. The upstream Go release does not publish a complete attribution inventory for that exact WASM. Before the first release, obtain the matching upstream notice inventory or document a reviewed basis for redistribution and attribution. Record that evidence against the WASM digest in the notice manifest. [Pinned Go SDK release](https://github.com/1Password/onepassword-sdk-go/releases/tag/v0.4.1) · [Embedded WASM](https://github.com/1Password/onepassword-sdk-go/blob/f60aea196b471a9c35ddad5f9096e5fd2b5c939c/internal/wasm/core.wasm)
+
+## GitHub mark
+
+The tray uses the [GitHub mark from Octicons 19.21.2](https://github.com/primer/octicons/blob/v19.21.2/icons/mark-github-16.svg) under the MIT License.
+
+```text
+MIT License
+
+Copyright (c) 2026 GitHub Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

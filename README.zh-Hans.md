@@ -21,9 +21,10 @@ opssh 是面向 Windows x64 系统 OpenSSH 客户端的 SSH 代理。它使用 1
 
 ## 快速开始
 
-1. 登录 1Password 桌面应用，在 **设置 → 开发者** 中开启 **与 1Password SDK 集成**。准备一个 SSH Key 条目。
-2. 从托盘打开 opssh。在 **1Password 和密钥** 中输入 1Password 侧边栏显示的账户名称或 ID，然后选择 **连接**。如有提示，请在 1Password 窗口中完成验证或授权。
-3. 打开 **概览 → SSH 客户端设置 → PowerShell → 显示命令**，在要使用 opssh 的 shell 中执行显示的命令。运行 `ssh-add -L` 确认列表中有预期的公钥。用 `ssh` 连接接受该密钥的主机，核对进程和指纹后再批准签名。
+1. 登录 1Password 桌面应用并安装官方 CLI。在 1Password 中启用 CLI 和 SDK 集成。
+2. 从托盘打开 opssh，选择账户并完成 1Password 验证。在 **1Password** 页允许需要的保险库，再到 **SSH 密钥** 页选择 **发现 SSH 密钥**。
+3. 在 **设置 → SSH 集成** 中复制 PowerShell 命令，在需要使用 opssh 的会话执行。运行 `ssh-add -L`，确认公钥后再批准签名请求。
+
 
 ## 使用指南
 
@@ -44,9 +45,10 @@ opssh 会恢复已保存的账户和公钥索引。下次从 1Password 读取数
 
 可以。显示的 PowerShell 命令只为当前 shell 及其启动的进程切换代理。如果 SSH 配置中设有 `IdentityAgent`，该设置可能覆盖环境变量。
 
-**锁定 opssh 会清除哪些内容？**
+**清除私钥会撤销授权吗？**
 
-锁定会清除 opssh 的签名批准和已加载的私钥，公钥索引仍可用。账户读取权限由 1Password 单独管理。
+在 **SSH 密钥** 页分别使用 **清除已加载私钥** 和 **撤销全部授权**。桌面访问权限由 1Password 管理。
+
 
 ## 资源与支持
 

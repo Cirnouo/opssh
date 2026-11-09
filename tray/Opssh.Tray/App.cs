@@ -15,7 +15,7 @@ public sealed partial class App : Application
     private readonly Queue<Approval> waiting = new();
     private DispatcherQueue dispatcher = null!;
     private DispatcherQueueTimer? statusTimer;
-    private SettingsWindow? settings;
+    private DashboardWindow? settings;
     private RectInt32 settingsRestoreBounds;
     private TrayIcon icon = null!;
     private Mutex? instance;
@@ -46,6 +46,10 @@ public sealed partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if OPSSH_DASHBOARD_FIXTURE
+        if (TryRunDashboardFixture(args.Arguments))
+            return;
+#endif
         instance = ClaimLogonInstance();
         if (instance is null)
         {
@@ -130,10 +134,13 @@ public sealed partial class App : Application
             return;
         if (settings is null)
         {
-            settings = new SettingsWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance,
-                () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates);
+            settings = new DashboardWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance,
+                () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates,
+                new DashboardActions(OnePasswordAccounts.ListAsync, SwitchAccountAsync, RequestDashboardAsync,
+                    LoginStartup.Read, SetLoginStartup, SetStartupPolicy, () => defaultAgentDesired, SetDefaultAgentAsync, () => defaultAgentActive));
             settings.Closed += SettingsClosed;
             settings.ShowReleaseCheck(releaseCheck);
+            settings.ShowMessage(message is null ? "" : Strings.Get(message));
             settings.SetAvailability(hello is not null, icon.CanRestart, Strings.Get(availability));
             if (hello is not null)
                 settings.SetHello(hello);
@@ -143,7 +150,6 @@ public sealed partial class App : Application
                 settings.SetLockState(value);
             settings.SetBusy(waitingForPoll is not null || (operation is not null && !polling));
             settings.SetUrgentBusy(urgentOperation is not null);
-            settings.ShowMessage(message is null ? "" : Strings.Get(message));
             if (appearanceBounds is { } bounds)
             {
                 settings.AppWindow.MoveAndResize(bounds);
@@ -168,11 +174,11 @@ public sealed partial class App : Application
 
     private void SettingsClosed(object sender, WindowEventArgs args)
     {
-        if (sender is SettingsWindow closed && settings == closed)
+        if (sender is DashboardWindow closed && settings == closed)
             ReleaseSettings(closed);
     }
 
-    private void ReleaseSettings(SettingsWindow closed)
+    private void ReleaseSettings(DashboardWindow closed)
     {
         closed.Closed -= SettingsClosed;
         closed.AppWindow.Changed -= SettingsBoundsChanged;
@@ -276,15 +282,17 @@ public sealed partial class App : Application
         settings?.ShowReleaseCheck(result);
     }
 
-    private void ReopenAppearance(SettingsWindow current)
+    private void ReopenAppearance(DashboardWindow current)
     {
         if (quitting || settings != current)
             return;
         var maximized = current.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
         var bounds = maximized ? settingsRestoreBounds : WindowBounds(current.AppWindow);
+        var page = current.CurrentPage;
         ReleaseSettings(current);
         current.Close();
         OpenSettings(bounds, maximized);
+        settings?.SelectPage(page);
     }
 
     private void PollSettings(DispatcherQueueTimer sender, object args) => _ = RefreshSettingsAsync();
@@ -398,7 +406,7 @@ public sealed partial class App : Application
     {
         var current = session;
         if (current is null || transitioning || quitting || (!background && changingDefaultAgent) ||
-            (background && (!SettingsVisible || waitingForPoll is not null || urgentOperation is not null)) ||
+            (background && (!SettingsVisible || waitingForPoll is not null || urgentOperation is not null || normalRequests.CurrentCount == 0)) ||
             (state is null && command != "status" && !afterAccountRestart) ||
             (command == "unlock" && urgentOperation is not null))
             return;
@@ -427,9 +435,9 @@ public sealed partial class App : Application
         if (!background)
         {
             settings?.SetBusy(true);
-            if (command == "connect")
+            if (command == "reload-vaults")
                 ShowMessage("App.ProviderVerification");
-            else if (command is "set-scope" or "refresh-index")
+            else if (command is "discover" or "set-scope" or "refresh-index")
                 ShowMessage("App.Discovering");
         }
         var revision = stateRevision;
@@ -437,7 +445,7 @@ public sealed partial class App : Application
         var refresh = false;
         try
         {
-            var result = await current.RequestAsync(command, body, timeout.Token);
+            var result = await RequestNormalAsync(current, command, body, timeout.Token);
             if (current != session || quitting)
                 return;
             if (revision != stateRevision || urgentOperation is not null)

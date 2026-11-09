@@ -21,9 +21,10 @@ If opssh is running, choose **Quit opssh** from the tray before installing, repa
 
 ## Quick start
 
-1. Sign in to 1Password Desktop and turn on **Settings → Developer → Integrate with 1Password SDKs**. Have an SSH Key item ready.
-2. Open opssh from the tray. In **1Password & keys**, enter the account name or ID shown in the 1Password sidebar and select **Connect**. Complete any verification or authorization in the 1Password window.
-3. In **Overview → SSH client setup → PowerShell → Show command**, use the displayed command in the shell where you want opssh. Run `ssh-add -L` to confirm the expected public key is listed. Use `ssh` with a host that accepts that key and check the process and fingerprint before approving the signing request.
+1. Sign in to 1Password Desktop and install the official CLI. Enable CLI and SDK integration in 1Password.
+2. Open opssh from the tray, select an account, and complete 1Password verification. On **1Password**, allow the vaults you want to use. On **SSH keys**, select **Discover SSH keys**.
+3. Copy the PowerShell command from **Settings → SSH integration** into the shell where you want to use opssh. Run `ssh-add -L` and check the public key before approving a signing request.
+
 
 ## User guide
 
@@ -44,9 +45,10 @@ opssh restores the saved account and public key index. The next read from 1Passw
 
 Yes. The displayed PowerShell command changes the agent for that shell and processes it starts. Check whether your SSH configuration sets `IdentityAgent`, which can override the environment variable.
 
-**What does locking opssh clear?**
+**Does clearing private keys also revoke approvals?**
 
-It clears opssh's signing approvals and loaded private keys. The public index remains available. 1Password separately manages permission to read from the account.
+Use the separate **Clear loaded private keys** and **Revoke all approvals** controls on **SSH keys**. 1Password manages Desktop access independently.
+
 
 ## Resources and support
 

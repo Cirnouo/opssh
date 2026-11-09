@@ -1,0 +1,1244 @@
+<div id="opssh-agent-dashboard" lang="zh-Hans" aria-label="opssh SSH 代理工作区"></div>
+
+<style>
+  #opssh-agent-dashboard {
+    --mica: light-dark(#f2f2f2, #202020);
+    --layer: light-dark(#f9f9f9, #272727);
+    --card: light-dark(#fff, #2d2d2d);
+    --field: light-dark(#fff, #333);
+    --subtle: light-dark(#f4f4f4, #242424);
+    --ink: light-dark(#1a1a1a, #fff);
+    --quiet: light-dark(#555, #c7c7c7);
+    --line: light-dark(#e2e2e2, #3c3c3c);
+    --edge: light-dark(#d6d6d6, #494949);
+    --hover: light-dark(#ededed, #363636);
+    --selected: light-dark(#e8e8e8, #373737);
+    --accent: light-dark(#005fb8, #60cdff);
+    --on-accent: light-dark(#fff, #082a3b);
+    --good: light-dark(#16732c, #83d694);
+    --warn: light-dark(#865600, #ffd479);
+    --danger: light-dark(#ad2929, #ff9d9d);
+    --warn-bg: light-dark(#fff4ce, #3e341d);
+    --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    --mono: "Cascadia Mono", Consolas, monospace;
+    color-scheme: light dark;
+    color: var(--ink);
+    font: 14px/1.45 var(--font);
+  }
+  #opssh-agent-dashboard[data-theme="light"] { color-scheme: light; }
+  #opssh-agent-dashboard[data-theme="dark"] { color-scheme: dark; }
+  #opssh-agent-dashboard * { box-sizing: border-box; }
+  #opssh-agent-dashboard :is(h1,h2,h3,p,ul,dl,dd) { margin: 0; font-family: var(--font); }
+  #opssh-agent-dashboard h1 { font-size: 28px; line-height: 1.2; font-weight: 600; }
+  #opssh-agent-dashboard h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+  #opssh-agent-dashboard h3 { font-size: 14px; font-weight: 600; }
+  #opssh-agent-dashboard strong { font-weight: 600; }
+  #opssh-agent-dashboard small { font-size: 12px; }
+  #opssh-agent-dashboard :is(button,select,input) { font: inherit; color: inherit; }
+  #opssh-agent-dashboard :is(button,select,input,a):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #opssh-agent-dashboard :is(button,select,input):disabled { opacity: .46; }
+  #opssh-agent-dashboard :is([data-lucide],.lucide) { width: 16px; height: 16px; flex: none; }
+  #opssh-agent-dashboard .ops-window {
+    display: grid; grid-template-rows: 38px minmax(0, 1fr); position: relative;
+    block-size: 642px; min-width: 0; border: 1px solid var(--edge);
+    border-radius: 8px; background: var(--mica);
+  }
+  #opssh-agent-dashboard .ops-titlebar, #opssh-agent-dashboard .ops-title, #opssh-agent-dashboard .ops-caption {
+    display: flex; align-items: center;
+  }
+  #opssh-agent-dashboard .ops-titlebar { justify-content: space-between; padding-inline-start: 14px; font-size: 12px; }
+  #opssh-agent-dashboard .ops-title { gap: 8px; }
+  #opssh-agent-dashboard .ops-app-icon {
+    display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px;
+    border-radius: 4px; color: var(--on-accent); background: var(--accent);
+  }
+  #opssh-agent-dashboard .ops-app-icon :is([data-lucide],.lucide) { width: 12px; height: 12px; }
+  #opssh-agent-dashboard .ops-caption span { display: grid; place-items: center; position: relative; width: 45px; height: 38px; }
+  #opssh-agent-dashboard .ops-caption span::before { content: ""; }
+  #opssh-agent-dashboard .ops-caption .ops-min::before { width: 10px; height: 1px; background: currentColor; }
+  #opssh-agent-dashboard .ops-caption .ops-max::before { width: 10px; height: 10px; border: 1px solid; }
+  #opssh-agent-dashboard .ops-caption .ops-close::before, #opssh-agent-dashboard .ops-caption .ops-close::after {
+    content: ""; position: absolute; width: 12px; height: 1px; background: currentColor; transform: rotate(45deg);
+  }
+  #opssh-agent-dashboard .ops-caption .ops-close::after { transform: rotate(-45deg); }
+  #opssh-agent-dashboard .ops-layout { display: grid; grid-template-columns: 186px minmax(0, 1fr); min-width: 0; min-height: 0; }
+  #opssh-agent-dashboard .ops-sidebar {
+    display: flex; flex-direction: column; gap: 9px; padding: 0 6px 8px; min-width: 0; min-height: 0;
+  }
+  #opssh-agent-dashboard .ops-sidebar ul { display: grid; gap: 3px; padding: 0; list-style: none; }
+  #opssh-agent-dashboard .ops-sidebar ul:last-child { margin-top: auto; }
+  #opssh-agent-dashboard :is(.ops-nav,.ops-icon-button) {
+    display: flex; position: relative; align-items: center; gap: 10px; min-height: 36px;
+    padding: 6px 10px; background: transparent; border: 0; border-radius: 4px; text-align: start;
+  }
+  #opssh-agent-dashboard .ops-nav { width: 100%; }
+  #opssh-agent-dashboard .ops-icon-button { justify-content: center; width: 36px; }
+  #opssh-agent-dashboard :is(.ops-nav,.ops-icon-button):enabled:hover { background: var(--hover); }
+  #opssh-agent-dashboard .ops-nav[aria-current="page"] { background: var(--selected); }
+  #opssh-agent-dashboard .ops-nav[aria-current="page"]::before {
+    content: ""; position: absolute; inset: 50% auto auto 0; transform: translateY(-50%);
+    width: 3px; height: 16px; border-radius: 2px; background: var(--accent);
+  }
+  #opssh-agent-dashboard .ops-layout[data-pane="collapsed"] { grid-template-columns: 48px minmax(0, 1fr); }
+  #opssh-agent-dashboard .ops-layout[data-pane="collapsed"] .ops-nav span { display: none; }
+  #opssh-agent-dashboard .ops-surface {
+    container: ops-content / inline-size;
+    display: grid; position: relative; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0;
+    background: var(--layer); border: 1px solid var(--line); border-inline-end: 0; border-block-end: 0;
+    border-radius: 8px 0 7px 0;
+  }
+  #opssh-agent-dashboard .ops-main {
+    min-width: 0; min-height: 0; padding: clamp(16px, 3.2vw, 32px);
+    overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+  }
+  #opssh-agent-dashboard .ops-signedout .ops-main { display: grid; place-items: center; }
+  #opssh-agent-dashboard .ops-stack { display: grid; align-content: start; gap: 16px; min-width: 0; }
+  #opssh-agent-dashboard .ops-actions {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+  }
+  #opssh-agent-dashboard .ops-heading, #opssh-agent-dashboard .ops-section-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-width: 0;
+  }
+  #opssh-agent-dashboard .ops-heading > div:first-child { display: grid; gap: 4px; min-width: 0; }
+  #opssh-agent-dashboard .ops-quiet { color: var(--quiet); }
+  #opssh-agent-dashboard .ops-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  #opssh-agent-dashboard :is(.ops-button,select,input:not([type="checkbox"])) {
+    min-height: 32px; padding: 4px 10px; max-width: 100%;
+    border: 1px solid var(--edge); border-bottom-color: color-mix(in srgb, var(--edge) 75%, var(--quiet));
+    border-radius: 4px; background: var(--field);
+  }
+  #opssh-agent-dashboard .ops-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    text-align: center; overflow-wrap: anywhere;
+  }
+  #opssh-agent-dashboard .ops-button:enabled:hover { background: var(--hover); }
+  #opssh-agent-dashboard .ops-button.ops-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  #opssh-agent-dashboard .ops-button.ops-primary:enabled:hover { filter: brightness(.94); }
+  #opssh-agent-dashboard :is(.ops-text-button,.ops-link) {
+    padding: 4px 1px; border: 0; background: transparent; color: var(--accent); text-decoration: none;
+  }
+  #opssh-agent-dashboard :is(.ops-text-button,.ops-link):hover { text-decoration: underline; }
+  #opssh-agent-dashboard .ops-status { display: inline-flex; align-items: baseline; gap: 7px; overflow-wrap: anywhere; }
+  #opssh-agent-dashboard .ops-status::before {
+    content: ""; inline-size: 6px; block-size: 6px; border-radius: 50%; flex: none; align-self: center; background: var(--quiet);
+  }
+  #opssh-agent-dashboard .ops-status[data-tone="success"]::before { background: var(--good); }
+  #opssh-agent-dashboard .ops-status[data-tone="warning"]::before { background: var(--warn); }
+  #opssh-agent-dashboard .ops-status[data-tone="danger"]::before { background: var(--danger); }
+  #opssh-agent-dashboard .ops-rows, #opssh-agent-dashboard .ops-table-wrap, #opssh-agent-dashboard .ops-empty {
+    border: 1px solid var(--line); border-radius: 6px; background: var(--card); min-width: 0;
+  }
+  #opssh-agent-dashboard .ops-setting-group { display: grid; gap: 8px; min-width: 0; }
+  #opssh-agent-dashboard .ops-key-counts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--quiet); }
+  #opssh-agent-dashboard .ops-key-counts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #opssh-agent-dashboard .ops-setting-row {
+    display: grid; align-items: center; grid-template-columns: 18px minmax(0,1fr) auto;
+    padding: 11px 13px; gap: 10px; min-height: 52px;
+  }
+  #opssh-agent-dashboard .ops-setting-row + .ops-setting-row { border-top: 1px solid var(--line); }
+  #opssh-agent-dashboard .ops-setting-row p { font-size: 12px; color: var(--quiet); }
+  #opssh-agent-dashboard .ops-setting-row > div { min-width: 0; overflow-wrap: anywhere; }
+  #opssh-agent-dashboard .ops-setting-detail { grid-column: 2 / -1; }
+  #opssh-agent-dashboard .ops-request-status { display: grid; gap: 3px; }
+  #opssh-agent-dashboard .ops-request-status time { font-size: 12px; color: var(--quiet); }
+  #opssh-agent-dashboard .ops-github-mark {
+    width: 16px; height: 16px; background: light-dark(#000, #fff);
+    mask: url("https://cdn.jsdelivr.net/gh/primer/octicons@v19.21.2/icons/mark-github-16.svg") center / contain no-repeat;
+  }
+  #opssh-agent-dashboard .ops-switch { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #opssh-agent-dashboard .ops-switch input {
+    appearance: none; position: relative; width: 40px; height: 20px; margin: 0;
+    border: 1px solid var(--quiet); border-radius: 12px; background: var(--field);
+  }
+  #opssh-agent-dashboard .ops-switch input::before {
+    content: ""; position: absolute; top: 4px; left: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--quiet);
+  }
+  #opssh-agent-dashboard .ops-switch input:checked { border-color: var(--accent); background: var(--accent); }
+  #opssh-agent-dashboard .ops-switch input:checked::before { left: 24px; background: var(--on-accent); }
+  #opssh-agent-dashboard .ops-field { display: grid; gap: 4px; min-width: 0; }
+  #opssh-agent-dashboard .ops-cache-list { display: grid; gap: 8px; }
+  #opssh-agent-dashboard .ops-cache-card { padding: 13px; }
+  #opssh-agent-dashboard .ops-cache-head { display: flex; align-items: start; gap: 10px; }
+  #opssh-agent-dashboard .ops-cache-head > :first-child { margin-top: 2px; }
+  #opssh-agent-dashboard .ops-cache-head p { margin-top: 2px; font-size: 12px; }
+  #opssh-agent-dashboard .ops-cache-grid {
+    display: flex; flex-wrap: wrap; align-items: start; gap: 8px 12px;
+    border-top: 1px solid var(--line); margin: 10px 0 0 26px; padding-top: 10px;
+  }
+  #opssh-agent-dashboard .ops-cache-mode { flex: 0 1 200px; }
+  #opssh-agent-dashboard .ops-cache-duration { flex: 0 1 110px; }
+  #opssh-agent-dashboard .ops-cache-grid input, #opssh-agent-dashboard .ops-cache-grid select { width: 100%; }
+  #opssh-agent-dashboard .ops-cache-hint { margin: 6px 0 0 26px; font-size: 12px; }
+  #opssh-agent-dashboard .ops-cache-error { font-size: 12px; color: var(--danger); }
+  #opssh-agent-dashboard .ops-cache-grid input[aria-invalid="true"] { border-color: var(--danger); }
+  #opssh-agent-dashboard .ops-code {
+    display: block; margin: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--subtle); font: 12px/1.45 var(--mono); overflow-wrap: anywhere; white-space: pre-wrap;
+  }
+  #opssh-agent-dashboard .ops-about-brand { display: flex; align-items: center; gap: 15px; padding-block: 8px; }
+  #opssh-agent-dashboard .ops-about-brand .ops-app-icon { width: 48px; height: 48px; border-radius: 8px; }
+  #opssh-agent-dashboard .ops-about-brand .ops-app-icon :is([data-lucide],.lucide) { width: 25px; height: 25px; }
+  #opssh-agent-dashboard .ops-infobar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 11px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--card);
+  }
+  #opssh-agent-dashboard .ops-infobar > p { flex: 1; overflow-wrap: anywhere; }
+  #opssh-agent-dashboard .ops-infobar > :first-child { color: var(--accent); }
+  #opssh-agent-dashboard .ops-infobar[data-kind="warning"] { background: var(--warn-bg); }
+  #opssh-agent-dashboard .ops-infobar[data-kind="warning"] > :first-child { color: var(--warn); }
+  #opssh-agent-dashboard .ops-feedback {
+    position: absolute; z-index: 5; inset: 9px 14px auto; max-width: 480px; margin-inline: auto;
+    border-radius: 4px; box-shadow: 0 6px 20px #0003;
+  }
+  #opssh-agent-dashboard .ops-feedback .ops-icon-button { flex: none; }
+  #opssh-agent-dashboard .ops-table { width: 100%; border-collapse: collapse; text-align: start; }
+  #opssh-agent-dashboard .ops-table :is(th,td) {
+    padding: 9px 11px; text-align: start; vertical-align: middle; overflow-wrap: anywhere;
+  }
+  #opssh-agent-dashboard .ops-table thead th { color: var(--quiet); font-size: 12px; font-weight: 600; background: var(--subtle); }
+  #opssh-agent-dashboard .ops-table tbody > tr { border-top: 1px solid var(--line); }
+  #opssh-agent-dashboard .ops-table tbody th { font-weight: 400; }
+  #opssh-agent-dashboard .ops-table th:first-child { border-start-start-radius: 6px; }
+  #opssh-agent-dashboard .ops-table th:last-child { border-start-end-radius: 6px; }
+  #opssh-agent-dashboard .ops-key-id { display: grid; min-width: 0; gap: 2px; }
+  #opssh-agent-dashboard .ops-key-id .ops-mono { font-size: 11px; }
+  #opssh-agent-dashboard .ops-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  #opssh-agent-dashboard .ops-row-actions .ops-button, #opssh-agent-dashboard .ops-grant-table .ops-button { min-height: 29px; font-size: 12px; padding-inline: 8px; }
+  #opssh-agent-dashboard .ops-expanded > td { background: var(--subtle); }
+  #opssh-agent-dashboard .ops-grant-pane { display: grid; gap: 8px; padding: 4px 2px 5px 10px; border-inline-start: 2px solid var(--edge); }
+  #opssh-agent-dashboard .ops-grant-table { background: var(--card); }
+  #opssh-agent-dashboard .ops-grant-table :is(th,td) { font-size: 12px; padding-block: 7px; }
+  #opssh-agent-dashboard .ops-activity-page { display: flex; flex-direction: column; min-height: 100%; height: 100%; }
+  #opssh-agent-dashboard .ops-activity-page > :not(.ops-activity-scroll) { flex-shrink: 0; }
+  #opssh-agent-dashboard .ops-activity-scroll {
+    flex: 1 1 auto; min-height: 88px; max-width: 100%; overflow: scroll;
+    overscroll-behavior: contain; scrollbar-gutter: stable;
+  }
+  #opssh-agent-dashboard .ops-activity-scroll thead th { position: sticky; top: 0; z-index: 1; }
+  #opssh-agent-dashboard .ops-activity-table { min-width: 960px; table-layout: fixed; }
+  #opssh-agent-dashboard .ops-activity-table .ops-col-process { width: 56%; }
+  #opssh-agent-dashboard .ops-activity-table .ops-col-key { width: 14%; }
+  #opssh-agent-dashboard .ops-activity-table .ops-col-result { width: 11%; }
+  #opssh-agent-dashboard .ops-activity-table .ops-col-time { width: 19%; }
+  #opssh-agent-dashboard .ops-activity-app { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  #opssh-agent-dashboard .ops-activity-command {
+    display: block; max-width: 100%; margin-top: 4px; padding: 4px 7px; border-radius: 4px;
+    background: var(--subtle); font-size: 12px; white-space: pre;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: transparent transparent;
+  }
+  #opssh-agent-dashboard .ops-activity-command:is(:hover,[data-wheel-scrolling]) {
+    scrollbar-color: var(--quiet) transparent;
+  }
+  #opssh-agent-dashboard .ops-activity-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  #opssh-agent-dashboard .ops-activity-filter { position: relative; min-width: 0; }
+  #opssh-agent-dashboard .ops-activity-filter-button[aria-expanded="true"],
+  #opssh-agent-dashboard .ops-activity-filter-button[data-filtered="true"] {
+    background: var(--selected);
+  }
+  #opssh-agent-dashboard .ops-activity-filter-menu {
+    position: absolute; z-index: 3; inset: calc(100% + 4px) auto auto 0; width: max-content;
+    min-width: 145px; max-width: 240px; max-height: 225px; overflow: auto;
+    display: grid; gap: 2px; padding: 5px;
+    border: 1px solid var(--edge); border-radius: 6px; background: var(--card); box-shadow: 0 5px 15px #0003;
+  }
+  #opssh-agent-dashboard .ops-activity-filter-option {
+    display: flex; align-items: center; gap: 9px; padding: 5px 8px; min-height: 32px;
+    border-radius: 4px; overflow-wrap: anywhere;
+  }
+  #opssh-agent-dashboard .ops-activity-filter-option:hover { background: var(--hover); }
+  #opssh-agent-dashboard .ops-activity-filter-option input { flex: none; accent-color: var(--accent); }
+  #opssh-agent-dashboard .ops-activity-count { color: var(--quiet); font-size: 12px; }
+  #opssh-agent-dashboard .ops-empty { display: grid; justify-items: center; align-content: center; gap: 9px; padding: 24px 12px; text-align: center; }
+  #opssh-agent-dashboard .ops-login {
+    display: grid; justify-items: center; gap: 12px; max-width: 320px; padding: 12px; text-align: center;
+  }
+  #opssh-agent-dashboard .ops-login .ops-app-icon { width: 40px; height: 40px; }
+  #opssh-agent-dashboard .ops-login .ops-app-icon :is([data-lucide],.lucide) { width: 22px; height: 22px; }
+  #opssh-agent-dashboard .ops-dialog {
+    width: min(420px, calc(100% - 24px)); max-height: calc(100% - 22px);
+    padding: 22px; border: 1px solid var(--edge); border-radius: 8px;
+    background: var(--card); color: var(--ink); font: inherit; box-shadow: 0 8px 24px #0004;
+  }
+  #opssh-agent-dashboard .ops-dialog::backdrop { background: #0006; }
+  #opssh-agent-dashboard .ops-dialog .ops-actions { justify-content: end; }
+  #opssh-agent-dashboard .ops-toast {
+    position: absolute; inset: auto 12px 12px auto; z-index: 3; width: min(315px, calc(100% - 24px));
+    padding: 13px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card); box-shadow: 0 5px 18px #0004;
+  }
+  #opssh-agent-dashboard + .ops-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  @media (max-width: 800px) {
+    #opssh-agent-dashboard .ops-layout { grid-template-columns: 152px minmax(0, 1fr); }
+  }
+  @media (max-width: 620px) {
+    #opssh-agent-dashboard .ops-layout { grid-template-columns: 48px minmax(0, 1fr); }
+    #opssh-agent-dashboard .ops-layout:not([data-pane="expanded"]) .ops-nav span { display: none; }
+    #opssh-agent-dashboard .ops-layout[data-pane="expanded"] .ops-sidebar {
+      position: absolute; z-index: 2; inset: 38px auto 0 0; width: 152px;
+      background: var(--mica); border-inline-end: 1px solid var(--line); box-shadow: 6px 0 18px #0003;
+    }
+    #opssh-agent-dashboard .ops-layout[data-pane="expanded"] .ops-surface { grid-column: 2; }
+    #opssh-agent-dashboard .ops-main { padding: 14px; }
+  }
+  @container ops-content (max-width: 590px) {
+    #opssh-agent-dashboard .ops-table :is(th,td) { padding-inline: 8px; }
+    #opssh-agent-dashboard .ops-key-table colgroup { display: none; }
+    #opssh-agent-dashboard .ops-key-table > thead { display: none; }
+    #opssh-agent-dashboard .ops-key-table, #opssh-agent-dashboard .ops-key-table > tbody { display: block; }
+    #opssh-agent-dashboard .ops-key-table > tbody > tr { display: flex; flex-wrap: wrap; align-items: center; }
+    #opssh-agent-dashboard .ops-key-table > tbody > tr:first-child { border-top: 0; }
+    #opssh-agent-dashboard .ops-key-table > tbody > tr > :is(td,th) { display: block; width: auto; }
+    #opssh-agent-dashboard .ops-key-table > tbody > tr > :first-child, #opssh-agent-dashboard .ops-key-table > tbody > .ops-expanded > td { flex: 1 1 100%; }
+    #opssh-agent-dashboard .ops-key-table > tbody > tr > td[data-label]::before {
+      content: attr(data-label); display: block; color: var(--quiet); font-size: 11px;
+    }
+  }
+  @container ops-content (max-width: 475px) {
+    #opssh-agent-dashboard .ops-activity-filters { position: relative; }
+    #opssh-agent-dashboard .ops-activity-filter { position: static; }
+    #opssh-agent-dashboard .ops-activity-filter-menu { max-width: min(240px, 100%); }
+    #opssh-agent-dashboard .ops-setting-row { grid-template-columns: 16px minmax(0,1fr); padding: 9px; }
+    #opssh-agent-dashboard .ops-setting-row > :nth-child(3) { grid-column: 2; justify-self: start; }
+    #opssh-agent-dashboard .ops-grant-table colgroup { display: none; }
+    #opssh-agent-dashboard .ops-grant-table > thead { display: none; }
+    #opssh-agent-dashboard .ops-grant-table, #opssh-agent-dashboard .ops-grant-table > tbody { display: block; }
+    #opssh-agent-dashboard .ops-grant-table > tbody > tr { display: flex; flex-wrap: wrap; align-items: center; }
+    #opssh-agent-dashboard .ops-grant-table > tbody > tr > :is(td,th) { display: block; max-width: 100%; }
+    #opssh-agent-dashboard .ops-grant-table > tbody > tr > :first-child { flex: 1 1 100%; }
+    #opssh-agent-dashboard .ops-grant-table td[data-label]::before {
+      content: attr(data-label); display: block; color: var(--quiet); font-family: var(--font); font-size: 11px;
+    }
+  }
+  @media (pointer: coarse) {
+    #opssh-agent-dashboard :is(button,select,input:not([type="checkbox"])) { min-height: 44px; }
+    #opssh-agent-dashboard :is(input,select) { font-size: 16px; }
+    #opssh-agent-dashboard .ops-activity-filter-option { min-height: 44px; }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById("opssh-agent-dashboard");
+  const vaults = [
+    { id: "work", name: "Engineering" },
+    { id: "personal", name: "Personal" },
+    { id: "archive", name: "Archive" }
+  ];
+  const catalog = [
+    { id: "workstation", vaultId: "work", vault: "Engineering", name: "workstation", fingerprint: "SHA256:…qZ2mFY" },
+    { id: "build", vaultId: "work", vault: "Engineering", name: "build-server", fingerprint: "SHA256:…L4wR8A" },
+    { id: "lab", vaultId: "personal", vault: "Personal", name: "lab-access", fingerprint: "SHA256:…tH9cKQ" },
+    { id: "archived", vaultId: "archive", vault: "Archive", name: "archive-access", fingerprint: "SHA256:…vD6pS8" }
+  ];
+  const pages = {
+    account: ["1Password", "user-round"], keys: ["SSH 密钥", "key-round"],
+    activity: ["活动", "activity"], settings: ["设置", "settings"], about: ["关于", "info"]
+  };
+  const accountChoices = {
+    "": "请选择账户",
+    "Demo Account": "Demo Account · 个人",
+    "Engineering Demo": "Engineering Demo · 团队"
+  };
+  const cacheDefaults = { keyMode: "fixed", keySeconds: "300", approvalMode: "fixed", approvalSeconds: "600" };
+  const settingDefaults = {
+    schemaVersion: 1, startup: false, systemDefault: false, waitForPassword: false, startupAction: "notify",
+    theme: "system", language: "system", autoUpdate: true, ...cacheDefaults
+  };
+  const esc = value => String(value).replace(/[&<>"']/g, char =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  const icon = name => name === "github"
+    ? '<span class="ops-github-mark" aria-hidden="true"></span>'
+    : `<i data-lucide="${name}" aria-hidden="true"></i>`;
+  const quiet = value => `<p class="ops-quiet">${value}</p>`;
+  const button = (label, action, { primary = false, disabled = false, glyph = "", labelFor = "" } = {}) =>
+    `<button type="button" class="ops-button${primary ? " ops-primary" : ""}" data-action="${esc(action)}"${disabled ? " disabled" : ""}${labelFor ? ` aria-label="${esc(labelFor)}"` : ""}>${glyph ? icon(glyph) : ""}${label}</button>`;
+  const textButton = (label, action) =>
+    `<button type="button" class="ops-text-button" data-action="${action}">${label}</button>`;
+  const iconButton = (label, action, glyph) =>
+    `<button type="button" class="ops-icon-button" aria-label="${label}" data-action="${action}">${icon(glyph)}</button>`;
+  const heading = (title, description, actions = "") =>
+    `<header class="ops-heading"><div><h1>${title}</h1>${description ? quiet(description) : ""}</div>${actions ? `<div class="ops-actions">${actions}</div>` : ""}</header>`;
+  const info = (message, { kind = "info", dismissible = false } = {}) =>
+    `<div class="ops-infobar" data-kind="${kind}">${icon(kind === "warning" ? "triangle-alert" : "info")}<p>${message}</p>${dismissible ? iconButton("关闭提示", "dismiss", "x") : ""}</div>`;
+  const row = (glyph, title, description, control = "", detail = "") =>
+    `<div class="ops-setting-row">${icon(glyph)}<div><strong>${title}</strong>${description ? quiet(description) : ""}</div><div>${control}</div>${detail ? `<div class="ops-setting-detail">${detail}</div>` : ""}</div>`;
+  const select = (label, action, choices, value, { disabled = false } = {}) =>
+    `<select data-action="${action}" aria-label="${label}"${disabled ? " disabled" : ""}>${Object.entries(choices).map(([id, name]) =>
+      `<option value="${id}"${id === value ? " selected" : ""}>${name}</option>`).join("")}</select>`;
+  const toggle = (label, action, value, { disabled = false } = {}) =>
+    `<label class="ops-switch"><input type="checkbox" role="switch" data-action="${action}" aria-label="${label}"${value ? " checked" : ""}${disabled ? " disabled" : ""}><span>${value ? "开" : "关"}</span></label>`;
+  const metricState = (label, tone = "neutral") => `<span class="ops-status" data-tone="${tone}">${esc(label)}</span>`;
+  const appIcon = glyph => `<span class="ops-app-icon" aria-hidden="true">${icon(glyph)}</span>`;
+  const timed = mode => mode === "fixed" || mode === "idle";
+
+  function localTime(timestamp) {
+    const value = new Date(timestamp);
+    const pad = part => String(part).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+  }
+
+  const emptyActivityFilters = () => ({ process: new Set(), key: new Set(), result: new Set(), day: new Set() });
+
+  function sampleActivity(now) {
+    const examples = [
+      ["warp.exe", "workstation", "已允许"],
+      ["Code.exe", "build-server", "已允许"],
+      ["WindowsTerminal.exe", "lab-access", "已拒绝"],
+      ["Code.exe", "workstation", "已允许"],
+      ["warp.exe", "build-server", "已取消"],
+      ["WindowsTerminal.exe", "workstation", "已允许"],
+      ["warp.exe", "lab-access", "已拒绝"]
+    ];
+    const appPids = { "warp.exe": 10432, "Code.exe": 13108, "WindowsTerminal.exe": 8420 };
+    const commands = {
+      workstation: "ssh -v -o ConnectTimeout=10 -o ForwardAgent=no -o ServerAliveInterval=30 workstation.example.test",
+      "build-server": "ssh -T -o BatchMode=yes -o ControlMaster=no -o StrictHostKeyChecking=yes git@build.example.test",
+      "lab-access": "ssh lab.example.test"
+    };
+    const entry = ([process, key, result], time) => ({ process, appPid: appPids[process], command: commands[key], key, result, time });
+    const recent = examples.slice(0, 3).map((example, index) => entry(example, now - (2 + index * 4) * 60000));
+    const history = [1, 2, 3].flatMap(days => examples.map((example, index) => {
+      const time = new Date(now);
+      time.setDate(time.getDate() - days);
+      time.setHours(17 - index, 18, 0, 0);
+      return entry(example, time.getTime());
+    }));
+    return [...recent, ...history];
+  }
+
+  function createModel(scenario, priorSettings = settingDefaults, startupAccount = "") {
+    const ready = scenario === "ready" || scenario === "provider-failed";
+    const connected = ready || scenario === "new-account";
+    const startup = scenario === "startup";
+    const settings = { ...priorSettings, waitForPassword: startup || priorSettings.waitForPassword };
+    const account = connected ? "Demo Account" : startup ? startupAccount : "";
+    const requestOnStartup = startup && Boolean(account) && settings.startupAction === "request";
+    const allowed = ready ? ["work", "personal"] : [];
+    const now = Date.now();
+    return {
+      settings,
+      page: ready ? "keys" : "account", pane: "auto",
+      connected, account, accountChoice: startup ? account : "",
+      availableAccounts: scenario === "no-accounts" ? {} : accountChoices,
+      allowedVaults: new Set(allowed),
+      lastDesktopRequest: connected ? { outcome: scenario === "provider-failed" ? "failure" : "success", at: now - 2 * 60000 } : null,
+      hasDiscovered: ready, keys: ready ? catalog.filter(key => allowed.includes(key.vaultId)) : [],
+      loaded: new Set(ready && settings.keyMode !== "off" ? ["workstation", "build"] : []), expanded: new Set(),
+      grants: ready && settings.approvalMode !== "off" ? [
+        { id: "warp", keyId: "workstation", process: "warp.exe", pid: 10432, expires: now + 8 * 60000 },
+        { id: "terminal", keyId: "workstation", process: "WindowsTerminal.exe", pid: 8420, expires: now + 6 * 60000 },
+        { id: "editor", keyId: "build", process: "Code.exe", pid: 13108, expires: now + 4 * 60000 }
+      ] : [],
+      activity: ready ? sampleActivity(now) : [],
+      activityFilters: emptyActivityFilters(), activityFilterOpen: "",
+      updateChecking: false, updateStatus: "", message: "", messageKind: "info",
+      dialog: requestOnStartup ? "authorize" : "",
+      toast: startup && !requestOnStartup
+    };
+  }
+
+  const preview = { scenario: "ready" };
+  let model = createModel(preview.scenario);
+  let renderedPage = "";
+  const commandScrollTimers = new WeakMap();
+  const live = document.createElement("span");
+  live.className = "ops-sr";
+  live.setAttribute("aria-live", "polite");
+  root.after(live);
+
+  function powershellCommand() {
+    const pipe = model.settings.systemDefault ? "openssh-ssh-agent" : "opssh-agent-0123456789abcdef";
+    return "$env:SSH_AUTH_SOCK = '\\\\.\\pipe\\" + pipe + "'";
+  }
+
+  function renderCacheCard(glyph, label, description, prefix) {
+    const settings = model.settings;
+    const mode = settings[`${prefix}Mode`];
+    const modes = { off: '不缓存', fixed: '固定时长', idle: '空闲超时', 'until-exit': '直到 opssh 退出' };
+    const hints = {
+      off: prefix === "key" ? "私钥仅用于当前请求，完成后释放。" : "每次请求单独批准。",
+      fixed: "从缓存建立时开始计时。",
+      idle: "在指定时长内未使用时清除。",
+      "until-exit": prefix === "key" ? "退出时清除，也可手动清除。" : "进程有效期间保留，可提前撤销，退出时清除。"
+    };
+    return `<section class="ops-rows ops-cache-card" aria-labelledby="ops-cache-title-${prefix}">
+      <div class="ops-cache-head">${icon(glyph)}<div><h3 id="ops-cache-title-${prefix}">${label}</h3>${quiet(description)}</div></div>
+      <div class="ops-cache-grid">
+        <label class="ops-field ops-cache-mode"><span>保留方式</span>
+          ${select(`${label}模式`, `cache:${prefix}Mode`, modes, mode)}
+        </label>
+        ${timed(mode) ? `<label class="ops-field ops-cache-duration">
+          <span>时长（秒）</span>
+          <input type="text" inputmode="numeric" pattern="[0-9]+" maxlength="7"
+            aria-label="${label}时长（秒）" data-action="cache:${prefix}Seconds"
+            aria-describedby="ops-cache-error-${prefix}"
+            value="${esc(settings[`${prefix}Seconds`])}">
+          <small id="ops-cache-error-${prefix}" class="ops-cache-error" role="status" hidden></small>
+        </label>` : ""}
+      </div>
+      <p class="ops-quiet ops-cache-hint">${hints[mode]}</p>
+    </section>`;
+  }
+
+  function renderSettings() {
+    const settings = model.settings;
+    return `<div class="ops-stack">
+      ${heading('设置', '管理启动、SSH 集成、缓存策略和显示偏好。更改后立即生效。')}
+      <section class="ops-setting-group" aria-labelledby="ops-startup-heading">
+        <h2 id="ops-startup-heading">启动</h2>
+        <div class="ops-rows">
+          ${row('power', '登录 Windows 时启动', '登录后在系统托盘中启动 opssh。', toggle('登录 Windows 时启动', 'startup', settings.startup))}
+          ${row('timer', '等待 1Password 启动', 'opssh 启动后，等 1Password 桌面应用就绪再发起账户访问。', toggle('等待 1Password 启动', 'wait-password', settings.waitForPassword))}
+          ${row('bell', '1Password 就绪后的操作', model.account ? `授权账户为 ${esc(model.account)}。` : '尚未选择账户。1Password 启动后会先提示选择账户。',
+            select('1Password 就绪后的操作', 'startup-action', { notify: '显示通知，由我选择', request: '直接请求授权' }, settings.startupAction, { disabled: !settings.waitForPassword }))}
+        </div>
+      </section>
+      <section class="ops-setting-group" aria-labelledby="ops-ssh-heading">
+        <h2 id="ops-ssh-heading">SSH 集成</h2>
+        <div class="ops-rows">
+          ${row('plug', '设为系统默认 SSH 代理', '让使用系统默认代理的 Windows SSH 客户端连接到 opssh。', toggle('设为系统默认 SSH 代理', 'system-default', settings.systemDefault))}
+          ${row('terminal', '当前 PowerShell 会话', '在当前 PowerShell 中运行命令，将会话指向 opssh 的监听管道。',
+            button('复制命令', 'copy-command', { glyph: 'copy' }),
+            `<pre class="ops-code" data-powershell-command><code>${esc(powershellCommand())}</code></pre><p data-copy-status class="ops-quiet" hidden></p>`)}
+        </div>
+      </section>
+      <section class="ops-setting-group" aria-labelledby="ops-cache-heading">
+        <h2 id="ops-cache-heading">缓存策略</h2>
+        <div class="ops-cache-list">
+          ${renderCacheCard('key-round', '私钥缓存', '控制已加载的私钥在内存中保留多久。', 'key')}
+          ${renderCacheCard('shield-check', '批准缓存', '控制进程批准可重复使用的时长。', 'approval')}
+        </div>
+      </section>
+      <section class="ops-setting-group" aria-labelledby="ops-appearance-heading">
+        <h2 id="ops-appearance-heading">偏好</h2>
+        <div class="ops-rows">
+          ${row('palette', '主题', '选择应用窗口和批准提示的外观。', select('主题', 'theme', { system: '跟随系统', light: '浅色', dark: '深色' }, settings.theme))}
+          ${row('languages', '语言', '选择设置、批准提示和托盘菜单的显示语言。', select('语言', 'language', { system: '跟随系统', 'zh-Hans': '简体中文', en: 'English' }, settings.language))}
+        </div>
+      </section>
+    </div>`;
+  }
+
+  function renderAbout() {
+    const settings = model.settings;
+    const github = '<a class="ops-link" href="https://github.com/Cirnouo/opssh" target="_blank" rel="noopener noreferrer">Cirnouo/opssh</a>';
+    return `<div class="ops-stack">
+      ${heading('关于', '')}
+      <div class="ops-about-brand">
+        <span class="ops-app-icon" aria-hidden="true">${icon('terminal')}</span>
+        <div>
+          <h2>opssh</h2>
+          <p class="ops-quiet">使用存储在 1Password 中的密钥，为 Windows SSH 客户端提供签名。</p>
+        </div>
+      </div>
+      <section class="ops-setting-group" aria-labelledby="ops-updates-heading">
+        <h2 id="ops-updates-heading">版本和更新</h2>
+        <div class="ops-rows">
+          ${row('package', '当前版本', 'Windows x64', '<span class="ops-mono">0.1.0</span>')}
+          ${row('refresh-cw', '检查更新', esc(model.updateStatus || '在 GitHub 上查找更新的正式发行版。'),
+            button(model.updateChecking ? '检查中…' : '检查更新', 'check-update', { disabled: model.updateChecking }))}
+          ${row('download', '启动时自动检查更新', '每次启动 opssh 时检查一次，发现新版时通知你。', toggle('启动时自动检查更新', 'auto-update', settings.autoUpdate))}
+        </div>
+      </section>
+      <section class="ops-setting-group" aria-labelledby="ops-project-heading">
+        <h2 id="ops-project-heading">项目信息</h2>
+        <div class="ops-rows">
+          ${row('user-round', '开发者', '', '<span>Cirnouo</span>')}
+          ${row('scale', '许可证', '', '<span>Apache License 2.0</span>')}
+          ${row('github', 'GitHub', '查看源代码和发行版。', github)}
+        </div>
+      </section>
+    </div>`;
+  }
+
+  function renderKeys() {
+    const keys = model.hasDiscovered ? model.keys : [];
+    const mayDiscover = model.allowedVaults.size > 0;
+    const actions = button('发现 SSH 密钥', 'discover', { primary: true, disabled: !mayDiscover, glyph: 'search' });
+    const bulkActions = `<div class="ops-actions" role="group" aria-label="批量操作">
+      ${button('预加载全部私钥', 'preload-all', {
+        disabled: !mayDiscover || model.settings.keyMode === "off" || !keys.some((key) => !model.loaded.has(key.id)),
+        glyph: 'download'
+      })}
+      ${button('清除已加载私钥', 'evict-all', { disabled: model.loaded.size === 0, glyph: 'package-minus' })}
+      ${button('撤销全部授权', 'revoke-all', { disabled: model.grants.length === 0, glyph: 'shield-x' })}
+    </div>`;
+    const status = !mayDiscover ? info('请在 1Password 页面选择允许发现 SSH 密钥的保险库。')
+      : model.settings.keyMode === "off" ? info('私钥缓存设为「不缓存」。签名时会临时读取私钥。') : '';
+    const empty = !model.hasDiscovered
+      ? '运行“发现 SSH 密钥”以建立密钥列表。'
+      : '已完成发现。所选保险库中没有 SSH 密钥。';
+
+    return `<div class="ops-stack">
+      ${heading('SSH 密钥', '发现密钥、管理预加载状态和进程授权。', actions)}
+      ${status}
+      <div class="ops-key-counts" aria-label="SSH 密钥统计">
+        <span><strong>${keys.length}</strong> 把公钥</span><span><strong>${model.grants.length}</strong> 项进程授权</span>
+      </div>
+      ${bulkActions}
+      ${keys.length ? renderKeyTable(keys) : `<p class="ops-empty">${empty}</p>`}
+    </div>`;
+  }
+
+  function renderKeyTable(keys) {
+    return `<div class="ops-table-wrap">
+      <table class="ops-table ops-key-table" aria-label="SSH 密钥">
+        <colgroup><col class="ops-col-key"><col class="ops-col-loaded"><col class="ops-col-approval"><col class="ops-col-actions"></colgroup>
+        <thead><tr>
+          <th scope="col">密钥</th>
+          <th scope="col">私钥加载状态</th>
+          <th scope="col">进程授权</th>
+          <th scope="col">操作</th>
+        </tr></thead>
+        <tbody>${keys.map(renderKeyRow).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderKeyRow(key) {
+    const keyGrants = model.grants.filter((grant) => grant.keyId === key.id);
+    const isLoaded = model.loaded.has(key.id);
+    const isExpanded = model.expanded.has(key.id);
+    const id = esc(key.id);
+    const name = esc(key.name);
+    const toggleLabel = `${isExpanded ? '收起' : '展开'} ${name} 的进程授权（${keyGrants.length} 项）`;
+    const toggle = `<button type="button" class="ops-button ops-key-expand ops-grant-toggle" data-action="expand:${id}"
+      aria-label="${toggleLabel}" aria-expanded="${isExpanded}"${isExpanded ? ` aria-controls="ops-grants-${id}"` : ''}>
+      ${icon(isExpanded ? 'chevron-down' : 'chevron-right')}<span>${keyGrants.length} 项</span>
+    </button>`;
+
+    return `<tr class="ops-key-row">
+      <th scope="row" data-label="密钥">
+        <div class="ops-key-id">
+          <span>${name}</span>
+          <span class="ops-quiet">${esc(key.vault)}</span>
+          <span class="ops-quiet ops-mono">${esc(key.fingerprint)}</span>
+        </div>
+      </th>
+      <td data-label="私钥加载状态">${metricState(isLoaded ? '已加载' : '未加载', isLoaded ? 'success' : 'neutral')}</td>
+      <td data-label="进程授权">${toggle}</td>
+      <td data-label="操作"><div class="ops-row-actions">
+        ${button('预加载私钥', `preload:${key.id}`, {
+          disabled: isLoaded || model.settings.keyMode === "off" || model.allowedVaults.size === 0,
+          labelFor: `预加载 ${key.name} 的私钥`
+        })}
+        ${button('清除私钥缓存', `evict:${key.id}`, {
+          disabled: !isLoaded,
+          labelFor: `清除 ${key.name} 已加载的私钥`
+        })}
+        ${button('撤销该密钥授权', `revoke-key:${key.id}`, {
+          disabled: keyGrants.length === 0,
+          labelFor: `撤销授权（${key.name} 的全部授权）`
+        })}
+      </div></td>
+    </tr>${isExpanded ? `<tr class="ops-expanded">
+      <td colspan="4"><div class="ops-grant-pane" id="ops-grants-${id}">
+        ${renderGrantTable(key, keyGrants)}
+      </div></td>
+    </tr>` : ''}`;
+  }
+
+  function renderGrantTable(key, keyGrants) {
+    if (!keyGrants.length) return '<p class="ops-empty">此密钥暂无进程授权。</p>';
+
+    return `<table class="ops-table ops-grant-table" aria-label="${esc(key.name)} 的进程授权">
+      <colgroup><col class="ops-col-process"><col class="ops-col-pid"><col class="ops-col-time"><col class="ops-col-actions"></colgroup>
+      <thead><tr>
+        <th scope="col">进程名称</th>
+        <th scope="col">PID</th>
+        <th scope="col">到期时间（本地）</th>
+        <th scope="col">操作</th>
+      </tr></thead>
+      <tbody>${keyGrants.map((grant) => `<tr>
+        <th scope="row" data-label="进程名称" class="ops-mono">${esc(grant.process)}</th>
+        <td data-label="PID" class="ops-mono">${esc(grant.pid)}</td>
+        <td data-label="到期时间（本地）" class="ops-mono"><time datetime="${new Date(grant.expires).toISOString()}">${esc(localTime(grant.expires))}</time></td>
+        <td data-label="操作">${button('撤销此授权', `revoke-grant:${grant.id}`, {
+          labelFor: `撤销 ${grant.process}（PID ${grant.pid}）对 ${key.name} 的授权`
+        })}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  function renderActivity() {
+    const groups = [
+      { id: 'process', label: '应用名称', value: entry => entry.process },
+      { id: 'key', label: '密钥名称', value: entry => entry.key || '—' },
+      { id: 'result', label: '结果', value: entry => entry.result },
+      { id: 'day', label: '本地日期', value: entry => localTime(entry.time).slice(0, 10) }
+    ];
+    const activity = model.activity;
+    const filters = model.activityFilters;
+    const entries = activity.filter(entry => groups.every(({ id, value }) =>
+      filters[id].size === 0 || filters[id].has(value(entry))));
+    const clearAction = button('清除活动', 'clear-activity', {
+      disabled: activity.length === 0,
+      glyph: 'trash-2'
+    });
+    const reset = button('重置筛选', 'filter-reset', {
+      disabled: groups.every(({ id }) => filters[id].size === 0)
+    });
+    return `<div class="ops-stack ops-activity-page">
+      ${heading('活动', '查看应用的 SSH 请求结果。', clearAction)}
+      <div class="ops-activity-filters" role="group" aria-label="活动筛选">
+        ${groups.map(group => renderActivityFilter(group, activity)).join('')}
+        ${reset}
+      </div>
+      <p class="ops-activity-count" role="status">共 ${activity.length} 条 · 显示 ${entries.length} 条</p>
+      ${renderActivityTable(entries)}
+    </div>`;
+  }
+
+  function renderActivityFilter({ id, label, value }, activity) {
+    const selected = model.activityFilters[id];
+    const open = model.activityFilterOpen === id;
+    const choices = [...new Set(activity.map(value))];
+    if (id === 'day') choices.sort().reverse();
+    else choices.sort((first, second) => first.localeCompare(second));
+    const menuId = `ops-activity-filter-${id}`;
+    return `<div class="ops-activity-filter">
+      <button type="button" class="ops-button ops-activity-filter-button" data-action="filter-open:${id}"
+        data-filtered="${selected.size > 0}" aria-expanded="${open}"${open ? ` aria-controls="${menuId}"` : ''}
+        ${choices.length ? '' : 'disabled'}${selected.size ? ` data-tooltip="${esc([...selected].join('、'))}"` : ''}>
+        <span>${label}${selected.size ? ` (${selected.size})` : ''}</span>${icon('chevron-down')}
+      </button>
+      ${open ? `<div class="ops-activity-filter-menu" id="${menuId}" role="group" aria-label="${label}">
+        ${choices.map(choice => `<label class="ops-activity-filter-option">
+          <input type="checkbox" data-action="filter:${id}" value="${esc(choice)}"${selected.has(choice) ? ' checked' : ''}>
+          <span>${esc(choice)}</span>
+        </label>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }
+
+  function renderActivityTable(entries) {
+    if (!entries.length) {
+      const message = model.activity.length ? '没有符合当前筛选条件的活动。' : '暂无 SSH 活动。';
+      return `<p class="ops-empty">${message}</p>`;
+    }
+
+    return `<div class="ops-table-wrap ops-activity-scroll" role="region" aria-label="SSH 活动列表">
+      <table class="ops-table ops-activity-table" aria-label="SSH 活动">
+        <colgroup><col class="ops-col-process"><col class="ops-col-key"><col class="ops-col-result"><col class="ops-col-time"></colgroup>
+        <thead><tr>
+          <th scope="col">应用</th>
+          <th scope="col">密钥</th>
+          <th scope="col">结果</th>
+          <th scope="col">时间（本地）</th>
+        </tr></thead>
+        <tbody>${entries.map(entry => `<tr>
+          <th scope="row" data-label="应用">
+            <div class="ops-activity-app"><strong>${esc(entry.process)}</strong><small class="ops-mono ops-quiet">PID ${esc(entry.appPid ?? '—')}</small></div>
+            <code class="ops-activity-command ops-mono" aria-label="SSH 请求命令">${esc(entry.command || '—')}</code>
+          </th>
+          <td data-label="密钥">${esc(entry.key || '—')}</td>
+          <td data-label="结果">${renderActivityResult(entry.result)}</td>
+          <td data-label="时间（本地）" class="ops-mono"><time datetime="${new Date(entry.time).toISOString()}">${esc(localTime(entry.time))}</time></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderActivityResult(result) {
+    const tone = ['已签名', '签名成功', '已允许', '允许'].includes(result) ? 'success'
+      : ['已拒绝', '拒绝', '签名失败', '失败'].includes(result) ? 'danger'
+      : 'neutral';
+    return metricState(result, tone);
+  }
+
+  function renderAccount() {
+    const request = model.lastDesktopRequest;
+    const requestStatus = request ? `<div class="ops-request-status">
+      ${metricState(request.outcome === "success" ? "上次请求成功" : "上次请求失败", request.outcome === "success" ? "success" : "danger")}
+      <time class="ops-mono" datetime="${new Date(request.at).toISOString()}" aria-label="上次请求时间（本地）">${esc(localTime(request.at))}</time>
+    </div>` : metricState("尚未请求");
+    const scopeHint = !model.allowedVaults.size ? "选择至少一个保险库，再前往 SSH 密钥手动发现。" :
+      "新增保险库中的公钥会在下次手动发现后出现。";
+    return `<div class="ops-stack">
+      ${heading("1Password 账户", "管理桌面访问和用于发现 SSH 密钥的保险库。")}
+      <div class="ops-rows">
+        ${row("user-round", "账户", esc(model.account), `<div class="ops-actions">
+          ${button("切换账户", "switch-account")}${button("注销", "logout", { labelFor: "注销当前账户" })}
+        </div>`)}
+        ${row("shield", "桌面应用访问", "最近一次 1Password 请求的结果和本地时间。", requestStatus)}
+      </div>
+      <section class="ops-setting-group">
+        <div class="ops-section-head"><h2>允许发现的保险库</h2><small class="ops-quiet">已允许 ${model.allowedVaults.size} 个</small></div>
+        ${quiet("权限更改立即生效。只从允许的保险库发现 SSH 密钥。")}
+        <div class="ops-rows">${vaults.map(vault => row("vault", vault.name, "",
+          toggle(`允许 ${vault.name} 保险库`, `vault:${vault.id}`, model.allowedVaults.has(vault.id)))).join("")}</div>
+        ${model.allowedVaults.size ? `<div class="ops-actions">${textButton("前往 SSH 密钥", "nav:keys")}</div>` : ""}
+        ${quiet(scopeHint)}
+      </section>
+    </div>`;
+  }
+
+  function renderSignedOut() {
+    return `<div class="ops-login">
+      ${appIcon("key-round")}
+      <h1>连接 1Password</h1>
+      ${quiet("在 1Password 桌面应用登录后，连接账户即可管理 SSH 密钥。")}
+      ${button("连接 1Password", "login", { primary: true })}
+    </div>`;
+  }
+
+  function renderToast() {
+    if (!model.toast) return "";
+    return `<aside class="ops-toast ops-stack" aria-label="Windows 通知演示">
+      <div class="ops-section-head"><span class="ops-title">${appIcon("terminal")} opssh</span>${iconButton("关闭通知", "toast-no", "x")}</div>
+      <div><strong>1Password 已就绪</strong>${quiet(model.account ? `现在为 ${esc(model.account)} 请求授权？` : "先选择要授权的 1Password 账户。")}</div>
+      <div class="ops-actions">${button(model.account ? "授权" : "选择账户", "toast-yes", { primary: true })}${button("稍后", "toast-no")}</div>
+    </aside>`;
+  }
+
+  function renderDialog() {
+    let title;
+    let detail;
+    let action;
+    if (model.dialog === "login") {
+      title = model.connected ? "切换 1Password 账户" : "连接 1Password 账户";
+      detail = Object.keys(model.availableAccounts).length ? `<label class="ops-field">账户（演示列表）
+          ${select("选择 1Password 账户", "choose-account", model.availableAccounts, model.accountChoice)}</label>
+          ${quiet("使用桌面 SDK 授权前，请在 1Password 的「设置 → 开发者」启用 SDK 集成。")}`
+        : info("暂未读到可选账户。请在 1Password 桌面应用中登录并启用 CLI 集成。", { kind: "warning" });
+      action = button("在 1Password 中继续", "login-start", { primary: true, disabled: !model.accountChoice });
+    } else if (model.dialog === "authorize") {
+      title = "1Password 授权";
+      detail = `<p>为 <strong>${esc(model.accountChoice)}</strong> 请求授权。</p>${model.connected && model.accountChoice !== model.account
+        ? "<p>新账户授权后会清除旧账户的保险库范围、密钥、授权和活动。</p>"
+        : quiet("真实验证会在 1Password 窗口完成。")}`;
+      action = button("模拟批准", "authorize", { primary: true });
+    } else if (model.dialog === "logout") {
+      title = "注销 opssh 中的账户？";
+      detail = "<p>将清除当前账户的保险库范围、公钥索引、私钥缓存、授权和活动。再次使用时需要连接账户。</p>";
+      action = button("注销", "confirm-logout", { primary: true });
+    } else if (model.dialog === "system-default") {
+      const enabling = !model.settings.systemDefault;
+      title = enabling ? "设为系统默认 SSH 代理？" : "恢复 Windows OpenSSH 代理？";
+      detail = enabling ?
+        "<p>如果 OpenSSH 代理服务设为自动且正在运行，将停止并禁用该服务，然后让 opssh 监听 Windows OpenSSH 的默认管道。</p>" :
+        "<p>opssh 将切回专用管道。如果 OpenSSH 代理服务未设为自动，将改为自动。如果服务尚未运行，将启动它。</p>";
+      action = button(enabling ? "设为默认" : "恢复 OpenSSH", "confirm-default", { primary: true });
+    } else if (model.dialog === "clear-activity") {
+      title = "清除活动？";
+      detail = "<p>清除列表中的 SSH 请求记录。</p>";
+      action = button("清除活动", "confirm-clear", { primary: true });
+    } else {
+      return "";
+    }
+    return `<dialog class="ops-dialog" aria-labelledby="ops-dialog-title"><div class="ops-stack">
+      <h2 id="ops-dialog-title">${title}</h2>${detail}
+      <div class="ops-actions">${action}${button("取消", "cancel-dialog")}</div>
+    </div></dialog>`;
+  }
+
+  function navItem(page, current) {
+    const [label, glyph] = pages[page];
+    const inactive = !model.connected && (page === "keys" || page === "activity");
+    return `<li><button type="button" class="ops-nav" data-action="nav:${page}" aria-label="${label}"${current ? ' aria-current="page"' : ""}${inactive ? " disabled" : ""}>
+      ${icon(glyph)}<span>${label}</span>
+    </button></li>`;
+  }
+
+  function draw(focusAction, focusValue) {
+    const samePage = renderedPage === model.page;
+    const filterChanged = focusAction?.startsWith("filter:") || focusAction === "filter-reset";
+    const mainTop = samePage ? root.querySelector(".ops-main")?.scrollTop : 0;
+    const activityScroll = samePage ? root.querySelector(".ops-activity-scroll") : null;
+    const activityTop = filterChanged ? 0 : activityScroll?.scrollTop;
+    const activityLeft = activityScroll?.scrollLeft;
+    const filterTop = samePage && focusAction?.startsWith("filter:") ? root.querySelector(".ops-activity-filter-menu")?.scrollTop : 0;
+    const signedOut = !model.connected && !["settings", "about"].includes(model.page);
+    const content = signedOut ? renderSignedOut() : ({
+      account: renderAccount, keys: renderKeys, activity: renderActivity,
+      settings: renderSettings, about: renderAbout
+    })[model.page]();
+    root.dataset.theme = model.settings.theme;
+    root.innerHTML = `<div class="ops-window">
+      <header class="ops-titlebar">
+        <span class="ops-title">${appIcon("terminal")}<span>opssh</span></span>
+        <span class="ops-caption" aria-hidden="true"><span class="ops-min"></span><span class="ops-max"></span><span class="ops-close"></span></span>
+      </header>
+      <div class="ops-layout" data-pane="${model.pane}">
+        <nav class="ops-sidebar" aria-label="opssh 导航">
+          ${iconButton("切换导航窗格", "pane", "menu")}
+          <ul>${["keys","activity","account"].map(page => navItem(page, page === model.page)).join("")}</ul>
+          <ul>${["settings","about"].map(page => navItem(page, page === model.page)).join("")}</ul>
+        </nav>
+        <div class="ops-surface${signedOut ? " ops-signedout" : ""}">
+          ${!signedOut && model.message ? `<div class="ops-feedback">${info(esc(model.message), { kind: model.messageKind, dismissible: true })}</div>` : ""}
+          <main class="ops-main">${content}</main>
+        </div>
+      </div>
+      ${renderToast()}${renderDialog()}
+    </div>`;
+    renderedPage = model.page;
+    for (const [selector, top] of [[".ops-main", mainTop], [".ops-activity-scroll", activityTop], [".ops-activity-filter-menu", filterTop]]) {
+      const element = root.querySelector(selector);
+      if (element && top) element.scrollTop = top;
+    }
+    const activityTable = root.querySelector(".ops-activity-scroll");
+    if (activityTable && activityLeft) activityTable.scrollLeft = activityLeft;
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+    const dialog = root.querySelector("dialog");
+    if (dialog) {
+      dialog.addEventListener("cancel", event => {
+        event.preventDefault();
+        draw(click("cancel-dialog"));
+      });
+      dialog.showModal();
+    }
+    if (focusAction) {
+      const targetAction = focusAction === "filter-reset" ? "filter-open:process" : focusAction;
+      const target = [...(dialog || root).querySelectorAll("[data-action]")].find(control =>
+        control.dataset.action === targetAction && !control.disabled && (focusValue === undefined || control.value === focusValue));
+      target?.focus({ preventScroll: true });
+    }
+    live.textContent = model.message || (model.page === "about" ? model.updateStatus : "");
+  }
+
+  function notify(message, kind = "info") {
+    model.message = message;
+    model.messageKind = kind;
+  }
+
+  function retainIndexedKeys() {
+    const ids = new Set(model.keys.map(key => key.id));
+    model.loaded = new Set([...model.loaded].filter(id => ids.has(id)));
+    model.grants = model.grants.filter(grant => ids.has(grant.keyId));
+    model.expanded = new Set([...model.expanded].filter(id => ids.has(id)));
+  }
+
+  function resetAccountData() {
+    model.allowedVaults.clear();
+    model.keys = [];
+    model.hasDiscovered = false;
+    retainIndexedKeys();
+    model.activity = [];
+    model.activityFilters = emptyActivityFilters();
+    model.activityFilterOpen = "";
+  }
+
+  async function copyPowerShellCommand() {
+    const current = model;
+    let copied = false;
+    try {
+      if (globalThis.navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(powershellCommand());
+        copied = true;
+      }
+    } catch {
+      // The preview host can restrict clipboard access.
+    }
+    if (model !== current || model.page !== "settings") return;
+    if (!copied) {
+      const command = root.querySelector("[data-powershell-command]");
+      const selection = globalThis.getSelection?.();
+      if (command && selection) {
+        const range = document.createRange();
+        range.selectNodeContents(command);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        try {
+          copied = document.execCommand?.("copy") === true;
+        } catch {
+          // Keep the selection available for Ctrl+C.
+        }
+        if (!copied) {
+          const status = root.querySelector("[data-copy-status]");
+          status.textContent = "已选中命令，按 Ctrl+C 复制。";
+          status.hidden = false;
+          live.textContent = status.textContent;
+          return;
+        }
+      }
+    }
+    notify(copied ? "已复制 PowerShell 命令。" : "剪贴板不可用，请手动选择并复制命令。", copied ? "info" : "warning");
+    draw("copy-command");
+  }
+
+  function recordDesktopRequest() {
+    model.lastDesktopRequest = { outcome: "success", at: Date.now() };
+  }
+
+  function setCachePolicy(field, value) {
+    if (model.settings[field] === value) return;
+    model.settings[field] = value;
+    if (field.startsWith("key")) model.loaded.clear();
+    else model.grants = [];
+  }
+
+  function commitCacheDuration(control, field) {
+    const seconds = Number(control.value);
+    const valid = /^\d+$/.test(control.value) && seconds >= 1 && seconds <= 2592000;
+    const error = control.parentElement.querySelector(".ops-cache-error");
+    control.setAttribute("aria-invalid", String(!valid));
+    error.hidden = valid;
+    error.textContent = valid ? "" : "请输入 1 到 2,592,000 之间的整数。";
+    if (valid) {
+      control.value = String(seconds);
+      setCachePolicy(field, control.value);
+    }
+  }
+
+  async function checkForUpdates() {
+    const current = model;
+    if (current.updateChecking) return;
+    current.updateChecking = true;
+    current.updateStatus = "正在检查更新…";
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      current.updateStatus = "演示结果：当前已是最新版本。";
+    } catch {
+      current.updateStatus = "演示结果：检查失败，可重试。";
+    } finally {
+      current.updateChecking = false;
+      if (model === current && current.page === "about") {
+        draw(document.activeElement?.dataset?.action);
+      }
+    }
+  }
+
+  function click(action) {
+    const [verb, id] = action.split(":");
+    switch (verb) {
+      case "nav":
+        model.page = id;
+        model.activityFilterOpen = "";
+        notify("");
+        if (model.pane === "expanded" && matchMedia("(max-width: 620px)").matches) model.pane = "auto";
+        break;
+      case "pane": {
+        const collapsed = model.pane === "collapsed" || (model.pane === "auto" && matchMedia("(max-width: 620px)").matches);
+        model.pane = collapsed ? "expanded" : "collapsed";
+        break;
+      }
+      case "dismiss": notify(""); break;
+      case "login":
+      case "switch-account":
+        model.accountChoice = "";
+        model.dialog = "login";
+        return "choose-account";
+      case "login-start":
+        if (!model.accountChoice || !Object.hasOwn(model.availableAccounts, model.accountChoice)) return "choose-account";
+        model.dialog = "authorize";
+        return "authorize";
+      case "authorize": {
+        const account = model.accountChoice;
+        if (!account) return "choose-account";
+        if (model.account !== account) resetAccountData();
+        model.account = account;
+        model.connected = true;
+        recordDesktopRequest();
+        model.page = "account";
+        model.dialog = "";
+        notify("已连接账户并列出保险库。请选择允许发现的保险库。");
+        return "nav:account";
+      }
+      case "logout":
+        model.dialog = "logout";
+        return "cancel-dialog";
+      case "confirm-logout":
+        resetAccountData();
+        model.account = "";
+        model.accountChoice = "";
+        model.connected = false;
+        model.lastDesktopRequest = null;
+        model.dialog = "";
+        notify("");
+        return "login";
+      case "cancel-dialog": {
+        const previous = model.dialog;
+        model.dialog = "";
+        if (previous === "system-default" || previous === "clear-activity" || previous === "logout") return previous;
+        return model.connected ? "switch-account" : "login";
+      }
+      case "toast-yes":
+        model.toast = false;
+        model.dialog = model.accountChoice ? "authorize" : "login";
+        return model.accountChoice ? "authorize" : "choose-account";
+      case "toast-no": model.toast = false; return "login";
+      case "discover":
+        recordDesktopRequest();
+        model.keys = catalog.filter(key => model.allowedVaults.has(key.vaultId));
+        model.hasDiscovered = true;
+        retainIndexedKeys();
+        notify(`发现完成，已将 ${model.keys.length} 把公钥导入索引。`);
+        break;
+      case "expand":
+        if (model.expanded.has(id)) model.expanded.delete(id);
+        else model.expanded.add(id);
+        break;
+      case "preload":
+        recordDesktopRequest();
+        model.loaded.add(id);
+        notify("已预加载这把密钥的私钥。");
+        return `evict:${id}`;
+      case "evict":
+        model.loaded.delete(id);
+        notify("已清除这把密钥的私钥缓存。");
+        return `preload:${id}`;
+      case "preload-all":
+        recordDesktopRequest();
+        model.loaded = new Set(model.keys.map(key => key.id));
+        notify("已预加载全部私钥。");
+        break;
+      case "evict-all":
+        model.loaded.clear();
+        notify(`已清除已加载的私钥。当前仍有 ${model.grants.length} 项进程授权。`);
+        break;
+      case "revoke-key":
+        model.grants = model.grants.filter(grant => grant.keyId !== id);
+        notify("已撤销这把密钥的全部进程授权。");
+        return `expand:${id}`;
+      case "revoke-grant": {
+        const keyId = model.grants.find(grant => grant.id === id)?.keyId;
+        model.grants = model.grants.filter(grant => grant.id !== id);
+        notify("已撤销该进程的授权。");
+        return `expand:${keyId}`;
+      }
+      case "revoke-all":
+        model.grants = [];
+        notify("已撤销全部进程授权。");
+        break;
+      case "filter-open":
+        model.activityFilterOpen = model.activityFilterOpen === id ? "" : id;
+        break;
+      case "filter-reset":
+        model.activityFilters = emptyActivityFilters();
+        model.activityFilterOpen = "";
+        break;
+      case "clear-activity": model.dialog = "clear-activity"; return "cancel-dialog";
+      case "confirm-clear":
+        model.activity = [];
+        model.activityFilters = emptyActivityFilters();
+        model.activityFilterOpen = "";
+        model.dialog = "";
+        notify("活动已清除。");
+        return "nav:activity";
+      case "confirm-default":
+        model.settings.systemDefault = !model.settings.systemDefault;
+        model.dialog = "";
+        notify(model.settings.systemDefault ? "演示状态已切换为系统默认 SSH 代理。" : "演示状态已切回 opssh 专用管道。");
+        return "system-default";
+      case "check-update": void checkForUpdates(); break;
+    }
+    return action;
+  }
+
+  function change(control) {
+    const action = control.dataset.action;
+    if (!action) return;
+    const [verb, id] = action.split(":");
+    switch (verb) {
+      case "choose-account":
+        model.accountChoice = Object.hasOwn(model.availableAccounts, control.value) ? control.value : "";
+        break;
+      case "filter":
+        if (control.checked) model.activityFilters[id].add(control.value);
+        else model.activityFilters[id].delete(control.value);
+        return draw(action, control.value);
+      case "vault":
+        if (control.checked) {
+          model.allowedVaults.add(id);
+          notify("已允许此保险库。请手动发现其中的公钥。");
+        } else {
+          model.allowedVaults.delete(id);
+          model.keys = model.keys.filter(key => key.vaultId !== id);
+          retainIndexedKeys();
+          notify("已排除此保险库及其密钥和授权。");
+        }
+        break;
+      case "startup": model.settings.startup = control.checked; break;
+      case "wait-password": model.settings.waitForPassword = control.checked; break;
+      case "startup-action": model.settings.startupAction = control.value; break;
+      case "system-default": model.dialog = "system-default"; return draw("cancel-dialog");
+      case "theme": model.settings.theme = control.value; break;
+      case "language":
+        model.settings.language = control.value;
+        notify("语言偏好已更新。预览文字使用简体中文。");
+        break;
+      case "auto-update": model.settings.autoUpdate = control.checked; break;
+      case "cache":
+        if (id.endsWith("Seconds")) return commitCacheDuration(control, id);
+        setCachePolicy(id, control.value);
+        break;
+      default: return;
+    }
+    draw(action);
+  }
+
+  function moveHorizontally(element, delta, deltaMode) {
+    const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? element.clientWidth : 1;
+    const before = element.scrollLeft;
+    element.scrollLeft = before + Math.sign(delta) * Math.max(1, Math.abs(delta * unit));
+    return element.scrollLeft !== before;
+  }
+
+  root.addEventListener("wheel", event => {
+    if (!event.shiftKey || event.ctrlKey || !event.cancelable) return;
+    const table = event.target.closest(".ops-activity-scroll");
+    if (!table) return;
+    const deltaMode = event.deltaMode;
+    const delta = event.deltaX || event.deltaY;
+    if (!Number.isFinite(delta) || delta === 0) return;
+    const command = event.target.closest(".ops-activity-command");
+    if (command && command.scrollWidth > command.clientWidth && moveHorizontally(command, delta, deltaMode)) {
+      event.preventDefault();
+      command.dataset.wheelScrolling = "";
+      clearTimeout(commandScrollTimers.get(command));
+      commandScrollTimers.set(command, setTimeout(() => {
+        delete command.dataset.wheelScrolling;
+        commandScrollTimers.delete(command);
+      }, 700));
+      return;
+    }
+    if (moveHorizontally(table, delta, deltaMode)) event.preventDefault();
+  }, { passive: false });
+
+  root.addEventListener("click", event => {
+    const control = event.target.closest("button[data-action]");
+    if (model.activityFilterOpen && !event.target.closest(".ops-activity-filter")) {
+      model.activityFilterOpen = "";
+      if (!control) return draw();
+    }
+    if (!control || control.disabled) return;
+    if (control.dataset.action === "copy-command") {
+      void copyPowerShellCommand();
+      return;
+    }
+    draw(click(control.dataset.action));
+  });
+  root.addEventListener("change", event => change(event.target));
+  root.addEventListener("keydown", event => {
+    if (event.key === "Escape" && model.activityFilterOpen && !model.dialog) {
+      event.preventDefault();
+      const filter = model.activityFilterOpen;
+      model.activityFilterOpen = "";
+      draw(`filter-open:${filter}`);
+      return;
+    }
+    const action = event.target.dataset.action;
+    if (event.key === "Enter" && action?.startsWith("cache:") && action.endsWith("Seconds")) {
+      event.preventDefault();
+      commitCacheDuration(event.target, action.split(":")[1]);
+    }
+  });
+
+  draw();
+  if (globalThis.Tweak) {
+    const tweak = new globalThis.Tweak({ container: root, onChange: () => {
+      model = createModel(preview.scenario, model.settings, model.account);
+      renderedPage = "";
+      draw();
+    } });
+    tweak.addSelect(preview, "scenario", { label: "演示场景", options: [
+      { value: "ready", label: "日常运行" },
+      { value: "first-run", label: "首次安装 · 未连接" },
+      { value: "no-accounts", label: "未读到可选账户" },
+      { value: "new-account", label: "已连接 · 待选择保险库" },
+      { value: "provider-failed", label: "已连接 · 上次桌面访问失败" },
+      { value: "startup", label: "模拟 1Password 启动" }
+    ] });
+  }
+})();
+</script>

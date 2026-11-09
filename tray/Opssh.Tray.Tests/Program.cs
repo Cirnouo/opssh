@@ -40,6 +40,7 @@ if (args.Length > 0)
 using var testTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 var token = testTimeout.Token;
 AppearanceChecks.Run();
+ActivityWheelChecks.Run();
 await WindowsIntegrationChecks.RunAsync(token);
 await ReleaseChecks.RunAsync(token);
 await FramingAsync(token);
