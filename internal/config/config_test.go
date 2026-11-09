@@ -15,6 +15,54 @@ import (
 const vaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
 const itemID = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
 
+func TestLegacyAccountScopeIncludesOnlyItsSelectedItems(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	data := `{"account":"Fixture","keys":[{"vaultId":"aaaaaaaaaaaaaaaaaaaaaaaaaa","itemId":"bbbbbbbbbbbbbbbbbbbbbbbbbb"}]}`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Scope.Default != "exclude" || !s.Scope.Includes(vaultID, itemID) ||
+		s.Scope.Includes(vaultID, "cccccccccccccccccccccccccc") {
+		t.Fatalf("legacy selection expanded: %+v", s.Scope)
+	}
+	if err := Save(path, s); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Read(path)
+	if err != nil || !reloaded.Scope.Includes(vaultID, itemID) || reloaded.Scope.Default != "exclude" {
+		t.Fatalf("legacy selection did not survive save: %+v, %v", reloaded.Scope, err)
+	}
+}
+
+func TestScopeItemOverridesVaultAndVaultOverridesDefault(t *testing.T) {
+	const otherVault = "cccccccccccccccccccccccccc"
+	const otherItem = "dddddddddddddddddddddddddd"
+	scope := Default().Scope
+	if !scope.Includes(vaultID, itemID) {
+		t.Fatal("fresh accounts should include reachable keys")
+	}
+	scope.Vaults[vaultID] = "exclude"
+	scope.Items[vaultID+"/"+itemID] = "include"
+	scope.Items[otherVault+"/"+itemID] = "exclude"
+	for _, tc := range []struct {
+		vault, item string
+		want        bool
+	}{
+		{vaultID, itemID, true},
+		{vaultID, otherItem, false},
+		{otherVault, itemID, false},
+		{otherVault, otherItem, true},
+	} {
+		if got := scope.Includes(tc.vault, tc.item); got != tc.want {
+			t.Errorf("effective scope for %s/%s = %t, want %t", tc.vault, tc.item, got, tc.want)
+		}
+	}
+}
+
 func TestDefaultsAndPublicIndexRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	s, err := Read(path)

@@ -17,20 +17,38 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"opssh/internal/config"
+	"opssh/internal/desktop"
 	"opssh/internal/winipc"
+)
+
+const (
+	fixtureVaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	fixtureItemID  = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	fixtureKeyName = "Generated offline key"
 )
 
 type fixtureVault struct {
 	public, private []byte
 }
 
-func (v *fixtureVault) Public(context.Context, string, string) ([]byte, error) {
+func (v *fixtureVault) Public(_ context.Context, vault, item string) ([]byte, error) {
+	if vault != fixtureVaultID || item != fixtureItemID {
+		return nil, desktop.ErrUnavailable
+	}
 	return bytes.Clone(v.public), nil
 }
-func (v *fixtureVault) Private(context.Context, string, string) ([]byte, error) {
+func (v *fixtureVault) Private(_ context.Context, vault, item string) ([]byte, error) {
+	if vault != fixtureVaultID || item != fixtureItemID {
+		return nil, desktop.ErrUnavailable
+	}
 	return bytes.Clone(v.private), nil
 }
 func (*fixtureVault) Status() string { return "offline-fixture" }
+
+func (*fixtureVault) Discover(context.Context, config.Scope) ([]desktop.Vault, error) {
+	return []desktop.Vault{{ID: fixtureVaultID, Name: "Offline test vault",
+		Items: []desktop.Item{{ID: fixtureItemID, Name: fixtureKeyName}}}}, nil
+}
 
 func main() {
 	if !runFixture() {
@@ -64,9 +82,11 @@ func runFixture() bool {
 	clear(block.Bytes)
 	defer clear(store.private)
 	cfg := config.Default()
-	cfg.Account = "Offline fixture"
-	cfg.Keys = []config.Key{{VaultID: "aaaaaaaaaaaaaaaaaaaaaaaaaa", ItemID: "bbbbbbbbbbbbbbbbbbbbbbbbbb",
-		Name: "Generated offline key", Public: store.public}}
+	if os.Getenv("OPSSH_FIXTURE_UNCONFIGURED") != "1" {
+		cfg.Account = "Offline fixture"
+		cfg.Keys = []config.Key{{VaultID: fixtureVaultID, ItemID: fixtureItemID, Name: fixtureKeyName, Public: store.public}}
+		cfg.Index = config.IndexReady
+	}
 	boot := startup{
 		readConfig: func() (string, config.Settings, error) { return filepath.Join(dir, "fixture-settings.json"), cfg, nil },
 		newVault:   func(string) vault { return store },

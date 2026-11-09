@@ -20,6 +20,11 @@ internal static class GoInterop
         const string prefix = @"\\.\pipe\";
         Require(hello.Pipe.StartsWith(prefix + "opssh-", StringComparison.OrdinalIgnoreCase), "local SSH endpoint");
         Require((await session.RequestAsync("status", null, token)) is
+            { Ok: true, State: { Account: "", Keys: [] } }, "fresh core has no configured account or key");
+        Require((await session.RequestAsync("connect", new { account = "Offline fixture" }, token)) is
+            { Ok: true, State: { Keys: [{ VaultId: "aaaaaaaaaaaaaaaaaaaaaaaaaa", ItemId: "bbbbbbbbbbbbbbbbbbbbbbbbbb" }] } },
+            "tray-led connection indexes the generated public key without manual IDs");
+        Require((await session.RequestAsync("status", null, token)) is
             {
                 Ok: true, State:
                 {
@@ -40,11 +45,31 @@ internal static class GoInterop
         Require(Encoding.UTF8.GetString(ReadString(entries)) == "Generated offline key" && entries.Position == entries.Length,
             "fixture identity comment");
 
+        const string vault = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string item = vault + "/bbbbbbbbbbbbbbbbbbbbbbbbbb";
+        Require((await session.RequestAsync("set-scope", new
+        {
+            @default = "include",
+            vaults = new Dictionary<string, string> { [vault] = "exclude" },
+            items = new Dictionary<string, string>()
+        }, token)) is { Ok: true, State: { Keys: [] } }, "vault exclusion withdraws the public identity");
+        await SendPacketAsync(ssh, new byte[] { 11 }, token);
+        Require((await ReadPacketAsync(ssh, token)) is [12, 0, 0, 0, 0], "SSH sees no identity after scope narrowing");
+
         using var sign = new MemoryStream();
         sign.WriteByte(13);
         WriteString(sign, blob);
         WriteString(sign, RandomNumberGenerator.GetBytes(32));
         sign.Write(new byte[4]); // Default Ed25519 flags.
+        await SendPacketAsync(ssh, sign.ToArray(), token);
+        Require((await ReadPacketAsync(ssh, token)) is [5] && !request.Task.IsCompleted,
+            "excluded identity cannot sign or prompt for approval");
+        Require((await session.RequestAsync("set-scope", new
+        {
+            @default = "include",
+            vaults = new Dictionary<string, string> { [vault] = "exclude" },
+            items = new Dictionary<string, string> { [item] = "include" }
+        }, token)) is { Ok: true, State: { Keys: [{ Loaded: false }] } }, "explicit item inclusion overrides the vault exclusion");
         await SendPacketAsync(ssh, sign.ToArray(), token);
         var approval = await request.Task.WaitAsync(token);
         var fingerprint = "SHA256:" + Convert.ToBase64String(SHA256.HashData(blob)).TrimEnd('=');
@@ -61,7 +86,7 @@ internal static class GoInterop
         ssh.Dispose();
         Require((await session.RequestAsync("shutdown", null, token)).Ok, "shutdown acknowledgement");
         Require(await core.WaitAsync(TimeSpan.FromSeconds(4)), "graceful Go core exit");
-        Console.WriteLine("Go interop passed (Windows bootstrap, state, local SSH list/sign approval, shutdown).");
+        Console.WriteLine("Go interop passed (tray-led discovery, vault and item scope, local SSH list/sign approval, shutdown).");
     }
 
     private static async Task SendPacketAsync(Stream stream, byte[] payload, CancellationToken token)

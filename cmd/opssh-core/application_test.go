@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"opssh/internal/config"
 	"opssh/internal/control"
+	"opssh/internal/desktop"
 )
 
 type offlineVault struct {
@@ -35,6 +37,213 @@ func (v *offlineVault) Private(context.Context, string, string) ([]byte, error) 
 	return nil, errors.New("private lookup was unexpected")
 }
 func (*offlineVault) Status() string { return "unknown" }
+
+type discoveryVault struct {
+	offlineVault
+	vaults   []desktop.Vault
+	discover func(context.Context) error
+	resolve  func(string, string) ([]byte, error)
+}
+
+func (v *discoveryVault) Discover(ctx context.Context, _ config.Scope) ([]desktop.Vault, error) {
+	if v.discover != nil {
+		return v.vaults, v.discover(ctx)
+	}
+	return v.vaults, nil
+}
+
+func (v *discoveryVault) Public(_ context.Context, vaultID, itemID string) ([]byte, error) {
+	v.publicCalls++
+	return v.resolve(vaultID, itemID)
+}
+
+func TestConnectDiscoversOnlyPublicKeysForTheEffectiveScope(t *testing.T) {
+	const vaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const included = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	const excluded = "cccccccccccccccccccccccccc"
+	public, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ssh.NewPublicKey(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &discoveryVault{
+		vaults: []desktop.Vault{{ID: vaultID, Name: "Test vault", Items: []desktop.Item{
+			{ID: included, Name: "Selected"}, {ID: excluded, Name: "Excluded"},
+		}}},
+		resolve: func(vault, item string) ([]byte, error) {
+			if vault != vaultID || item != included {
+				t.Errorf("resolved excluded or unknown reference %s/%s", vault, item)
+			}
+			return key.Marshal(), nil
+		},
+	}
+	cfg := config.Default()
+	cfg.Account = "Test"
+	cfg.Scope.Items[vaultID+"/"+excluded] = "exclude"
+	path := filepath.Join(t.TempDir(), "settings.json")
+	app, err := newApplication(path, "fixture", cfg, nil, func(string) vault { return store })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.engine.Close()
+	if store.publicCalls != 0 {
+		t.Fatal("startup unexpectedly refreshed the index")
+	}
+	res := app.command(context.Background(), control.Event("connect", "connect", map[string]string{"account": "Test"}))
+	if !res.OK {
+		t.Fatalf("connect failed: %+v", res)
+	}
+	status := app.status()
+	if status.Index != "ready" || len(status.Vaults) != 1 || len(status.Vaults[0].Items) != 2 {
+		t.Fatalf("discovery metadata or status missing: %+v", status)
+	}
+	keys := app.engine.List()
+	if len(keys) != 1 || keys[0].ItemID != included || store.publicCalls != 1 || store.privateCalls != 0 {
+		t.Fatalf("unexpected index: %v, public=%d private=%d", keys, store.publicCalls, store.privateCalls)
+	}
+}
+
+func TestScopeExclusionsPersistBeforeProviderFailure(t *testing.T) {
+	const vaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const itemID = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	public, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ssh.NewPublicKey(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "settings.json")
+	cfg := config.Default()
+	cfg.Account = "Test"
+	cfg.Keys = []config.Key{{VaultID: vaultID, ItemID: itemID, Public: key.Marshal()}}
+	var app *application
+	store := &discoveryVault{discover: func(context.Context) error {
+		saved, err := config.Read(path)
+		if err != nil || len(app.engine.List()) != 0 || len(saved.Keys) != 0 || saved.Scope.Includes(vaultID, itemID) {
+			t.Errorf("exclusion was not effective before provider access: %+v, %v", saved, err)
+		}
+		return desktop.ErrUnavailable
+	}}
+	app, err = newApplication(path, "fixture", cfg, nil, func(string) vault { return store })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.engine.Close()
+	res := app.command(context.Background(), control.Event("set-scope", "scope", map[string]string{"default": "exclude"}))
+	if res.OK || app.status().Index != "unavailable" || len(app.engine.List()) != 0 {
+		t.Fatalf("failed discovery restored an excluded key: %+v", res)
+	}
+}
+
+func TestRefreshPublishesOnlyUnambiguousPublicKeysFromAPartialCatalog(t *testing.T) {
+	const vaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const unique = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	const duplicated = "cccccccccccccccccccccccccc"
+	const secondCopy = "dddddddddddddddddddddddddd"
+	const missing = "eeeeeeeeeeeeeeeeeeeeeeeeee"
+	newBlob := func() []byte {
+		t.Helper()
+		public, _, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, err := ssh.NewPublicKey(public)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key.Marshal()
+	}
+	good, duplicate := newBlob(), newBlob()
+	store := &discoveryVault{
+		vaults: []desktop.Vault{{ID: vaultID, Items: []desktop.Item{
+			{ID: unique}, {ID: duplicated}, {ID: secondCopy}, {ID: missing},
+		}}},
+		resolve: func(_, item string) ([]byte, error) {
+			switch item {
+			case unique:
+				return good, nil
+			case duplicated, secondCopy:
+				return duplicate, nil
+			default:
+				return nil, desktop.ErrUnavailable
+			}
+		},
+	}
+	cfg := config.Default()
+	cfg.Account = "Test"
+	cfg.Keys = []config.Key{{VaultID: vaultID, ItemID: missing, Public: newBlob()}}
+	path := filepath.Join(t.TempDir(), "settings.json")
+	app, err := newApplication(path, "fixture", cfg, nil, func(string) vault { return store })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.engine.Close()
+	res := app.command(context.Background(), control.Event("refresh-index", "refresh", nil))
+	if res.OK || app.status().Index != "partial" {
+		t.Fatalf("incomplete refresh reported success: %+v", res)
+	}
+	keys := app.engine.List()
+	saved, err := config.Read(path)
+	if len(keys) != 1 || keys[0].ItemID != unique || err != nil || saved.Index != "partial" || store.privateCalls != 0 {
+		t.Fatalf("partial refresh exposed stale or ambiguous keys: %v, %v", keys, err)
+	}
+}
+
+func TestConnectReplacementClearsPriorAccountBeforeRestart(t *testing.T) {
+	cfg := config.Default()
+	cfg.Account = "Original"
+	cfg.Scope.Default = "exclude"
+	cfg.Scope.Items[cfgKeyID()] = "include"
+	path := filepath.Join(t.TempDir(), "settings.json")
+	var accounts []string
+	app, err := newApplication(path, "fixture", cfg, nil, func(account string) vault {
+		accounts = append(accounts, account)
+		return &offlineVault{}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.engine.Close()
+	result := app.command(context.Background(), control.Event("connect", "connect", map[string]string{"account": "Replacement"}))
+	saved, err := config.Read(path)
+	if !result.OK || !result.RestartRequired || err != nil || saved.Account != "Replacement" ||
+		saved.Scope.Default != "include" || len(saved.Scope.Items) != 0 || saved.Index != "not-indexed" {
+		t.Fatalf("replacement account did not start with fresh scope: %+v, %+v, %v", result, saved, err)
+	}
+	if len(accounts) != 1 || accounts[0] != "Original" || !app.engine.Status().Locked {
+		t.Fatal("core opened the replacement account before the restart")
+	}
+}
+
+func TestOversizedScopeDoesNotResolveOrAdvertiseATruncatedIndex(t *testing.T) {
+	const vaultID = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	items := make([]desktop.Item, 65)
+	for i := range items {
+		items[i] = desktop.Item{ID: fmt.Sprintf("%026d", i)}
+	}
+	store := &discoveryVault{vaults: []desktop.Vault{{ID: vaultID, Items: items}}}
+	cfg := config.Default()
+	cfg.Account = "Test"
+	path := filepath.Join(t.TempDir(), "settings.json")
+	app, err := newApplication(path, "fixture", cfg, nil, func(string) vault { return store })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.engine.Close()
+	res := app.command(context.Background(), control.Event("refresh-index", "refresh", nil))
+	status := app.status()
+	if res.OK || status.Index != "scope-too-broad" || len(status.Keys) != 0 || store.publicCalls != 0 {
+		t.Fatalf("oversized catalog was advertised: %+v", res)
+	}
+	if len(status.Vaults) != 1 || len(status.Vaults[0].Items) != len(items) {
+		t.Fatalf("metadata missing for scope narrowing: %+v", status.Vaults)
+	}
+}
 
 func TestRefreshFailureRetiresPublicIndex(t *testing.T) {
 	public, _, err := ed25519.GenerateKey(rand.Reader)
