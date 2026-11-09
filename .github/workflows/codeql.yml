@@ -1,0 +1,125 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            runner: windows-2025
+            build-mode: manual
+          - language: csharp
+            runner: windows-2025
+            build-mode: manual
+          - language: actions
+            runner: ubuntu-24.04
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: 10.0.403
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          tools: linked
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          db-location: ${{ runner.temp }}/opssh-codeql
+      - name: Compile the Windows Go core
+        if: matrix.language == 'go'
+        shell: pwsh
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $binary = Join-Path $env:RUNNER_TEMP 'opssh-codeql-core.exe'
+          go build -a -mod=readonly '-ldflags=-H windowsgui' -o $binary ./cmd/opssh-core
+          if ($LASTEXITCODE -ne 0 -or (Get-Item -LiteralPath $binary).Length -le 0) { throw 'Windows core compilation failed.' }
+      - name: Compile the Windows WinUI tray and test runner
+        if: matrix.language == 'csharp'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($project in @(
+              'tray/Opssh.Tray/Opssh.Tray.csproj',
+              'tray/Opssh.Tray.Tests/Opssh.Tray.Tests.csproj'
+          )) {
+              dotnet restore $project --locked-mode -p:Configuration=Release
+              if ($LASTEXITCODE -ne 0) { throw "CodeQL locked restore failed for $project" }
+              dotnet build $project -c Release --no-restore --no-incremental --disable-build-servers -p:UseSharedCompilation=false
+              if ($LASTEXITCODE -ne 0) { throw "CodeQL compilation failed for $project" }
+          }
+      - name: Analyze extracted code
+        id: analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/opssh-codeql-results
+          upload: never
+          upload-database: false
+      - name: Require expected first-party sources and a CodeQL report
+        shell: pwsh
+        env:
+          CODEQL_LANGUAGE: ${{ matrix.language }}
+          CODEQL_DATABASES: ${{ steps.analyze.outputs.db-locations }}
+          CODEQL_SARIF: ${{ runner.temp }}/opssh-codeql-results
+        run: ./tools/Test-CodeQLCoverage.ps1 -Language $env:CODEQL_LANGUAGE -DatabaseLocations $env:CODEQL_DATABASES -SarifDirectory $env:CODEQL_SARIF
+      - name: Upload verified results to GitHub code scanning
+        id: upload
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: ${{ runner.temp }}/opssh-codeql-results/${{ matrix.language }}.sarif
+          category: /language:${{ matrix.language }}
+          wait-for-processing: true
+      - name: Verify GitHub processed the uploaded results
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODEQL_SARIF_ID: ${{ steps.upload.outputs.sarif-id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $id = [guid]::Empty
+          if (![guid]::TryParseExact($env:CODEQL_SARIF_ID, 'D', [ref]$id)) {
+              throw 'GitHub code scanning did not acknowledge an upload.'
+          }
+          for ($attempt = 0; $attempt -lt 6; $attempt++) {
+              $state = gh api --method GET "repos/$env:GITHUB_REPOSITORY/code-scanning/sarifs/$id" --jq .processing_status
+              if ($LASTEXITCODE -ne 0) { throw 'Could not read the code scanning receipt.' }
+              if ($state -ceq 'complete') {
+                  Write-Host "Verified processed SARIF upload $id."
+                  return
+              }
+              if ($state -cne 'pending') { throw 'GitHub did not process the CodeQL report successfully.' }
+              Start-Sleep -Seconds 10
+          }
+          throw 'GitHub code scanning processing exceeded the verification deadline.'
