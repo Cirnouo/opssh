@@ -1,0 +1,14 @@
+# 1Password Desktop SDK validation procedure
+
+This procedure requires explicit approval for the exact disposable item, the intended test actions, and use of the local desktop application. The normal build, test and CI pipeline uses the offline fixture.
+
+1. Prepare a dedicated SSH Key item in a 1Password test vault. A human selects the item and supplies its public fingerprint and vault and item IDs. Record Windows architecture, 1Password desktop version, and the SDK version. Keep actual account and item identifiers out of public test evidence.
+2. In the local desktop application, verify the signed-in test account and that SDK desktop integration is enabled. The operator owns any settings change. Launch the production Release tray with a fresh test configuration directory. Use the exact account label and disposable item.
+3. Add the selected item. Inspect the 1Password desktop authorization prompt, its requesting process and account scope. Approve only this test request. Check that the public-only reference resolves the expected canonical key and fingerprint. Test `ssh-add -L` against the opt-in process-local pipe. If the public field selector fails, record the failure and stop before requesting the private field.
+4. With the public key in a temporary public file, use system `ssh-keygen -Y sign` on a generated local message and verify with `ssh-keygen -Y verify`. Approve only the exact signing request in the opssh window. This performs local signing without an SSH connection. Compare the derived identity to the index and retain only the public fingerprint, algorithm, timings and outcome.
+5. Repeat with a denied or canceled prompt, a changed test item's public key, and a late provider response if reproducible. Verify the UI distinguishes provider failures from loaded keys. Lock opssh and verify that a subsequent request needs a new approval. Observe that locking 1Password revokes its read grant, while already loaded material follows opssh's local policy. Confirm that explicit refresh retires the old index and local state.
+6. Exit through the tray and restore the test shell's prior agent selection. Close the test configuration, retain only sanitized evidence and identify any unexercised conditions.
+
+The production adapter uses the public `WithDesktopAppIntegration` and `Secrets.Resolve` interfaces. The private reference uses the documented `private key?ssh-format=openssh` selector. The public field is tested independently in step 3. No complete item retrieval is used.
+
+Sources: [SDK setup](https://www.1password.dev/sdks), [secret reference formats](https://www.1password.dev/sdks/concepts#ssh-format), [Go desktop implementation v0.4.1](https://github.com/1Password/onepassword-sdk-go/blob/f60aea196b471a9c35ddad5f9096e5fd2b5c939c/internal/shared_lib_core_windows.go).

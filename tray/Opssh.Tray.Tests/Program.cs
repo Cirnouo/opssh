@@ -1,0 +1,246 @@
+using System.Buffers.Binary;
+using System.IO.Pipes;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
+using Opssh.Tray;
+
+if (args is ["--go-interop"])
+{
+    await GoInterop.CheckAsync();
+    return;
+}
+
+if (args.Length > 0)
+{
+    Assert(args.Length == 4 && args[0] == "--control-handle" && args[2] == "--tray-handle", "bootstrap arguments");
+    using var pipe = new NamedPipeClientStream(PipeDirection.InOut, true, true, new SafePipeHandle(nint.Parse(args[1]), true));
+    using var tray = new SafeWaitHandle(nint.Parse(args[3]), true);
+    var parent = NativeTest.GetProcessId(tray);
+    Assert(parent != 0 && parent != Environment.ProcessId, "inherited real process handle");
+    Assert(NativeTest.WaitForSingleObject(tray, 0) == 258, "tray is alive");
+    Assert(NativeTest.GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var owner) && owner == parent, "inherited process owns private pipe");
+    await SendAsync(pipe, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+    var request = await Protocol.ReadAsync(pipe, default);
+    Assert(request.Type == "status" && request.Id is not null, "status request with correlation ID");
+    await SendAsync(pipe, """{"v":1,"type":"result","id":"stale","body":{"ok":false}}""");
+    await SendAsync(pipe, $$$$"""{"v":1,"type":"result","id":"{{{{request.Id}}}}","body":{"ok":true,"state":{"pipe":"test","locked":false,"account":"","keys":[],"keyCache":{"mode":"fixed","seconds":300},"approvalCache":{"mode":"fixed","seconds":600},"provider":"unconfigured","pending":0}}}""");
+    request = await Protocol.ReadAsync(pipe, default);
+    Assert(request.Type == "shutdown", "graceful shutdown");
+    await SendAsync(pipe, $$$"""{"v":1,"type":"result","id":"{{{request.Id}}}","body":{"ok":true}}""");
+    return;
+}
+
+using var testTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+var token = testTimeout.Token;
+await FramingAsync(token);
+await SupervisionAsync(token);
+await ApprovalLifetimeAsync(token);
+await ConcurrentCommandsAsync(token);
+await MalformedResultsAsync(token);
+await TruncatedFrameAsync(token);
+Console.WriteLine("Tray checks passed (framing, Windows launch and shutdown, approval lifetime, concurrent control replies, malformed result rejection, partial frame deadline).");
+
+static async Task FramingAsync(CancellationToken token)
+{
+    using var stream = new MemoryStream();
+    await Protocol.WriteAsync(stream, new(1, "decision", "one", JsonSerializer.SerializeToElement(new { scope = "host", candidate = 2 })), token);
+    var encoded = stream.ToArray();
+    Assert(BinaryPrimitives.ReadInt32BigEndian(encoded) == encoded.Length - 4, "big-endian byte count");
+    using var payload = JsonDocument.Parse(encoded.AsMemory(4));
+    Assert(payload.RootElement.GetProperty("id").GetString() == "one", "decision ID");
+    Assert(payload.RootElement.GetProperty("body").GetProperty("candidate").GetInt32() == 2, "integer chain index");
+    foreach (var invalid in new[]
+    {
+        new byte[] { 0, 0, 0, 0 },
+        new byte[] { 0, 4, 0, 1 },
+        Frame("""{"v":2,"type":"hello"}"""),
+        Frame("""{"v":1,"type":"hello","v":2}"""),
+        Frame("""{"v":1,"type":"hello","body":[] }"""),
+        Frame("""{"v":1,"type":"hello"}""")[..^1],
+    })
+    {
+        try
+        {
+            await Protocol.ReadAsync(new MemoryStream(invalid), token);
+            throw new Exception("Accepted an invalid control frame.");
+        }
+        catch (IOException) { }
+    }
+}
+
+static async Task SupervisionAsync(CancellationToken token)
+{
+    using var core = await CoreProcess.StartAsync(token);
+    using var session = new CoreSession(core.Pipe);
+    var hello = await session.StartAsync(token);
+    Assert(hello.Pipe == "test", "hello from inherited endpoint");
+    var result = await session.RequestAsync("status", null, token);
+    Assert(result is { Ok: true, State: { Provider: "unconfigured" } }, "matching status and validated state delivered");
+    await session.RequestAsync("shutdown", null, token);
+    Assert(await core.WaitAsync(TimeSpan.FromSeconds(3)), "owned child exited after shutdown");
+}
+
+static async Task ApprovalLifetimeAsync(CancellationToken token)
+{
+    var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");
+    using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 4096, 4096);
+    using var peer = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+    await Task.WhenAll(server.WaitForConnectionAsync(token), peer.ConnectAsync(token));
+    var clock = new TestClock();
+    using var session = new CoreSession(server, clock);
+    var approvals = System.Threading.Channels.Channel.CreateUnbounded<string>();
+    var ended = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    session.ApprovalRequested += approval => approvals.Writer.TryWrite(approval.Id);
+    session.ApprovalEnded += id => ended.TrySetResult(id);
+    session.Disconnected += () => disconnected.TrySetResult();
+    var handshake = session.StartAsync(token);
+    await SendAsync(peer, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+    await handshake;
+    await SendAsync(peer, Approval("ended", clock.GetUtcNow().AddMinutes(1)));
+    Assert(await approvals.Reader.ReadAsync(token) == "ended", "approval dispatched");
+    await SendAsync(peer, """{"v":1,"type":"approval-ended","id":"ended"}""");
+    Assert(await ended.Task.WaitAsync(token) == "ended", "dismissal dispatched");
+    Assert(!await session.DecideAsync("ended", "once", 0, token), "ended request retired");
+    await SendAsync(peer, Approval("expired", clock.GetUtcNow().AddSeconds(1)));
+    Assert(await approvals.Reader.ReadAsync(token) == "expired", "expiring approval was active");
+    clock.Advance(TimeSpan.FromSeconds(2));
+    Assert(!await session.DecideAsync("expired", "once", 0, token), "expired request cannot be approved");
+    await SendAsync(peer, Approval("decide", clock.GetUtcNow().AddMinutes(1)));
+    Assert(await approvals.Reader.ReadAsync(token) == "decide", "new approval after expiry");
+    Assert(!await session.DecideAsync("decide", "host", 0, token), "requester is not a host candidate");
+    Assert(await session.DecideAsync("decide", "host", 1, token), "verified ancestor is a valid host candidate");
+    var decision = await Protocol.ReadAsync(peer, token);
+    Assert(decision is { Type: "decision", Id: "decide", Body: { } }, "decision bound to its request");
+    Assert(decision.Body!.Value.GetProperty("candidate").GetInt32() == 1, "host candidate is the received chain index");
+    Assert(!await session.DecideAsync("decide", "once", 0, token), "decision cannot be replayed");
+    await SendAsync(peer, Approval("disconnected", clock.GetUtcNow().AddMinutes(1)));
+    Assert(await approvals.Reader.ReadAsync(token) == "disconnected", "disconnecting request was active");
+    peer.Dispose();
+    await disconnected.Task.WaitAsync(token);
+    Assert(!await session.DecideAsync("disconnected", "once", 0, token), "disconnected request retired");
+}
+
+static async Task ConcurrentCommandsAsync(CancellationToken token)
+{
+    var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");
+    using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 4096, 4096);
+    using var peer = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+    await Task.WhenAll(server.WaitForConnectionAsync(token), peer.ConnectAsync(token));
+    using var session = new CoreSession(server);
+    var handshake = session.StartAsync(token);
+    await SendAsync(peer, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+    await handshake;
+    var preload = session.RequestAsync("preload", new { keyId = "fixture" }, token);
+    var preloadRequest = await Protocol.ReadAsync(peer, token);
+    var urgent = session.RequestAsync("lock", null, token);
+    if (urgent.IsFaulted)
+        await urgent;
+    var urgentRequest = await Protocol.ReadAsync(peer, token);
+    Assert(preloadRequest.Type == "preload" && urgentRequest.Type == "lock" && preloadRequest.Id != urgentRequest.Id,
+        "priority request is sent while provider command is outstanding");
+    await SendAsync(peer, $$$"""{"v":1,"type":"result","id":"{{{urgentRequest.Id}}}","body":{"ok":true}}""");
+    Assert((await urgent).Ok && !preload.IsCompleted, "priority reply does not complete the provider command");
+    await SendAsync(peer, $$$"""{"v":1,"type":"result","id":"{{{preloadRequest.Id}}}","body":{"ok":false,"error":"Locked"}}""");
+    Assert((await preload) is { Ok: false, Error: "Locked" }, "provider reply retains its original correlation");
+}
+
+static async Task MalformedResultsAsync(CancellationToken token)
+{
+    const string valid = """{"pipe":"test","locked":false,"account":"Fixture","keys":[],"keyCache":{"mode":"fixed","seconds":300},"approvalCache":{"mode":"off","seconds":0},"provider":"unknown","pending":0}""";
+    foreach (var malformed in new[]
+    {
+        valid.Replace("[]", "[null]"),
+        valid.Replace("[]", "[{}]"),
+        valid.Replace("\"locked\":false,", ""),
+        valid.Replace("\"seconds\":300", "\"seconds\":0"),
+        valid.Replace("\"test\"", "\"different\""),
+        valid.Replace("\"pending\":0", "\"pending\":-1"),
+    })
+    {
+        var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");
+        using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous, 4096, 4096);
+        using var peer = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await Task.WhenAll(server.WaitForConnectionAsync(token), peer.ConnectAsync(token));
+        using var session = new CoreSession(server);
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Disconnected += () => disconnected.TrySetResult();
+        var handshake = session.StartAsync(token);
+        await SendAsync(peer, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+        await handshake;
+        var result = session.RequestAsync("status", null, token);
+        var status = await Protocol.ReadAsync(peer, token);
+        await SendAsync(peer, $$$"""{"v":1,"type":"result","id":"{{{status.Id}}}","body":{"ok":true,"state":{{{malformed}}}}}""");
+        try
+        {
+            await result;
+            throw new Exception("Delivered malformed state to the caller.");
+        }
+        catch (IOException) { }
+        await disconnected.Task.WaitAsync(token);
+        Assert(!session.IsConnected, "malformed matching result closes control session");
+    }
+}
+
+static async Task TruncatedFrameAsync(CancellationToken token)
+{
+    var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");
+    using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+        PipeOptions.Asynchronous, 4096, 4096);
+    using var peer = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+    await Task.WhenAll(server.WaitForConnectionAsync(token), peer.ConnectAsync(token));
+    using var session = new CoreSession(server);
+    var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    session.Disconnected += () => disconnected.TrySetResult();
+    var handshake = session.StartAsync(token);
+    await SendAsync(peer, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+    await handshake;
+
+    // Keep the peer open after sending the first header byte, so EOF cannot retire the session.
+    await peer.WriteAsync(new byte[] { 0 }, token);
+    await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(6), token);
+    Assert(!session.IsConnected, "stalled frame closes control session");
+}
+
+static string Approval(string id, DateTimeOffset deadline) =>
+    $$$"""{"v":1,"type":"approval","id":"{{{id}}}","body":{"name":"Fixture","fingerprint":"SHA256:fixture","chain":[{"pid":10,"created":100,"path":"fixture.exe"},{"pid":11,"created":90,"path":"host.exe"}],"deadline":"{{{deadline:O}}}","cacheAllowed":true}}""";
+
+static Task SendAsync(Stream pipe, string json) => pipe.WriteAsync(Frame(json)).AsTask();
+
+static byte[] Frame(string json)
+{
+    var payload = Encoding.UTF8.GetBytes(json);
+    var frame = new byte[4 + payload.Length];
+    BinaryPrimitives.WriteInt32BigEndian(frame, payload.Length);
+    payload.CopyTo(frame, 4);
+    return frame;
+}
+
+static void Assert(bool condition, string message)
+{
+    if (!condition) throw new Exception(message);
+}
+
+internal static class NativeTest
+{
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    internal static extern uint GetProcessId(SafeWaitHandle process);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    internal static extern uint WaitForSingleObject(SafeWaitHandle handle, uint milliseconds);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    internal static extern bool GetNamedPipeServerProcessId(SafePipeHandle handle, out uint pid);
+}
+
+internal sealed class TestClock : TimeProvider
+{
+    private long now = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero).Ticks;
+
+    public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref now), TimeSpan.Zero);
+
+    internal void Advance(TimeSpan duration) => Interlocked.Add(ref now, duration.Ticks);
+}
