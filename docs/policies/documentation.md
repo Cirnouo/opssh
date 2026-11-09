@@ -1,10 +1,12 @@
 # Documentation policy
 
-Write maintenance documentation in English. Keep the English [README](../../README.md) and [Simplified Chinese README](../../README.zh-Hans.md) aligned when user-facing steps or consequences change. [README.en.md](../../README.en.md) routes readers to those versions. Maintain English and Simplified Chinese text for the tray's supported UI locales. Preserve the language of quoted source material and captured evidence.
+Write maintenance documentation and the changelog in English. Maintain English and Simplified Chinese user guidance and tray text. The unsuffixed `README.md` is English at the repository root and in `docs/user-guide/`. In both locations, `README.zh-Hans.md` is Simplified Chinese. Preserve the language of quoted source material and captured evidence.
 
 | Location | Purpose |
 | --- | --- |
-| [CONTRIBUTING.md](../../CONTRIBUTING.md) | Human setup and contribution entry. |
+| [English README](../../README.md) and [Simplified Chinese README](../../README.zh-Hans.md) | Project overview, installation entry, first-use steps, common questions and routes to help. |
+| [English user guide](../user-guide/README.md) and [Simplified Chinese user guide](../user-guide/README.zh-Hans.md) | Detailed installation, everyday tasks, settings and recovery. |
+| [CONTRIBUTING.md](../../CONTRIBUTING.md) | Human setup, build, verification and contribution entry. |
 | `docs/specs/` | Current implemented behavior, ownership, compatibility and limitations, with pointers to code and tests. |
 | `docs/policies/` | Reusable maintenance and contributor procedures. |
 | ADRs | Lasting decisions, rationale, active constraints and replacement relationships. |
@@ -16,6 +18,14 @@ Update the current spec and affected user guidance in the same change as the beh
 Record a lasting tradeoff in an ADR when its rationale will matter to future changes. Mark decisions active or superseded, retain the rationale for replaced decisions and link each successor and predecessor. Keep a partially amended decision active and identify exactly which constraint changed. Preserve identifiers and inbound links when moving or superseding records.
 
 Write UTF-8, keep repository links and anchors valid and link to the canonical owner rather than copying it. Keep task plans, review ledgers, logs and other transient outputs in ignored workflow state or outside the checkout. Keep personal machine paths, local tool state and conversation transcripts out of maintained documentation.
+
+## User guidance boundaries
+
+Keep the root READMEs concise. Give readers enough to choose an installer, connect 1Password Desktop, select opssh in their SSH client and reach the first signing request. Link each overview to its same-language guide for the full procedure and to [CONTRIBUTING.md](../../CONTRIBUTING.md) for source builds and verification.
+
+Organize the guides around user tasks. Put the first successful path ahead of optional settings. Describe prerequisites, meaningful defaults, the scope and lifetime of approvals, when to refresh the index, and how to restore an SSH client selection. Distinguish 1Password account permission, loaded private keys and local approvals when that distinction changes what the reader can do. Give recovery steps for the affected operation and keep valid settings when addressing temporary failures.
+
+Keep implementation contracts and provider validation procedures in their canonical specifications, policies and references. Limit control descriptions to choices, interactions and consequences that help the reader complete a task. Keep both languages aligned in tasks, defaults and consequences when user-facing behavior changes. Check the rendered headings, tables, links, anchors and emphasis in both languages, including emphasis next to Chinese punctuation.
 
 ## Instruction progressive disclosure
 
