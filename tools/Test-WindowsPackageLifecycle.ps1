@@ -150,6 +150,13 @@ $nativeErrorCode = $null
 $workerExitCode = $null
 $report = $null
 $metadata = $null
+$installerPolicyPath = 'SOFTWARE\Policies\Microsoft\Windows\Installer'
+$policyHive = $null
+$policyKey = $null
+$policy = [ordered]@{ originalDisableMsi = $null; testDisableMsi = $null; restored = $null }
+$createdPolicyKey = $false
+$capturedPolicyValue = $false
+$changedPolicyValue = $false
 $phase = 'create test account'
 try {
     $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#%'
@@ -202,6 +209,32 @@ try {
     [void][IO.Directory]::CreateDirectory($stubs)
     foreach ($imageName in @('opssh-tray.exe', 'opssh-core.exe')) {
         [IO.File]::Copy((Join-Path ([Environment]::SystemDirectory) 'ping.exe'), (Join-Path $stubs $imageName))
+    }
+
+    $phase = 'enable per-user MSI on the disposable runner'
+    $policyHive = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+        [Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    $policyKey = $policyHive.OpenSubKey($installerPolicyPath, $true)
+    if (!$policyKey) {
+        $policyKey = $policyHive.CreateSubKey($installerPolicyPath)
+        $createdPolicyKey = $true
+    }
+    if ($policyKey.GetValueNames() -contains 'DisableMSI') {
+        $original = $policyKey.GetValue('DisableMSI')
+        if ($original -isnot [int] -or $policyKey.GetValueKind('DisableMSI') -ne [Microsoft.Win32.RegistryValueKind]::DWord) {
+            throw 'Unexpected Windows Installer policy type on the hosted runner.'
+        }
+        $policy.originalDisableMsi = $original
+    }
+    $capturedPolicyValue = $true
+    if ($null -eq $policy.originalDisableMsi -or $policy.originalDisableMsi -ne 0) {
+        $changedPolicyValue = $true
+        $policyKey.SetValue('DisableMSI', 0, [Microsoft.Win32.RegistryValueKind]::DWord)
+    }
+    $policy.testDisableMsi = $policyKey.GetValue('DisableMSI')
+    if ($policy.testDisableMsi -isnot [int] -or $policy.testDisableMsi -ne 0 -or
+        $policyKey.GetValueKind('DisableMSI') -ne [Microsoft.Win32.RegistryValueKind]::DWord) {
+        throw 'Could not enable per-user MSI on the hosted runner.'
     }
 
     $phase = 'run standard-user lifecycle cases'
@@ -281,18 +314,49 @@ try {
             $cleanupFailure = $true
         }
     }
+    if ($policyHive) {
+        try {
+            if ($changedPolicyValue) {
+                if ($null -eq $policy.originalDisableMsi) {
+                    $policyKey.DeleteValue('DisableMSI', $false)
+                } else {
+                    $policyKey.SetValue('DisableMSI', $policy.originalDisableMsi, [Microsoft.Win32.RegistryValueKind]::DWord)
+                }
+            }
+            if ($capturedPolicyValue) {
+                $present = $policyKey.GetValueNames() -contains 'DisableMSI'
+                if ($present -ne ($null -ne $policy.originalDisableMsi) -or ($present -and
+                    ($policyKey.GetValueKind('DisableMSI') -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
+                    $policyKey.GetValue('DisableMSI') -ne $policy.originalDisableMsi))) {
+                    throw 'The original Windows Installer policy was not restored.'
+                }
+            }
+            if ($createdPolicyKey -and $policyKey.ValueCount -eq 0 -and $policyKey.SubKeyCount -eq 0) {
+                $policyKey.Dispose()
+                $policyKey = $null
+                $policyHive.DeleteSubKey($installerPolicyPath)
+            }
+            $policy.restored = $true
+        } catch {
+            $policy.restored = $false
+        } finally {
+            if ($policyKey) { $policyKey.Dispose() }
+            $policyHive.Dispose()
+        }
+    }
 }
 
 [ordered]@{
-    passed = !$testFailure -and !$cleanupFailure
+    passed = !$testFailure -and !$cleanupFailure -and $policy.restored
     phase = $phase
     accountCleanupPassed = !$cleanupFailure
+    installerPolicy = $policy
     failureKind = $failureKind
     nativeErrorCode = $nativeErrorCode
     workerExitCode = $workerExitCode
     inputs = $metadata
     lifecycle = $report
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportPath -Encoding utf8
-if ($cleanupFailure) { throw 'Disposable lifecycle cleanup failed. Discard the hosted runner.' }
+if ($cleanupFailure -or $policy.restored -eq $false) { throw 'Disposable lifecycle cleanup failed. Discard the hosted runner.' }
 if ($testFailure) { throw "Windows package lifecycle verification failed during $phase." }
 Write-Host 'Verified Windows package lifecycle under a disposable standard user and removed the account and profile.'

@@ -66,12 +66,26 @@ function Invoke-Setup($Package, [string]$EntryPoint, [string]$Operation, [string
     } finally {
         Stop-OwnedProcess $process
     }
-    $steps.Add([ordered]@{ phase = $script:stage; entryPoint = $EntryPoint; operation = $Operation; exitCode = $code })
+    $step = [ordered]@{ phase = $script:stage; entryPoint = $EntryPoint; operation = $Operation; exitCode = $code }
+    $steps.Add($step)
+    $win32Code = $code -band 0xffff
+    if ($win32Code -eq 1625) {
+        # Report only the effective values from Windows Installer, never its private log text.
+        $stem = $steps.Count - 1
+        $policyLogs = @(Get-ChildItem -LiteralPath $logDirectory -File -Filter "$stem*.log" |
+            Where-Object { $_.BaseName -eq "$stem" -or $_.BaseName.StartsWith("${stem}_") })
+        $step.policy = [ordered]@{}
+        foreach ($name in @('DisableMsi', 'DisableUserInstalls')) {
+            $step.policy[$name] = @($policyLogs | ForEach-Object {
+                Select-String -LiteralPath $_.FullName -Pattern "Machine policy value '$name' is ([0-9]{1,2})\s*$" |
+                    ForEach-Object { [int]$_.Matches[0].Groups[1].Value }
+            } | Sort-Object -Unique)
+        }
+    }
     if ($Expected -eq 'success') {
         if ($code -ne 0) { throw 'Installer did not return success without a restart.' }
         return
     }
-    $win32Code = $code -band 0xffff
     if ($Expected -eq 'guard') {
         $message = [regex]::Escape($guardMessage)
         $expectedCode = $win32Code -eq 1603
