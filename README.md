@@ -2,49 +2,58 @@
 
 **English** · [简体中文](README.zh-Hans.md)
 
-opssh is an SSH agent for the built-in Windows x64 OpenSSH client. Its Go core fetches selected keys on demand from the signed-in 1Password desktop app through the official 1Password Go SDK and signs in memory. The resident C# WinUI 3 tray shows process ancestry and key fingerprints and manages approval for specific requests.
+opssh is an SSH agent for the built-in Windows x64 OpenSSH client. It uses SSH keys from 1Password Desktop to sign in memory. The tray shows the requesting process, its ancestry and the key fingerprint so you can decide whether to approve each request.
 
-- Approve a single request, the requesting process, or a host process instance and its descendants. Windows PID and creation time identify the instance.
-- Private keys default to a fixed five-minute cache. Host approvals default to a fixed ten-minute cache. The two policies are independent.
-- Connecting to 1Password automatically indexes public keys. By default, the index includes usable SSH Key items in vaults the account can access. You can adjust the scope by vault and item. The Go core manages private keys, signing, and approvals.
-- The per-logon agent pipe can coexist with the system agent.
+- Approve one signature, the requesting process, or a selected ancestor process and its descendants.
+- Choose which 1Password vaults and SSH Key items opssh makes available to SSH.
+- Select opssh in the PowerShell sessions where you want it. The Windows system agent can run alongside it.
 
-Offline verification uses generated keys and a mock provider. Production builds use the Desktop SDK adapter. Reading real 1Password items requires the [separate integration procedure](docs/references/1password-desktop-validation.md).
+<a name="build-and-use"></a>
+<a name="install-from-a-stable-release"></a>
 
-## Install from a stable release
+## Install
 
-When a stable release is available, download the Windows x64 MSI, offline installer EXE, or portable ZIP. The MSI and EXE install for the current user under `%LOCALAPPDATA%\Programs\opssh`. Open **opssh** from the Start menu. For the ZIP, extract the folder and launch `opssh-tray.exe` inside it. The installers and first-party binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
+When a stable release is available, download the Windows x64 MSI, offline installer EXE, or portable ZIP. The MSI and EXE install for the current user. Open **opssh** from the Start menu, or extract the ZIP and run `opssh-tray.exe` from the extracted folder. The installers and opssh binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
 
-If opssh is running, choose **Quit opssh** from the tray before installing, repairing, upgrading, or uninstalling. Windows **Installed apps** manages the installed copy from either installer. Uninstall removes the program and shortcut and preserves settings and the public key index under `%LOCALAPPDATA%\opssh`.
+To run opssh before the first stable release, follow the [source build steps](CONTRIBUTING.md#verify-and-submit).
 
-## Build and use
+If opssh is running, choose **Quit opssh** from the tray before installing, repairing, upgrading, or uninstalling. See the [installation and maintenance steps](docs/user-guide/README.md#install) for the install location and what uninstall keeps.
 
-Install Go 1.27.3, .NET 10 SDK 10.0.403, and PowerShell 7. Run this command in a Windows x64 checkout.
+## Quick start
 
-```powershell
-./tools/Test-Windows.ps1
-```
+1. Sign in to 1Password Desktop and turn on **Settings → Developer → Integrate with 1Password SDKs**. Have an SSH Key item ready.
+2. Open opssh from the tray. In **1Password & keys**, enter the account name or ID shown in the 1Password sidebar and select **Connect**. Complete any verification or authorization in the 1Password window.
+3. In **Overview → SSH client setup → PowerShell → Show command**, use the displayed command in the shell where you want opssh. Run `ssh-add -L` to confirm the expected public key is listed. Use `ssh` with a host that accepts that key and check the process and fingerprint before approving the signing request.
 
-The script produces a verified, self-contained `release` directory. Launch its `opssh-tray.exe` and open Settings from the tray. Under **1Password & keys**, enter the account name or ID displayed in the 1Password desktop sidebar and select **Connect**. Add the account to 1Password Desktop and enable **Settings → Developer → Integrate with 1Password SDKs** there first. The official 1Password window handles verification and read authorization.
+## User guide
 
-After connecting, opssh reads the public keys of SSH Key items in scope. Set the account default and adjust the scope by vault and item name. Item rules take precedence over vault rules. Unset rules inherit the level above. New configurations include all by default. Existing manually configured selections keep their original item scope.
+[Read the English user guide](docs/user-guide/README.md) for key scope, approvals, cache settings and recovery.
 
-After a restart, opssh loads the saved account and public index. You can use SSH without opening Settings and selecting **Connect** again. If an approved signature needs a private key, opssh requests it from 1Password. Approve the official 1Password prompt when the SDK requires a fresh grant.
+<a name="language-and-theme"></a>
+<a name="updates"></a>
 
-In the PowerShell session where you want to use opssh, record the current `$env:SSH_AUTH_SOCK` value and run the command shown under **Settings → Overview → SSH client setup → PowerShell → Show command**. Use the built-in OpenSSH client's `ssh-add -L` to list public keys. An `IdentityAgent` setting in your SSH configuration may take precedence over the environment variable. To revert, close the shell or restore its previous value. The command affects only the current process and its descendants.
+[Select or restore the SSH agent](docs/user-guide/README.md#select-agent) · [Appearance and updates](docs/user-guide/README.md#appearance-and-updates) · [Troubleshooting](docs/user-guide/README.md#troubleshooting)
 
-Closing Settings returns to the tray. **Quit opssh** stops both processes. Locking opssh clears signing approvals and cached private keys. Refresh the public key index from the tray after adding, rotating, archiving, or deleting items in 1Password.
+## FAQ
 
-## Language and theme
+**Do I need to connect again after restarting opssh?**
 
-In **Appearance**, choose English (`en`), Simplified Chinese (`zh-Hans`), or **Follow system**. The default uses the Windows display language when the tray starts and falls back to English for other languages. Choose light, dark, or system theme. Both preferences are kept when the tray restarts.
+opssh restores the saved account and public key index. The next read from 1Password may require a new authorization in its desktop window.
 
-## Updates
+**Can I use a different agent in another shell?**
 
-In **About**, select **Check for updates** to look for a newer stable GitHub release. **Automatically check for updates** is enabled by default. It checks once per tray launch and shows a Windows notification if a newer version is available. Open the release page from **About** to view it.
+Yes. The displayed PowerShell command changes the agent for that shell and processes it starts. Check whether your SSH configuration sets `IdentityAgent`, which can override the environment variable.
 
-[Behavior and security boundaries](docs/specs/windows-agent.md) · [Development and verification](CONTRIBUTING.md) · [Offline performance measurements](docs/references/windows-offline-performance.md)
+**What does locking opssh clear?**
 
-[Support](SUPPORT.md) · [Security reporting](SECURITY.md)
+It clears opssh's signing approvals and loaded private keys. The public index remains available. 1Password separately manages permission to read from the account.
 
-[Apache-2.0 license](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
+## Resources and support
+
+[1Password Desktop SDK integration](https://www.1password.dev/sdks/desktop-app-integrations) · [Windows agent behavior and security boundaries](docs/specs/windows-agent.md) · [Offline performance measurements](docs/references/windows-offline-performance.md) · [Changelog](CHANGELOG.md)
+
+[Support](SUPPORT.md) · [Private vulnerability reporting](SECURITY.md) · [Build, verify and contribute](CONTRIBUTING.md)
+
+## License
+
+[Apache License 2.0](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)

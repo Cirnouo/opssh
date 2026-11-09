@@ -13,7 +13,7 @@ Ordinary verification is offline. Use generated in-memory keys, controlled clock
 | Changing Go or WinUI implementation, IPC, settings or lifecycle | [Maintenance policy](docs/policies/maintenance.md), the [current behavior specification](docs/specs/windows-agent.md) and its linked decisions. |
 | Choosing checks, committing or reporting verification | [Verification policy](docs/policies/verification.md). |
 | Testing with a live 1Password account or publishing provider evidence | [Desktop validation procedure](docs/references/1password-desktop-validation.md) and the [documentation policy](docs/policies/documentation.md). |
-| Editing specs, references, evidence, guides or the changelog | [Documentation policy](docs/policies/documentation.md). |
+| Editing READMEs, specs, references, evidence, guides or the changelog | [Documentation policy](docs/policies/documentation.md). |
 | Editing contributor instructions or their references | [Instruction progressive disclosure](docs/policies/documentation.md#instruction-progressive-disclosure). |
 | Creating a branch or worktree, opening or merging a PR, or changing CI or rules | [Repository governance](docs/policies/repository-governance.md) and the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for PRs. |
 | Preparing a stable tag or publishing a Windows release | [Stable release policy](docs/policies/releases.md). |

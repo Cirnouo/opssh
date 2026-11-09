@@ -1,6 +1,6 @@
 # Support
 
-Start with the [English overview](README.md) or [Simplified Chinese overview](README.zh-Hans.md) for Windows x64 setup, 1Password Desktop connection and built-in OpenSSH usage. For building or contributing, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Start with the [English user guide](docs/user-guide/README.md) or [Simplified Chinese user guide](docs/user-guide/README.zh-Hans.md) for Windows x64 setup, 1Password Desktop connection and built-in OpenSSH usage. For building or contributing, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Search [existing issues](https://github.com/Cirnouo/opssh/issues) before opening a [bug report, feature request or question](https://github.com/Cirnouo/opssh/issues/new/choose). Include your opssh version or commit, Windows build, affected component and the smallest safe reproduction. Include the OpenSSH or 1Password Desktop version when it affects the behavior.
 
