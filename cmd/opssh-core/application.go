@@ -18,7 +18,7 @@ import (
 	"opssh/internal/engine"
 )
 
-const version = "0.1.0"
+var version = "dev" // Set from the tray project Version by the Windows build.
 
 type vault interface {
 	Public(context.Context, string, string) ([]byte, error)

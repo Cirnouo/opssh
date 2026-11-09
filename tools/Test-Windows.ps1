@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$OutputDirectory, [string]$ReportPath)
+param([string]$OutputDirectory, [string]$ReportPath, [string]$ReleaseVersion)
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -55,12 +55,16 @@ function Invoke-Checked([string]$Phase, [string]$Program, [string[]]$CommandArgs
     if ($code -ne 0) { throw "$Program failed in $Phase with exit code $code." }
 }
 
+$priorDotnetNoLogo = $env:DOTNET_NOLOGO
+$priorDotnetCertificate = $env:DOTNET_GENERATE_ASPNET_CERTIFICATE
 $priorCgo = $env:CGO_ENABLED
 $priorFixture = $env:OPSSH_FIXTURE_DIRECTORY
 $priorUnconfiguredFixture = $env:OPSSH_FIXTURE_UNCONFIGURED
 Push-Location -LiteralPath $repo
 try {
     Write-ValidationReport 'incomplete'
+    $env:DOTNET_NOLOGO = 'true'
+    $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
     $env:CGO_ENABLED = '0'
     $unformatted = & gofmt -l cmd internal
     $formatPassed = $LASTEXITCODE -eq 0 -and !$unformatted
@@ -72,6 +76,18 @@ try {
 
     $tray = 'tray/Opssh.Tray/Opssh.Tray.csproj'
     $tests = 'tray/Opssh.Tray.Tests/Opssh.Tray.Tests.csproj'
+    $evaluatedVersion = @(dotnet msbuild $tray -nologo -property:Configuration=Release -getProperty:Version)
+    $version = $null
+    if ($LASTEXITCODE -ne 0 -or $evaluatedVersion.Count -ne 1 -or
+        ![Version]::TryParse($evaluatedVersion[0], [ref]$version) -or $version.Build -lt 0 -or $version.Revision -ge 0 -or
+        $version.ToString(3) -cne $evaluatedVersion[0] -or $version.Major -gt 255 -or
+        $version.Minor -gt 255 -or $version.Build -gt 65534) {
+        throw 'The tray project Version must be a canonical triplet within 255.255.65534.'
+    }
+    if ($PSBoundParameters.ContainsKey('ReleaseVersion') -and $ReleaseVersion -cne $evaluatedVersion[0]) {
+        throw 'The expected release version differs from the tray project Version.'
+    }
+    $linkerFlags = "-ldflags=-H windowsgui -X main.version=$version"
     Invoke-Checked 'tray-test-restore' dotnet @('restore',$tests,'--locked-mode')
     Invoke-Checked 'tray-test-build' dotnet @('build',$tests,'--no-restore','-c','Release','-o',$interopDir)
     $driver = Join-Path $interopDir 'opssh-core.dll'
@@ -79,17 +95,30 @@ try {
 
     $env:OPSSH_FIXTURE_DIRECTORY = $fixtureDir
     $env:OPSSH_FIXTURE_UNCONFIGURED = '1'
-    Invoke-Checked 'fixture-build' go @('build','-mod=readonly','-trimpath','-tags','opssh_fixture','-ldflags=-H windowsgui','-o',(Join-Path $interopDir 'opssh-core.exe'),'./cmd/opssh-core')
+    Invoke-Checked 'fixture-build' go @('build','-mod=readonly','-trimpath','-tags','opssh_fixture',$linkerFlags,'-o',(Join-Path $interopDir 'opssh-core.exe'),'./cmd/opssh-core')
     Invoke-Checked 'go-tray-interop' dotnet @($driver,'--go-interop')
 
     Invoke-Checked 'tray-restore' dotnet @('restore',$tray,'--locked-mode')
-    Invoke-Checked 'tray-publish' dotnet @('publish',$tray,'--no-restore','-c','Release','-o',$releaseDir)
-    Invoke-Checked 'core-build' go @('build','-mod=readonly','-trimpath','-ldflags=-H windowsgui','-o',(Join-Path $releaseDir 'opssh-core.exe'),'./cmd/opssh-core')
+    Invoke-Checked 'tray-publish' dotnet @('publish',$tray,'--no-restore','-c','Release','-p:DebugType=none','-p:DebugSymbols=false','-o',$releaseDir)
+    Invoke-Checked 'core-build' go @('build','-mod=readonly','-trimpath',$linkerFlags,'-o',(Join-Path $releaseDir 'opssh-core.exe'),'./cmd/opssh-core')
 
     foreach ($name in @('opssh-core.exe','opssh-tray.exe','opssh-tray.dll','opssh-tray.pri','Microsoft.UI.Xaml.dll')) {
         $item = Get-Item -LiteralPath (Join-Path $releaseDir $name)
         if ($item.Length -eq 0) { throw "Empty release component: $name" }
     }
+    $trayAssembly = Join-Path $releaseDir 'opssh-tray.dll'
+    if ([Reflection.AssemblyName]::GetAssemblyName($trayAssembly).Version -ne [Version]"$version.0") {
+        throw 'The published tray assembly version differs from the project Version.'
+    }
+    $stream = [IO.File]::OpenRead($trayAssembly)
+    try {
+        $reader = [Reflection.PortableExecutable.PEReader]::new($stream)
+        try {
+            if ($reader.ReadDebugDirectory().Type -contains 'CodeView') {
+                throw 'The published tray assembly contains a CodeView debug path.'
+            }
+        } finally { $reader.Dispose() }
+    } finally { $stream.Dispose() }
     if ($ReportPath) {
         foreach ($file in (Get-ChildItem -LiteralPath $releaseDir -File -Force -Recurse | Sort-Object FullName)) {
             $releaseFiles.Add(@{
@@ -107,6 +136,8 @@ try {
     throw
 } finally {
     Pop-Location
+    $env:DOTNET_NOLOGO = $priorDotnetNoLogo
+    $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = $priorDotnetCertificate
     $env:CGO_ENABLED = $priorCgo
     $env:OPSSH_FIXTURE_DIRECTORY = $priorFixture
     $env:OPSSH_FIXTURE_UNCONFIGURED = $priorUnconfiguredFixture

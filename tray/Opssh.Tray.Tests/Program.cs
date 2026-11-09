@@ -11,6 +11,12 @@ if (args is ["--go-interop"])
     return;
 }
 
+if (args is ["--production-version", var version])
+{
+    await GoInterop.CheckProductionAsync(version);
+    return;
+}
+
 if (args.Length > 0)
 {
     Assert(args.Length == 4 && args[0] == "--control-handle" && args[2] == "--tray-handle", "bootstrap arguments");
