@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -239,6 +240,15 @@ func TestOversizedScopeDoesNotResolveOrAdvertiseATruncatedIndex(t *testing.T) {
 	status := app.status()
 	if res.OK || status.Index != "scope-too-broad" || len(status.Keys) != 0 || store.publicCalls != 0 {
 		t.Fatalf("oversized catalog was advertised: %+v", res)
+	}
+	var feedback struct {
+		Code   string `json:"errorCode"`
+		Legacy string `json:"error"`
+	}
+	if err := json.Unmarshal(control.Event("result", "refresh", res).Body, &feedback); err != nil ||
+		feedback.Code != "scope-too-broad" ||
+		feedback.Legacy != "The scope selects more than 64 SSH keys. Narrow the selection and refresh the public index." {
+		t.Fatalf("scope failure lacks localized and legacy feedback: %+v, %v", feedback, err)
 	}
 	if len(status.Vaults) != 1 || len(status.Vaults[0].Items) != len(items) {
 		t.Fatalf("metadata missing for scope narrowing: %+v", status.Vaults)

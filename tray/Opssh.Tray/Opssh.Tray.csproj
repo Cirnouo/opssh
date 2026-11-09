@@ -14,8 +14,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
+    <EmbeddedResource Include="Localization/*.json" WithCulture="false" LogicalName="Opssh.Tray.Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

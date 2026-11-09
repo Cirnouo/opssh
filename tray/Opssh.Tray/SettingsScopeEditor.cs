@@ -8,7 +8,7 @@ internal sealed class SettingsScopeEditor
 {
     private readonly ComboBox defaultRule = new() { MinWidth = 156 };
     private readonly TextBlock summary = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock empty = Ui.Text("Connect an account or refresh the index to list vaults and SSH items.");
+    private readonly TextBlock empty = Ui.Text(Strings.Get("Scope.ListEmpty"));
     private readonly StackPanel vaultRows = new() { Spacing = 4 };
     private readonly StackPanel unavailableRows = new() { Spacing = 8 };
     private readonly Expander unavailableOverrides;
@@ -19,12 +19,13 @@ internal sealed class SettingsScopeEditor
     private DiscoveryScope draft = new("include", [], []);
     private DiscoveredVault[] catalog = [];
     private bool rebuilding;
+    private int itemCount;
 
     internal SettingsScopeEditor(Func<DiscoveryScope, Task> applyScope, Action<string> showMessage)
     {
-        defaultRule.Items.Add("Include all");
-        defaultRule.Items.Add("Exclude all");
-        AutomationProperties.SetName(defaultRule, "Default discovery scope");
+        defaultRule.Items.Add(Strings.Get("Scope.IncludeAll"));
+        defaultRule.Items.Add(Strings.Get("Scope.ExcludeAll"));
+        AutomationProperties.SetName(defaultRule, Strings.Get("Scope.DefaultAutomationName"));
         defaultRule.SelectionChanged += (_, _) =>
         {
             if (rebuilding)
@@ -32,16 +33,16 @@ internal sealed class SettingsScopeEditor
             draft = draft with { Default = defaultRule.SelectedIndex == 1 ? "exclude" : "include" };
             UpdateSummary();
         };
-        apply = Ui.Button("Apply scope", async () =>
+        apply = Ui.Button(Strings.Get("Scope.Apply"), async () =>
         {
             if (draft.Vaults.Count > DiscoveryScope.MaxVaults || draft.Items.Count > DiscoveryScope.MaxItems)
             {
-                showMessage($"Keep at most {DiscoveryScope.MaxVaults} vault overrides and {DiscoveryScope.MaxItems} SSH item overrides.");
+                showMessage(Strings.Get("Scope.OverrideLimit", DiscoveryScope.MaxVaults, DiscoveryScope.MaxItems));
                 return;
             }
             await applyScope(Copy(draft));
         });
-        clear = Ui.Button("Clear overrides", () =>
+        clear = Ui.Button(Strings.Get("Scope.Clear"), () =>
         {
             draft.Vaults.Clear();
             draft.Items.Clear();
@@ -51,62 +52,61 @@ internal sealed class SettingsScopeEditor
         var controls = new StackPanel { Spacing = 12 };
         unavailableOverrides = new Expander
         {
-            Header = "Overrides outside the discovery list",
+            Header = Strings.Get("Scope.Unavailable"),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Content = new StackPanel
             {
                 Spacing = 8,
-                Children = { Ui.Text("These rules still apply to the corresponding vaults or items when available."), unavailableRows }
+                Children = { Ui.Text(Strings.Get("Scope.UnavailableDescription")), unavailableRows }
             }
         };
-        controls.Children.Add(Ui.Text("Scope controls which SSH keys opssh indexes and uses. 1Password manages account-wide access separately."));
-        controls.Children.Add(Ui.Text("An SSH item rule takes precedence over its vault rule. Vaults and items set to Inherit use the nearest rule above them."));
-        controls.Children.Add(Ui.Text($"The discovery list shows up to {DiscoveryScope.MaxVaults} vaults and {DiscoveryScope.MaxItems} SSH items."));
-        controls.Children.Add(Ui.Text("Apply to save your changes. Closing Settings discards unapplied changes."));
-        controls.Children.Add(SettingsLayout.Row(Ui.Text("Default for all SSH items"), defaultRule));
+        controls.Children.Add(Ui.Text(Strings.Get("Scope.Description")));
+        controls.Children.Add(Ui.Text(Strings.Get("Scope.Precedence")));
+        controls.Children.Add(Ui.Text(Strings.Get("Scope.CatalogLimit", DiscoveryScope.MaxVaults, DiscoveryScope.MaxItems)));
+        controls.Children.Add(Ui.Text(Strings.Get("Scope.ApplyDescription")));
+        controls.Children.Add(SettingsLayout.Row(Ui.Text(Strings.Get("Scope.Default")), defaultRule));
         controls.Children.Add(empty);
         controls.Children.Add(vaultRows);
         controls.Children.Add(unavailableOverrides);
         controls.Children.Add(SettingsLayout.Row(apply, clear));
         View = new Expander
         {
-            Header = new StackPanel { Spacing = 2, Children = { Ui.Heading("Discovery scope", 14), summary } },
+            Header = new StackPanel { Spacing = 2, Children = { Ui.Heading(Strings.Get("Scope.DiscoveryScope"), 14), summary } },
             Content = controls,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch
         };
-        AutomationProperties.SetName(View, "Discovery scope");
+        AutomationProperties.SetName(View, Strings.Get("Scope.DiscoveryScope"));
         RebuildRows();
     }
 
     internal Expander View { get; }
 
-    internal void Reset()
-    {
-        saved = new DiscoveryScope("include", [], []);
-        draft = Copy(saved);
-        catalog = [];
-        RebuildRows();
-    }
+    internal void Reset() => Update(null, [], reset: true);
 
-    internal void Update(DiscoveryScope? scope, DiscoveredVault[] vaults)
+    internal void Update(DiscoveryScope? scope, DiscoveredVault[] vaults, bool reset)
     {
-        var previousSaved = saved;
-        saved = scope ?? new DiscoveryScope("include", [], []);
-        var replaceDraft = SameScope(draft, previousSaved) && !SameScope(draft, saved);
+        var next = scope ?? new DiscoveryScope("include", [], []);
+        var savedChanged = !SameScope(saved, next);
+        var catalogChanged = !SameCatalog(catalog, vaults);
+        var replaceDraft = (reset || (savedChanged && SameScope(draft, saved))) && !SameScope(draft, next);
+        if (!savedChanged && !catalogChanged && !replaceDraft)
+            return;
+
+        saved = next;
         if (replaceDraft)
             draft = Copy(saved);
-
-        if (replaceDraft || !SameCatalog(catalog, vaults))
+        if (catalogChanged)
         {
             catalog = vaults;
+            itemCount = vaults.Sum(vault => vault.Items.Length);
+        }
+
+        if (replaceDraft || catalogChanged)
             RebuildRows();
-        }
         else
-        {
             UpdateSummary();
-        }
     }
 
     private void RebuildRows()
@@ -116,22 +116,13 @@ internal sealed class SettingsScopeEditor
         var expanded = vaultSections.Where(section => section.Value.IsExpanded).Select(section => section.Key).ToHashSet(StringComparer.Ordinal);
         vaultSections.Clear();
         vaultRows.Children.Clear();
-        var vaultLabels = SettingsLabels.ById(catalog.Select(v => (v.Id, DisplayName(v.Name, "Unnamed vault"))));
+        var vaultLabels = SettingsLabels.ById(catalog.Select(v => (v.Id, DisplayName(v.Name, Strings.Get("Scope.UnnamedVault")))));
         var listedItems = new HashSet<string>(StringComparer.Ordinal);
         foreach (var vault in catalog.OrderBy(v => v.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             var name = vaultLabels[vault.Id];
-            var itemLabels = SettingsLabels.ById(vault.Items.Select(i => (i.Id, DisplayName(i.Name, "Unnamed SSH item"))));
-            var rules = new StackPanel { Spacing = 8 };
-            rules.Children.Add(SettingsLayout.Row(Ui.Text("Vault rule"), Override(draft.Vaults, vault.Id, $"Rule for vault {name}")));
-            foreach (var item in vault.Items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
-            {
-                var id = vault.Id + "/" + item.Id;
-                listedItems.Add(id);
-                var itemName = itemLabels[item.Id];
-                rules.Children.Add(SettingsLayout.Row(Ui.Text(itemName),
-                    Override(draft.Items, id, $"Rule for SSH item {itemName} in {name}")));
-            }
+            foreach (var item in vault.Items)
+                listedItems.Add(vault.Id + "/" + item.Id);
 
             var section = new Expander
             {
@@ -141,14 +132,19 @@ internal sealed class SettingsScopeEditor
                     Children =
                     {
                         new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap },
-                        new TextBlock { Text = Count(vault.Items.Length, "SSH item", "SSH items") }
+                        new TextBlock { Text = ItemCount(vault.Items.Length) }
                     }
                 },
-                Content = rules,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                IsExpanded = expanded.Contains(vault.Id)
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
             };
+            // Materialize item controls when the user opens the vault.
+            section.Expanding += (sender, _) => sender.Content ??= BuildVaultRules(vault, name);
+            if (expanded.Contains(vault.Id))
+            {
+                section.Content = BuildVaultRules(vault, name);
+                section.IsExpanded = true;
+            }
             AutomationProperties.SetName(section, name);
             vaultRows.Children.Add(section);
             vaultSections.Add(vault.Id, section);
@@ -157,7 +153,7 @@ internal sealed class SettingsScopeEditor
         foreach (var rule in draft.Vaults.OrderBy(rule => rule.Key, StringComparer.Ordinal))
         {
             if (!vaultLabels.ContainsKey(rule.Key))
-                AddUnavailableRow(draft.Vaults, rule.Key, $"Vault {rule.Key}", rule.Value);
+                AddUnavailableRow(draft.Vaults, rule.Key, Strings.Get("Scope.UnknownVault", rule.Key), rule.Value);
         }
         foreach (var rule in draft.Items.OrderBy(rule => rule.Key, StringComparer.Ordinal))
         {
@@ -165,8 +161,8 @@ internal sealed class SettingsScopeEditor
             {
                 var separator = rule.Key.IndexOf('/');
                 var vaultId = rule.Key[..separator];
-                var vaultName = vaultLabels.GetValueOrDefault(vaultId, "vault " + vaultId);
-                AddUnavailableRow(draft.Items, rule.Key, $"SSH item {rule.Key[(separator + 1)..]} in {vaultName}", rule.Value);
+                var vaultName = vaultLabels.GetValueOrDefault(vaultId, Strings.Get("Scope.UnknownVault", vaultId));
+                AddUnavailableRow(draft.Items, rule.Key, Strings.Get("Scope.UnknownItem", rule.Key[(separator + 1)..], vaultName), rule.Value);
             }
         }
         empty.Visibility = catalog.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -174,11 +170,26 @@ internal sealed class SettingsScopeEditor
         UpdateSummary();
     }
 
+    private StackPanel BuildVaultRules(DiscoveredVault vault, string name)
+    {
+        var itemLabels = SettingsLabels.ById(vault.Items.Select(i => (i.Id, DisplayName(i.Name, Strings.Get("Scope.UnnamedItem")))));
+        var rules = new StackPanel { Spacing = 8 };
+        rules.Children.Add(SettingsLayout.Row(Ui.Text(Strings.Get("Scope.VaultRule")),
+            Override(draft.Vaults, vault.Id, Strings.Get("Scope.VaultRuleAutomationName", name))));
+        foreach (var item in vault.Items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var itemName = itemLabels[item.Id];
+            rules.Children.Add(SettingsLayout.Row(Ui.Text(itemName),
+                Override(draft.Items, vault.Id + "/" + item.Id, Strings.Get("Scope.ItemRuleAutomationName", itemName, name))));
+        }
+        return rules;
+    }
+
     private void AddUnavailableRow(Dictionary<string, string> overrides, string id, string name, string rule)
     {
-        var label = rule == "include" ? "Include" : "Exclude";
-        var remove = new Button { Content = "Remove" };
-        AutomationProperties.SetName(remove, $"Remove {label.ToLowerInvariant()} override for {name}");
+        var label = rule == "include" ? Strings.Get("Scope.Include") : Strings.Get("Scope.Exclude");
+        var remove = new Button { Content = Strings.Get("Scope.Remove") };
+        AutomationProperties.SetName(remove, Strings.Get("Scope.RemoveAutomationName", name, label));
         var row = SettingsLayout.Row(Ui.Text($"{name} · {label}"), remove);
         remove.Click += (_, _) =>
         {
@@ -196,9 +207,9 @@ internal sealed class SettingsScopeEditor
     private ComboBox Override(Dictionary<string, string> overrides, string id, string label)
     {
         var choice = new ComboBox { MinWidth = 116 };
-        choice.Items.Add("Inherit");
-        choice.Items.Add("Include");
-        choice.Items.Add("Exclude");
+        choice.Items.Add(Strings.Get("Scope.Inherit"));
+        choice.Items.Add(Strings.Get("Scope.Include"));
+        choice.Items.Add(Strings.Get("Scope.Exclude"));
         choice.SelectedIndex = overrides.GetValueOrDefault(id) switch
         {
             "include" => 1,
@@ -224,10 +235,10 @@ internal sealed class SettingsScopeEditor
     private void UpdateSummary()
     {
         var dirty = !SameScope(draft, saved);
-        var defaultLabel = draft.Default == "include" ? "Include all by default" : "Exclude all by default";
-        summary.Text = $"{defaultLabel} · {Count(catalog.Length, "vault", "vaults")} · " +
-            $"{Count(catalog.Sum(v => v.Items.Length), "SSH item", "SSH items")}" +
-            (dirty ? " · Unsaved changes" : "");
+        var defaultLabel = draft.Default == "include" ? Strings.Get("Scope.DefaultInclude") : Strings.Get("Scope.DefaultExclude");
+        var vaultCount = Strings.Get(catalog.Length == 1 ? "Scope.VaultCountOne" : "Scope.VaultCountMany", catalog.Length);
+        summary.Text = $"{defaultLabel} · {vaultCount} · {ItemCount(itemCount)}" +
+            (dirty ? $" · {Strings.Get("Scope.Unsaved")}" : "");
         apply.IsEnabled = dirty;
         clear.IsEnabled = draft.Vaults.Count > 0 || draft.Items.Count > 0;
         unavailableOverrides.Visibility = unavailableRows.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -249,7 +260,7 @@ internal sealed class SettingsScopeEditor
 
     private static string DisplayName(string name, string fallback) => string.IsNullOrWhiteSpace(name) ? fallback : name;
 
-    private static string Count(int count, string singular, string plural) => $"{count} {(count == 1 ? singular : plural)}";
+    private static string ItemCount(int count) => Strings.Get(count == 1 ? "Scope.ItemCountOne" : "Scope.ItemCountMany", count);
 }
 
 internal static class SettingsLabels
@@ -269,7 +280,7 @@ internal static class SettingsLabels
                     while (matching.Any(other => other.Id != entry.Id &&
                         SamePrefix(entry.Id, other.Id, length)))
                         length++;
-                    label += "\nID " + IdPrefix(entry.Id, length);
+                    label += "\n" + Strings.Get("Scope.EntryId", IdPrefix(entry.Id, length));
                 }
                 labels.Add(entry.Id, label);
             }

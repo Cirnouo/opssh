@@ -36,16 +36,16 @@ func run(args []string, boot startup) error {
 	defer ch.Close()
 	path, settings, err := boot.readConfig()
 	if err != nil {
-		return startupError(ch, "The public configuration is invalid or unreadable.")
+		return startupError(ch, "invalid-configuration", "The public configuration is invalid or unreadable.")
 	}
 	listener, err := boot.listen()
 	if err != nil {
-		return startupError(ch, "The SSH agent pipe is unavailable or already in use.")
+		return startupError(ch, "pipe-unavailable", "The SSH agent pipe is unavailable or already in use.")
 	}
 	defer listener.Close()
 	app, err := newApplication(path, listener.Addr(), settings, ch, boot.newVault)
 	if err != nil {
-		return startupError(ch, "The public key index could not be opened.")
+		return startupError(ch, "index-unreadable", "The public key index could not be opened.")
 	}
 	defer app.engine.Close()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,8 +69,8 @@ func run(args []string, boot startup) error {
 	return ch.Run(ctx, app.command, app.priority)
 }
 
-func startupError(ch *control.Channel, message string) error {
-	_ = ch.Send(control.Event("fatal", "", map[string]string{"error": message}))
+func startupError(ch *control.Channel, code, message string) error {
+	_ = ch.Send(control.Event("fatal", "", map[string]string{"errorCode": code, "error": message}))
 	return errors.New(message)
 }
 

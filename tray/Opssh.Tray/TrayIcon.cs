@@ -19,6 +19,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly nint module;
     private nint window;
     private IconData icon;
+    private string tipKey = "Tray.Starting";
 
     internal event Action? OpenRequested;
     internal event Action? RestartRequested;
@@ -55,15 +56,22 @@ internal sealed class TrayIcon : IDisposable
             Flags = 0x07,
             Message = Callback,
             Icon = LoadIconW(0, 32512),
-            Tip = "opssh is starting",
+            Tip = Strings.Get(tipKey),
             Info = "",
             InfoTitle = ""
         };
         Shell_NotifyIconW(Add, ref icon);
     }
 
-    internal void SetTip(string value)
+    internal void SetTip(string key)
     {
+        tipKey = key;
+        RefreshLanguage();
+    }
+
+    internal void RefreshLanguage()
+    {
+        var value = Strings.Get(tipKey);
         icon.Tip = value.Length <= 127 ? value : value[..127];
         if (!Shell_NotifyIconW(Modify, ref icon))
             Shell_NotifyIconW(Add, ref icon);
@@ -94,9 +102,9 @@ internal sealed class TrayIcon : IDisposable
             return;
         try
         {
-            AppendMenuW(menu, 0, 1, "Open opssh");
-            AppendMenuW(menu, CanRestart ? 0u : 1u, 2, "Restart core");
-            AppendMenuW(menu, 0, 3, "Quit opssh");
+            AppendMenuW(menu, 0, 1, Strings.Get("Tray.Open"));
+            AppendMenuW(menu, CanRestart ? 0u : 1u, 2, Strings.Get("Tray.Restart"));
+            AppendMenuW(menu, 0, 3, Strings.Get("Tray.Quit"));
             if (!GetCursorPos(out var cursor))
                 return;
             SetForegroundWindow(window);

@@ -3,7 +3,10 @@ using System.Text.Json.Serialization;
 
 namespace Opssh.Tray;
 
-internal sealed class CoreStartupException(string message) : IOException(message);
+internal sealed class CoreStartupException(string feedbackKey) : IOException("The core could not start.")
+{
+    internal string FeedbackKey { get; } = feedbackKey;
+}
 internal sealed record Hello(string Pipe, string Version);
 internal sealed record CachePolicy(
     [property: JsonRequired] string Mode,
@@ -27,7 +30,8 @@ internal sealed record PublicKey(
     [property: JsonRequired] string Fingerprint,
     [property: JsonRequired] bool Loaded,
     [property: JsonRequired] bool Loading,
-    string? Error);
+    string? Error,
+    bool Unnamed = false);
 
 internal sealed record DiscoveryScope(
     [property: JsonRequired] string Default,
@@ -60,9 +64,46 @@ internal sealed record CoreState(
     DiscoveredVault[]? Vaults = null,
     string? Index = null);
 
-internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired);
+internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired, string? ErrorCode = null);
 internal sealed record ProcessIdentity(uint Pid, ulong Created, string Path);
-internal sealed record Approval(string Id, string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline, bool CacheAllowed);
+internal sealed record Approval(string Id, string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline,
+    bool CacheAllowed, string? NameHint = null);
+
+internal static class CoreFeedback
+{
+    // Older cores only send English text. Match only known, safe messages.
+    internal static string ResultKey(string? code, string? legacy) => (code ?? legacy) switch
+    {
+        "invalid-command" or "Invalid command or settings." => "Error.InvalidCommand",
+        "configuration-write" or "Could not save the public configuration." => "Error.ConfigurationWrite",
+        "already-selected" or "This item is already selected." => "Error.AlreadySelected",
+        "invalid-settings" or "Check the account name, item IDs, cache duration and duplicate public keys." => "Error.InvalidSettings",
+        "account-unconfigured" or "Configure your 1Password account first." => "Error.AccountUnconfigured",
+        "busy" or "A request is already in progress. Try again after it completes." => "Error.Busy",
+        "scope-too-broad" or "The scope selects more than 64 SSH keys. Narrow the selection and refresh the public index." => "Error.ScopeTooBroad",
+        "scan-limit" or "Discovery can scan up to 256 vaults and 8,192 item overviews per scoped vault. The public index is empty." => "Error.ScanLimit",
+        "partial-index" or "The public index is incomplete. Check 1Password desktop access and refresh." => "Error.PartialIndex",
+        "public-lookup" or "The public key lookup failed. Check 1Password desktop integration and the selected item, then refresh." => "Error.PublicLookup",
+        "unknown-key" or "Select a key with a current public index." => "Error.UnknownKey",
+        "locked" or "Unlock opssh before loading a private key." => "Error.Locked",
+        "provider-timeout" or "The 1Password request timed out." => "Error.ProviderTimeout",
+        "canceled" or "The request was canceled." => "Error.Canceled",
+        "key-mismatch" or "The private key no longer matches the public index. Refresh the item." => "Error.KeyMismatch",
+        "invalid-key" or "The selected private key has an unsupported or invalid format." => "Error.InvalidKey",
+        "request-failed" or "The request could not be completed." => "Error.RequestFailed",
+        "restart-required" or "Restart the core to use the selected account." => "Error.RestartRequired",
+        "too-many-commands" or "Too many pending commands." => "Error.TooManyCommands",
+        _ => "Error.RequestRejected"
+    };
+
+    internal static string StartupKey(string? code, string? legacy) => (code ?? legacy) switch
+    {
+        "invalid-configuration" or "The public configuration is invalid or unreadable." => "Error.InvalidConfiguration",
+        "pipe-unavailable" or "The SSH agent pipe is unavailable or already in use." => "Error.PipeUnavailable",
+        "index-unreadable" or "The public key index could not be opened." => "Error.IndexUnreadable",
+        _ => "Error.StartFailed"
+    };
+}
 
 internal sealed class CoreSession : IDisposable
 {
@@ -203,10 +244,14 @@ internal sealed class CoreSession : IDisposable
         try
         {
             var first = await Protocol.ReadAsync(pipe, stopped).ConfigureAwait(false);
-            if (first.Type == "fatal" && first.Body is { } failure && failure.TryGetProperty("error", out var error) &&
-                error.ValueKind == JsonValueKind.String && error.GetString() is { Length: > 0 and <= 512 } reason)
+            if (first.Type == "fatal" && first.Id is null)
             {
-                greeting.TrySetException(new CoreStartupException(reason));
+                var failure = ReadBody<StartupFailure>(first);
+                if ((failure.Error is null && failure.ErrorCode is null) ||
+                    (failure.Error is not null && !ValidText(failure.Error, 512)) ||
+                    (failure.ErrorCode is not null && !ValidErrorCode(failure.ErrorCode)))
+                    throw new IOException("Invalid core startup failure.");
+                greeting.TrySetException(new CoreStartupException(CoreFeedback.StartupKey(failure.ErrorCode, failure.Error)));
                 return;
             }
             if (first.Type != "hello" || first.Id is not null || first.Body is not { } helloBody ||
@@ -237,11 +282,12 @@ internal sealed class CoreSession : IDisposable
                         var body = ReadBody<ApprovalBody>(message);
                         if (body.Chain is not { Length: > 0 and <= 64 } chain ||
                             chain.Any(p => p is null || p.Pid == 0 || p.Created == 0 || string.IsNullOrWhiteSpace(p.Path)) ||
-                            string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.Fingerprint))
+                            string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.Fingerprint) ||
+                            (body.NameHint is not null && (body.NameHint.Length != 8 || !body.NameHint.All(IsIdCharacter))))
                             throw new IOException("Invalid approval request.");
                         if (body.Deadline <= clock.GetUtcNow())
                             break;
-                        var approval = new Approval(id, body.Name, body.Fingerprint, chain, body.Deadline, body.CacheAllowed);
+                        var approval = new Approval(id, body.Name, body.Fingerprint, chain, body.Deadline, body.CacheAllowed, body.NameHint);
                         lock (sync)
                         {
                             if (closed)
@@ -276,7 +322,8 @@ internal sealed class CoreSession : IDisposable
     private static Result ReadResult(Envelope message, string command, string pipeName)
     {
         var result = ReadBody<Result>(message);
-        if (result.Error is not null && !ValidText(result.Error, 512))
+        if ((result.Error is not null && !ValidText(result.Error, 512)) ||
+            (result.ErrorCode is not null && !ValidErrorCode(result.ErrorCode)))
             throw new IOException("Invalid control result error.");
         if (result.State is not { } state)
         {
@@ -357,8 +404,12 @@ internal sealed class CoreSession : IDisposable
     private static bool ValidText(string? value, int maxLength) =>
         value is not null && value.Length <= maxLength && !value.Any(char.IsControl);
 
-    private static bool ValidItemId(string? value) =>
-        value is { Length: 26 } && value.All(ch => ch is (>= 'a' and <= 'z') or (>= '0' and <= '9'));
+    private static bool ValidItemId(string? value) => value is { Length: 26 } && value.All(IsIdCharacter);
+
+    private static bool IsIdCharacter(char ch) => ch is (>= 'a' and <= 'z') or (>= '0' and <= '9');
+
+    private static bool ValidErrorCode(string value) =>
+        value is { Length: > 0 and <= 64 } && value.All(ch => ch == '-' || IsIdCharacter(ch));
 
     private static T ReadBody<T>(Envelope message) where T : class =>
         message.Body?.Deserialize<T>(Protocol.Json) ?? throw new IOException("Missing control body.");
@@ -383,5 +434,7 @@ internal sealed class CoreSession : IDisposable
         Disconnected?.Invoke();
     }
 
-    private sealed record ApprovalBody(string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline, bool CacheAllowed);
+    private sealed record StartupFailure(string? ErrorCode, string? Error);
+    private sealed record ApprovalBody(string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline, bool CacheAllowed,
+        string? NameHint);
 }

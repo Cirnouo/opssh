@@ -83,7 +83,7 @@ func engineKeys(cfg config.Settings) []engine.Key {
 	keys := make([]engine.Key, 0, len(cfg.Keys))
 	for _, k := range cfg.Keys {
 		if len(k.Public) > 0 {
-			keys = append(keys, engine.Key{ID: k.ID(), VaultID: k.VaultID, ItemID: k.ItemID, Name: label(k), Public: k.Public})
+			keys = append(keys, engine.Key{ID: k.ID(), VaultID: k.VaultID, ItemID: k.ItemID, Name: k.Name, Public: k.Public})
 		}
 	}
 	return keys
@@ -123,11 +123,19 @@ func (a *application) approve(ctx context.Context, prompt engine.Prompt) (engine
 	}
 	body := struct {
 		Name         string           `json:"name"`
+		NameHint     string           `json:"nameHint,omitempty"`
 		Fingerprint  string           `json:"fingerprint"`
 		Chain        []processDisplay `json:"chain"`
 		Deadline     time.Time        `json:"deadline"`
 		CacheAllowed bool             `json:"cacheAllowed"`
-	}{prompt.Key.Name, fingerprint(prompt.Key.Public), chain, prompt.Deadline, prompt.CacheAllowed}
+	}{
+		Name: prompt.Key.Name, Fingerprint: fingerprint(prompt.Key.Public),
+		Chain: chain, Deadline: prompt.Deadline, CacheAllowed: prompt.CacheAllowed,
+	}
+	if body.Name == "" {
+		body.NameHint = prompt.Key.ItemID[:8]
+		body.Name = "SSH key " + body.NameHint
+	}
 	decision, err := a.channel.Prompt(ctx, body)
 	return engine.Approval{Scope: decision.Scope, Candidate: decision.Candidate}, err
 }
@@ -137,6 +145,7 @@ type keyDisplay struct {
 	VaultID     string `json:"vaultId"`
 	ItemID      string `json:"itemId"`
 	Name        string `json:"name"`
+	Unnamed     bool   `json:"unnamed,omitempty"`
 	Fingerprint string `json:"fingerprint"`
 	Loaded      bool   `json:"loaded"`
 	Loading     bool   `json:"loading"`
@@ -174,8 +183,11 @@ func (a *application) status() appState {
 		state.Pending = a.channel.Pending()
 	}
 	for _, k := range a.settings.Keys {
-		row := keyDisplay{ID: k.ID(), VaultID: k.VaultID, ItemID: k.ItemID, Name: label(k),
+		row := keyDisplay{ID: k.ID(), VaultID: k.VaultID, ItemID: k.ItemID, Name: k.Name, Unnamed: k.Name == "",
 			Fingerprint: fingerprint(k.Public), Loaded: s.Loaded[k.ID()], Loading: s.Loading[k.ID()], Error: s.Errors[k.ID()]}
+		if row.Unnamed {
+			row.Name = "SSH key " + k.ItemID[:8]
+		}
 		if len(k.Public) == 0 {
 			row.Error = "public-index-missing"
 		}
@@ -192,13 +204,6 @@ func fingerprint(blob []byte) string {
 	return ssh.FingerprintSHA256(key)
 }
 
-func label(k config.Key) string {
-	if k.Name != "" {
-		return k.Name
-	}
-	return "SSH key " + k.ItemID[:8]
-}
-
 // These operations only touch the synchronized engine. They can run while
 // the regular command worker is waiting on 1Password.
 func (a *application) priority(msg control.Message) (control.Result, bool) {
@@ -209,7 +214,7 @@ func (a *application) priority(msg control.Message) (control.Result, bool) {
 		a.restartMu.Lock()
 		defer a.restartMu.Unlock()
 		if a.restartRequired {
-			return control.Result{Error: "Restart the core to use the selected account.", RestartRequired: true}, true
+			return restartResult(), true
 		}
 		a.engine.Unlock()
 	case "evict-keys":
@@ -219,7 +224,7 @@ func (a *application) priority(msg control.Message) (control.Result, bool) {
 			KeyID string `json:"keyId"`
 		}
 		if len(msg.Body) > 0 && control.DecodeBody(msg, &body) != nil {
-			return control.Result{Error: displayError(errCommand)}, true
+			return commandResult(errCommand), true
 		}
 		a.engine.Revoke(body.KeyID)
 	default:
@@ -231,7 +236,9 @@ func (a *application) priority(msg control.Message) (control.Result, bool) {
 func (a *application) command(ctx context.Context, msg control.Message) control.Result {
 	var err error
 	if a.restartRequired && msg.Type != "status" {
-		return control.Result{Error: "Restart the core to use the selected account.", State: a.status(), RestartRequired: true}
+		result := restartResult()
+		result.State = a.status()
+		return result
 	}
 	switch msg.Type {
 	case "status":
@@ -288,7 +295,16 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	default:
 		err = errCommand
 	}
-	return control.Result{OK: err == nil, Error: displayError(err), State: a.status(), RestartRequired: a.restartRequired}
+	result := commandResult(err)
+	result.State = a.status()
+	result.RestartRequired = a.restartRequired
+	return result
+}
+
+func restartResult() control.Result {
+	return control.Result{
+		ErrorCode: "restart-required", Error: "Restart the core to use the selected account.", RestartRequired: true,
+	}
 }
 
 func (a *application) keyIndex(id string) int {
@@ -448,43 +464,50 @@ var (
 	errAlreadySelected = errors.New("item already selected")
 )
 
-func displayError(err error) string {
+func commandResult(err error) control.Result {
+	if err == nil {
+		return control.Result{OK: true}
+	}
+	code, message := displayError(err)
+	return control.Result{ErrorCode: code, Error: message}
+}
+
+// Keep the safe English message for older trays. New trays translate the code.
+func displayError(err error) (code, message string) {
 	switch {
-	case err == nil:
-		return ""
 	case errors.Is(err, errCommand):
-		return "Invalid command or settings."
+		return "invalid-command", "Invalid command or settings."
 	case errors.Is(err, errSettingsWrite):
-		return "Could not save the public configuration."
+		return "configuration-write", "Could not save the public configuration."
 	case errors.Is(err, errAlreadySelected):
-		return "This item is already selected."
+		return "already-selected", "This item is already selected."
 	case errors.Is(err, config.ErrInvalid):
-		return "Check the account name, item IDs, cache duration and duplicate public keys."
+		return "invalid-settings", "Check the account name, item IDs, cache duration and duplicate public keys."
 	case errors.Is(err, desktop.ErrUnconfigured):
-		return "Configure your 1Password account first."
+		return "account-unconfigured", "Configure your 1Password account first."
 	case errors.Is(err, desktop.ErrBusy), errors.Is(err, engine.ErrBusy):
-		return "A request is already in progress. Try again after it completes."
+		return "busy", "A request is already in progress. Try again after it completes."
 	case errors.Is(err, desktop.ErrScopeTooBroad):
-		return "The scope selects more than 64 SSH keys. Narrow the selection and refresh the public index."
+		return "scope-too-broad", "The scope selects more than 64 SSH keys. Narrow the selection and refresh the public index."
 	case errors.Is(err, desktop.ErrScanLimit):
-		return "Discovery can scan up to 256 vaults and 8,192 item overviews per scoped vault. The public index is empty."
+		return "scan-limit", "Discovery can scan up to 256 vaults and 8,192 item overviews per scoped vault. The public index is empty."
 	case errors.Is(err, desktop.ErrPartial):
-		return "The public index is incomplete. Check 1Password desktop access and refresh."
+		return "partial-index", "The public index is incomplete. Check 1Password desktop access and refresh."
 	case errors.Is(err, desktop.ErrPublic), errors.Is(err, desktop.ErrUnavailable):
-		return "The public key lookup failed. Check 1Password desktop integration and the selected item, then refresh."
+		return "public-lookup", "The public key lookup failed. Check 1Password desktop integration and the selected item, then refresh."
 	case errors.Is(err, engine.ErrUnknownKey):
-		return "Select a key with a current public index."
+		return "unknown-key", "Select a key with a current public index."
 	case errors.Is(err, engine.ErrLocked):
-		return "Unlock opssh before loading a private key."
+		return "locked", "Unlock opssh before loading a private key."
 	case errors.Is(err, engine.ErrLoadTimeout), errors.Is(err, context.DeadlineExceeded):
-		return "The 1Password request timed out."
+		return "provider-timeout", "The 1Password request timed out."
 	case errors.Is(err, context.Canceled):
-		return "The request was canceled."
+		return "canceled", "The request was canceled."
 	case errors.Is(err, engine.ErrKeyMismatch):
-		return "The private key no longer matches the public index. Refresh the item."
+		return "key-mismatch", "The private key no longer matches the public index. Refresh the item."
 	case errors.Is(err, engine.ErrInvalidKey):
-		return "The selected private key has an unsupported or invalid format."
+		return "invalid-key", "The selected private key has an unsupported or invalid format."
 	default:
-		return "The request could not be completed."
+		return "request-failed", "The request could not be completed."
 	}
 }
