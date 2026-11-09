@@ -5,6 +5,26 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      release-tag:
+        required: true
+        type: string
+      release-tag-object:
+        required: true
+        type: string
+      release-source-commit:
+        required: true
+        type: string
+    outputs:
+      package-artifact-id:
+        value: ${{ jobs.distributables.outputs.package-artifact-id }}
+      package-artifact-name:
+        value: ${{ jobs.distributables.outputs.package-artifact-name }}
+      package-manifest-sha256:
+        value: ${{ jobs.distributables.outputs.package-manifest-sha256 }}
+      package-notes-sha256:
+        value: ${{ jobs.distributables.outputs.package-notes-sha256 }}
 
 permissions:
   contents: read
@@ -28,9 +48,27 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.403
+      - name: Exercise release admission and publication offline
+        shell: pwsh
+        run: ./tools/Test-WindowsReleasePublisher.ps1
       - name: Verify agent and distributable
         shell: pwsh
-        run: ./tools/Test-Windows.ps1 -OutputDirectory .artifacts/ci -ReportPath .artifacts/ci/release-report.json
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_SOURCE: ${{ inputs.release-source-commit }}
+        run: |
+          $arguments = @{ OutputDirectory = '.artifacts/ci'; ReportPath = '.artifacts/ci/release-report.json' }
+          if ($env:RELEASE_TAG) {
+              Import-Module ./tools/OpsshRelease.psm1
+              $version = Get-OpsshReleaseVersion -Tag $env:RELEASE_TAG
+              $head = git rev-parse --verify HEAD
+              if ($LASTEXITCODE -ne 0 -or $head -cne $env:RELEASE_SOURCE -or
+                  $head -cne $env:GITHUB_SHA -or $env:GITHUB_REF -cne "refs/tags/$env:RELEASE_TAG") {
+                  throw 'The Windows validation checkout does not match the admitted tag.'
+              }
+              $arguments.ReleaseVersion = $version.ToString(3)
+          }
+          ./tools/Test-Windows.ps1 @arguments
       - name: Exercise staged validation in disposable repositories
         shell: pwsh
         run: |
@@ -68,10 +106,15 @@ jobs:
     needs: offline
     runs-on: windows-2025
     timeout-minutes: 75
+    outputs:
+      package-artifact-id: ${{ steps.release-artifact.outputs.artifact-id }}
+      package-artifact-name: ${{ steps.release-inputs.outputs.artifact-name }}
+      package-manifest-sha256: ${{ steps.release-inputs.outputs.manifest-sha256 }}
+      package-notes-sha256: ${{ steps.release-inputs.outputs.notes-sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.release-source-commit || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -152,5 +195,33 @@ jobs:
             .artifacts/ci/packages/opssh-*-windows-x64.msi
             .artifacts/ci/packages/opssh-*-windows-x64.exe
             .artifacts/ci/packages/opssh-*-windows-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+      - name: Prepare the verified package handoff and release notes
+        id: release-inputs
+        if: ${{ inputs.release-tag != '' }}
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_TAG_OBJECT: ${{ inputs.release-tag-object }}
+          RELEASE_SOURCE: ${{ inputs.release-source-commit }}
+        run: |
+          ./tools/New-WindowsReleaseInputs.ps1 -Tag $env:RELEASE_TAG -TagObject $env:RELEASE_TAG_OBJECT `
+              -SourceCommit $env:RELEASE_SOURCE -PackageDirectory .artifacts/ci/packages -ChangelogPath CHANGELOG.md
+          "artifact-name=opssh-release-$env:RELEASE_SOURCE-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" >> $env:GITHUB_OUTPUT
+          "manifest-sha256=$((Get-FileHash -LiteralPath .artifacts/ci/packages/manifest.json -Algorithm SHA256).Hash)" >> $env:GITHUB_OUTPUT
+          "notes-sha256=$((Get-FileHash -LiteralPath .artifacts/ci/packages/notes.md -Algorithm SHA256).Hash)" >> $env:GITHUB_OUTPUT
+      - name: Preserve the exact release inputs
+        id: release-artifact
+        if: ${{ inputs.release-tag != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.release-inputs.outputs.artifact-name }}
+          path: |
+            .artifacts/ci/packages/opssh-*-windows-x64.msi
+            .artifacts/ci/packages/opssh-*-windows-x64.exe
+            .artifacts/ci/packages/opssh-*-windows-x64.zip
+            .artifacts/ci/packages/manifest.json
+            .artifacts/ci/packages/notes.md
           if-no-files-found: error
           compression-level: 0

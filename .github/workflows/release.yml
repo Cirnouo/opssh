@@ -1,0 +1,109 @@
+name: Windows release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    name: Verify tag and exact main validation
+    if: ${{ github.event.created && !github.event.deleted && !github.event.forced }}
+    runs-on: windows-2025
+    timeout-minutes: 8
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tag: ${{ steps.admission.outputs.tag }}
+      tag-object: ${{ steps.admission.outputs.tag-object }}
+      source-commit: ${{ steps.admission.outputs.source-commit }}
+      main-sha: ${{ steps.admission.outputs.main-sha }}
+      main-runs: ${{ steps.admission.outputs.main-runs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Admit the exact tagged commit
+        id: admission
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/Assert-WindowsReleaseAdmission.ps1
+
+  verify:
+    name: Validate tagged Windows packages
+    needs: admit
+    uses: ./.github/workflows/windows.yml
+    permissions:
+      contents: read
+    with:
+      release-tag: ${{ needs.admit.outputs.tag }}
+      release-tag-object: ${{ needs.admit.outputs.tag-object }}
+      release-source-commit: ${{ needs.admit.outputs.source-commit }}
+
+  audit:
+    name: Audit tagged dependency graphs
+    needs: admit
+    uses: ./.github/workflows/dependency-audit.yml
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish immutable Windows release
+    needs: [admit, verify, audit]
+    runs-on: windows-2025
+    timeout-minutes: 20
+    concurrency:
+      group: windows-release-publish
+      queue: max
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.admit.outputs.source-commit }}
+          persist-credentials: false
+      - name: Check validated artifact identity
+        shell: pwsh
+        env:
+          RELEASE_ARTIFACT_ID: ${{ needs.verify.outputs.package-artifact-id }}
+          RELEASE_ARTIFACT_NAME: ${{ needs.verify.outputs.package-artifact-name }}
+          RELEASE_SOURCE: ${{ needs.admit.outputs.source-commit }}
+        run: |
+          $head = git rev-parse --verify HEAD
+          $namePattern = '\Aopssh-release-' + [regex]::Escape($env:RELEASE_SOURCE) + '-' +
+              [regex]::Escape($env:GITHUB_RUN_ID) + '-([1-9][0-9]{0,8})\z'
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:RELEASE_SOURCE -or
+              $env:RELEASE_ARTIFACT_ID -cnotmatch '\A[1-9][0-9]{0,18}\z' -or
+              $env:RELEASE_ARTIFACT_NAME -cnotmatch $namePattern -or [int]$Matches[1] -gt [int]$env:GITHUB_RUN_ATTEMPT) {
+              throw 'The checkout or validated artifact identity is missing or inconsistent.'
+          }
+      - name: Download the exact validated package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.verify.outputs.package-artifact-id }}
+          path: ${{ runner.temp }}/opssh-release-input
+      - name: Publish or verify the immutable release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.admit.outputs.tag }}
+          RELEASE_TAG_OBJECT: ${{ needs.admit.outputs.tag-object }}
+          RELEASE_SOURCE: ${{ needs.admit.outputs.source-commit }}
+          MANIFEST_SHA256: ${{ needs.verify.outputs.package-manifest-sha256 }}
+          NOTES_SHA256: ${{ needs.verify.outputs.package-notes-sha256 }}
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'opssh-release-input'
+          ./tools/Publish-WindowsRelease.ps1 -Repository $env:GITHUB_REPOSITORY -Tag $env:RELEASE_TAG `
+              -TagObject $env:RELEASE_TAG_OBJECT -SourceCommit $env:RELEASE_SOURCE `
+              -ManifestPath (Join-Path $directory 'manifest.json') -ManifestSha256 $env:MANIFEST_SHA256 `
+              -NotesPath (Join-Path $directory 'notes.md') -NotesSha256 $env:NOTES_SHA256

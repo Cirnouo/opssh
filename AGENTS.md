@@ -15,7 +15,8 @@ Ordinary verification is offline. Use generated in-memory keys, controlled clock
 | Testing with a live 1Password account or publishing provider evidence | [Desktop validation procedure](docs/references/1password-desktop-validation.md) and the [documentation policy](docs/policies/documentation.md). |
 | Editing specs, references, evidence, guides or the changelog | [Documentation policy](docs/policies/documentation.md). |
 | Editing contributor instructions or their references | [Instruction progressive disclosure](docs/policies/documentation.md#instruction-progressive-disclosure). |
-| Creating a branch or worktree, opening or merging a PR, changing CI or rules, or preparing a release | [Repository governance](docs/policies/repository-governance.md) and the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for PRs. |
+| Creating a branch or worktree, opening or merging a PR, or changing CI or rules | [Repository governance](docs/policies/repository-governance.md) and the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for PRs. |
+| Preparing a stable tag or publishing a Windows release | [Stable release policy](docs/policies/releases.md). |
 
 Use `gpt-6.1-sol` with ultra reasoning for decision and review subagents. Do not use `gpt-6-astra`. Before pushing, a `gpt-6-luna` high subagent runs and follows local checks and reports their outcomes. A `gpt-6-luna` medium subagent follows PR CI and CI for the exact integrated `main` commit. Fast-forward local `main` after CI and retain the managed worktree that is the current chat checkout.
 
