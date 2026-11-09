@@ -1,0 +1,5 @@
+# Documentation policy
+
+Keep the root instructions short and put conditional procedures in a canonical policy reachable from the instructions. Keep `CONTRIBUTING.md` as the human setup entry. Current specifications explain delivered behavior and limitations and point to code and tests. ADRs preserve decisions and their rationale. Provider references cite official documentation and immutable source versions. Evidence records describe observed results, preserve raw bytes where appropriate and exclude secrets. Use UTF-8, keep links and anchors valid, and avoid duplicating policy or treating a proposal as shipped behavior.
+
+Keep task-specific plans, review ledgers and transient diagnostics in ignored workflow state. Do not copy personal machine paths or conversation transcripts into maintained documentation. Update the relevant current spec and user guidance with the change. Changelogs describe final net user-visible changes since the last published stable release. Preserve published history.

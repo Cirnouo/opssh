@@ -1,0 +1,14 @@
+/.worktrees/
+/.superpowers/
+/docs/superpowers/
+/.artifacts/
+/.scratch/
+/.vs/
+/.idea/
+**/bin/
+**/obj/
+**/TestResults/
+*.user
+*.exe
+*.test
+*.log
