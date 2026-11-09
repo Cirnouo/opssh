@@ -1,4 +1,4 @@
 #!/bin/sh
-set -eu
-root=$(git rev-parse --show-toplevel)
-exec pwsh -NoLogo -NoProfile -File "$root/tools/Test-StagedTree.ps1"
+# opssh worktree gate bootstrap
+echo 'Install and check the worktree hooks with ./tools/Install-TestHooks.ps1 -Install and -Check.' >&2
+exit 1
