@@ -40,3 +40,5 @@ opssh 是面向 Windows x64 系统 OpenSSH 的 SSH agent。Go 核心按需通过
 [行为与安全边界](docs/specs/windows-agent.md) · [开发和验证](CONTRIBUTING.md) · [离线性能实测](docs/references/windows-offline-performance.md)
 
 [使用支持](SUPPORT.md) · [安全报告](SECURITY.md)
+
+[Apache-2.0 许可证](LICENSE) · [第三方许可声明](THIRD-PARTY-NOTICES.md)
