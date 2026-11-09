@@ -36,6 +36,12 @@ About offers a manual update check and a startup check toggle, enabled by defaul
 
 The Go core wipes application-owned mutable buffers and disposes private key references when they expire. SDK response strings, parser allocations, and cryptographic internals can retain copies outside that control. The app does not write a cleartext private key to disk. This is not protection from paging, dumps or malicious same-account processes. The [desktop validation procedure](../references/1password-desktop-validation.md) records the remaining vendor checks.
 
+## Windows startup and agent selection
+
+Login startup is a current-user registration. Waiting for 1Password subscribes to same-session process start events, with periodic checks when subscription is unavailable. The tray verifies the desktop process and can request SDK access for the saved account or show a notification. The Windows integration can list available accounts through the signed official 1Password CLI in desktop integration mode.
+
+A confirmed default-agent change can stop and disable the automatic running inbox OpenSSH agent before reserving its known pipe. The tray refuses other pipe owners and an automatic service that is stopped. Restoring Windows OpenSSH releases the default pipe and sets the installed service to automatic and running. An interrupted service change leaves a recovery record. A pending elevated change remains recorded until the initiating process can establish its outcome. If the process exits during that change, an administrator must reconcile the recorded state before removing the recovery file. Exit releases the pipe and retains the selection for the next startup.
+
 ## Windows distribution
 
 The tray project Version defines the triplet for the published tray assembly, Go core greeting and Windows packages. The Windows x64 release has a per-user MSI, a Burn EXE containing the same MSI, and a portable ZIP containing the same application payload. The first-party binaries and installers are unsigned.

@@ -6,10 +6,12 @@ namespace Opssh.Tray;
 internal sealed record UiPreferences(string Language, string Theme, bool AutoCheckUpdates = true)
 {
     private const int MaxSize = 4096;
-    private const int CurrentVersion = 1;
+    private const int CurrentVersion = 2;
+    public bool WaitForPassword { get; init; }
+    public string StartupAction { get; init; } = "notify";
     public int Version { get; init; } = CurrentVersion;
 
-    internal bool IsValid => Version == CurrentVersion && (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
+    internal bool IsValid => Version == CurrentVersion && (StartupAction is "notify" or "request") && (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
 
     private static string SettingsPath =>
         Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "", "opssh", "tray-settings.json");
@@ -42,6 +44,8 @@ internal sealed record UiPreferences(string Language, string Theme, bool AutoChe
             var saved = root.Deserialize<UiPreferences>(Protocol.Json);
             if (version == 0 && saved is not null)
                 saved = saved with { Version = 1 };
+            if (saved is { Version: 1 })
+                saved = saved with { Version = 2, WaitForPassword = false, StartupAction = "notify" };
             return saved is { IsValid: true } ? saved : fallback;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

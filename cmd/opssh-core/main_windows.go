@@ -59,6 +59,7 @@ func run(args []string, boot startup) error {
 	defer cancel()
 	server := &sshEndpoint{ctx: ctx, fail: cancel, open: boot.listen, app: app}
 	defer server.stop()
+	defer server.setDefaultAgent(false)
 	if !candidate {
 		if err := server.start(); err != nil {
 			return startupError(ch, "pipe-unavailable", "The SSH agent pipe is unavailable or already in use.")
@@ -82,13 +83,17 @@ func run(args []string, boot startup) error {
 // The command worker is the only writer of the endpoint during its lifetime.
 // Closing the control channel cancels and joins the worker before cleanup.
 type sshEndpoint struct {
-	ctx      context.Context
-	fail     context.CancelFunc
-	open     func() (*winipc.Listener, error)
-	app      *application
-	close    context.CancelFunc
-	done     chan struct{}
-	listener *winipc.Listener
+	ctx         context.Context
+	fail        context.CancelFunc
+	open        func() (*winipc.Listener, error)
+	app         *application
+	close       context.CancelFunc
+	done        chan struct{}
+	listener    *winipc.Listener
+	alias       *winipc.Listener
+	closeAlias  context.CancelFunc
+	aliasDone   chan struct{}
+	pausedAlias bool
 }
 
 func (s *sshEndpoint) start() error {
@@ -126,7 +131,20 @@ func (s *sshEndpoint) stop() {
 
 func (s *sshEndpoint) command(ctx context.Context, msg control.Message) control.Result {
 	a := s.app
+	a.defaultAgent = s.defaultAgentEnabled()
 	switch msg.Type {
+	case "default-agent":
+		var request struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if a.candidate || a.paused || a.restartRequired || control.DecodeBody(msg, &request) != nil || request.Enabled == nil {
+			return commandResult(errCommand)
+		}
+		if err := s.setDefaultAgent(*request.Enabled); err != nil {
+			return commandResult(err)
+		}
+		a.defaultAgent = s.defaultAgentEnabled()
+		return control.Result{OK: true}
 	case "pause-ssh":
 		if len(msg.Body) != 0 || a.candidate || a.restartRequired {
 			return commandResult(errCommand)
@@ -134,9 +152,12 @@ func (s *sshEndpoint) command(ctx context.Context, msg control.Message) control.
 		if !a.paused {
 			a.paused = true
 			a.engine.SuspendIndex()
+			s.pausedAlias = s.defaultAgentEnabled()
+			_ = s.setDefaultAgent(false)
+			a.defaultAgent = false
 			s.stop()
 		}
-		return commandResult(nil)
+		return control.Result{OK: true, Data: map[string]bool{"defaultAgent": s.pausedAlias}}
 	case "resume-ssh":
 		if len(msg.Body) != 0 || a.candidate || a.restartRequired {
 			return commandResult(errCommand)
@@ -149,12 +170,22 @@ func (s *sshEndpoint) command(ctx context.Context, msg control.Message) control.
 			if err := s.start(); err != nil {
 				return commandResult(err)
 			}
+			if s.pausedAlias {
+				if err := s.setDefaultAgent(true); err != nil {
+					s.stop()
+					return commandResult(err)
+				}
+			}
+			a.defaultAgent = s.defaultAgentEnabled()
 			a.paused = false
 			a.engine.ResumeIndex()
 		}
 		return commandResult(nil)
 	case "activate-account":
-		if len(msg.Body) != 0 || !a.candidate || a.prepared == nil {
+		var request struct {
+			DefaultAgent bool `json:"defaultAgent"`
+		}
+		if (len(msg.Body) != 0 && control.DecodeBody(msg, &request) != nil) || !a.candidate || a.prepared == nil {
 			return commandResult(errCommand)
 		}
 		// Reserve the same endpoint before the durable account commit, but
@@ -163,10 +194,18 @@ func (s *sshEndpoint) command(ctx context.Context, msg control.Message) control.
 		if err := s.start(); err != nil {
 			return commandResult(err)
 		}
+		if request.DefaultAgent {
+			if err := s.setDefaultAgent(true); err != nil {
+				s.stop()
+				return commandResult(err)
+			}
+		}
 		if err := a.activateAccount(ctx); err != nil {
+			_ = s.setDefaultAgent(false)
 			s.stop()
 			return commandResult(err)
 		}
+		a.defaultAgent = s.defaultAgentEnabled()
 		a.engine.ResumeIndex()
 		result := commandResult(nil)
 		result.State = a.status()

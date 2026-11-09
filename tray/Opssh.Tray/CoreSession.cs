@@ -66,7 +66,8 @@ internal sealed record CoreState(
     string? Index = null,
     string? AccountName = null,
     string? LastProvider = null,
-    DateTimeOffset? ProviderAt = null);
+    DateTimeOffset? ProviderAt = null,
+    bool DefaultAgent = false);
 
 internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired, string? ErrorCode = null,
     JsonElement? Data = null);

@@ -66,6 +66,7 @@ type application struct {
 	attempted       bool
 	prepared        *config.Settings
 	paused          bool
+	defaultAgent    bool
 }
 
 func newApplication(path, endpoint string, cfg config.Settings, ch *control.Channel, factory func(string) vault) (*application, error) {
@@ -167,6 +168,7 @@ type keyDisplay struct {
 	Grants      int    `json:"grants,omitempty"`
 }
 type appState struct {
+	DefaultAgent  bool            `json:"defaultAgent,omitempty"`
 	Pipe          string          `json:"pipe"`
 	Locked        bool            `json:"locked"`
 	Account       string          `json:"account"`
@@ -186,7 +188,7 @@ type appState struct {
 func (a *application) status() appState {
 	s := a.engine.Status()
 	state := appState{
-		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account, AccountName: a.settings.AccountName,
+		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account, AccountName: a.settings.AccountName, DefaultAgent: a.defaultAgent,
 		Keys:     make([]keyDisplay, 0, len(a.settings.Keys)),
 		KeyCache: a.settings.KeyCache, ApprovalCache: a.settings.ApprovalCache,
 		Provider: a.vault.get().Status(), Scope: a.settings.Scope, Vaults: a.vaults, Index: a.settings.Index,
@@ -293,6 +295,24 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	case "status":
 	case "settings":
 		err = a.updateSettings(msg)
+	case "authorize-desktop":
+		var request struct {
+			Account  string `json:"account"`
+			Deadline int64  `json:"deadline"`
+		}
+		if control.DecodeBody(msg, &request) != nil || request.Account == "" || request.Account != a.settings.Account {
+			err = errCommand
+		} else {
+			deadline := time.UnixMilli(request.Deadline)
+			remaining := time.Until(deadline)
+			if remaining <= 0 || remaining > 40*time.Second {
+				err = context.DeadlineExceeded
+			} else {
+				requestContext, stop := context.WithDeadline(ctx, deadline)
+				err = a.reloadVaults(requestContext)
+				stop()
+			}
+		}
 	case "reload-vaults":
 		if len(msg.Body) != 0 {
 			err = errCommand
