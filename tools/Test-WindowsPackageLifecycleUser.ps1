@@ -15,6 +15,9 @@ $startedCases = $false
 $failed = $false
 $cleanupFailed = $false
 $failureKind = $null
+$failureCheck = $null
+$cleanupFailureCheck = $null
+$checkpoint = $null
 $msiexec = Join-Path ([Environment]::SystemDirectory) 'msiexec.exe'
 $logDirectory = Join-Path $ResultDirectory 'installer-logs'
 $arpPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -128,9 +131,40 @@ function Get-Registration([string]$Hive) {
     if (!(Test-Path -LiteralPath $registry)) { return }
     foreach ($key in Get-ChildItem -LiteralPath $registry) {
         $entry = Get-ItemProperty -LiteralPath $key.PSPath
-        if ($entry.DisplayName -eq 'opssh' -or $entry.BundleUpgradeCode -contains '{93B28357-F0AD-4D07-8959-F18BFDE560E9}') {
+        if ($entry.PSChildName -in @($previous.ProductCode, $candidate.ProductCode) -or $entry.DisplayName -eq 'opssh' -or
+            $entry.BundleUpgradeCode -contains '{93B28357-F0AD-4D07-8959-F18BFDE560E9}') {
             $entry
         }
+    }
+}
+
+function Get-MsiInstallations($Package, [switch]$VerifyIdentity) {
+    # Windows Installer's product context identifies ownership independently of
+    # the hive that contains the Add/Remove Programs metadata.
+    # MSIINSTALLCONTEXT_ALL queries machine and current-user contexts with an empty SID.
+    $products = $installer.ProductsEx($Package.ProductCode, '', 7)
+    $getProperty = [Reflection.BindingFlags]'Public, Instance, GetProperty'
+    try {
+        foreach ($product in $products) {
+            try {
+                $type = $product.GetType()
+                $code = $type.InvokeMember('ProductCode', $getProperty, $null, $product, @())
+                if ($code -ine $Package.ProductCode) { throw 'Unexpected MSI product identity.' }
+                $context = $type.InvokeMember('Context', $getProperty, $null, $product, @())
+                $sid = $type.InvokeMember('UserSID', $getProperty, $null, $product, @())
+                $installed = $product.InstallProperty('State') -ceq '5'
+                [PSCustomObject]@{
+                    owned = [int]$context -eq 2 -and $sid -ceq $ExpectedSid
+                    installed = $installed
+                    expectedIdentity = $VerifyIdentity -and $installed -and $product.InstallProperty('InstalledProductName') -ceq 'opssh' -and
+                        $product.InstallProperty('VersionString') -ceq $Package.Version
+                }
+            } finally {
+                [void][Runtime.InteropServices.Marshal]::ReleaseComObject($product)
+            }
+        }
+    } finally {
+        [void][Runtime.InteropServices.Marshal]::ReleaseComObject($products)
     }
 }
 
@@ -168,35 +202,48 @@ function Get-ProtectedState {
 }
 
 function Assert-ProtectedState {
+    $script:checkpoint = 'shared Programs directory'
     if (!(Test-Path -LiteralPath $sharedPrograms -PathType Container) -or
         @(Get-ChildItem -LiteralPath $sharedPrograms -Force | Where-Object { $_.FullName -ine $installDirectory }).Count) {
         throw 'Installer changed the shared Programs directory outside the application directory.'
     }
+    $script:checkpoint = 'settings and system state'
     if ((Get-Digest $sentinel) -cne $sentinelHash -or (Get-ProtectedState) -cne $protectedState) {
         throw 'Installer changed the preserved settings, PATH, startup, or SSH service state.'
     }
+    $script:checkpoint = $null
 }
 
 function Assert-Uninstalled {
+    $script:checkpoint = 'removed files and MSI registrations'
     if ((Test-Path -LiteralPath $installDirectory) -or (Test-Path -LiteralPath $shortcut) -or
         (Test-Path -LiteralPath $machineShortcut) -or @(Get-Registration 'HKCU:\').Count -or @(Get-Registration 'HKLM:\').Count -or
-        $installer.ProductState($previous.ProductCode) -eq 5 -or $installer.ProductState($candidate.ProductCode) -eq 5) {
+        @(Get-MsiInstallations $previous).Count -or @(Get-MsiInstallations $candidate).Count) {
         throw 'Installed files, shortcut, or registration remain.'
     }
+    $script:checkpoint = 'removed MSI components'
     if ((Test-Path -LiteralPath $installerRegistry) -and @(Get-ItemProperty -LiteralPath $installerRegistry |
         ForEach-Object { $_.PSObject.Properties.Name | Where-Object { $_ -notin 'PSPath','PSParentPath','PSChildName','PSDrive','PSProvider' } }).Count) {
         throw 'An owned MSI component registration remains.'
     }
+    $script:checkpoint = $null
 }
 
 function Assert-Installed($Package, $Other) {
-    $registrations = @(Get-Registration 'HKCU:\')
+    $script:checkpoint = 'per-user MSI inventory'
+    $products = @(Get-MsiInstallations $Package -VerifyIdentity)
+    if ($products.Count -ne 1 -or !$products[0].owned -or !$products[0].expectedIdentity -or
+        @(Get-MsiInstallations $Other).Count) {
+        throw 'Expected one installed MSI of this version in the current user context.'
+    }
+    $script:checkpoint = 'uninstall entries and Burn ownership'
+    $registrations = @(Get-Registration 'HKCU:\'; Get-Registration 'HKLM:\')
     if ($registrations.Count -ne 1 -or $registrations[0].PSChildName -ine $Package.ProductCode -or
         $registrations[0].SystemComponent -eq 1 -or $registrations[0].WindowsInstaller -ne 1 -or
-        $registrations[0].DisplayVersion -cne $Package.Version -or @(Get-Registration 'HKLM:\').Count -or
-        $installer.ProductState($Package.ProductCode) -ne 5 -or $installer.ProductState($Other.ProductCode) -eq 5) {
-        throw 'Expected exactly one visible per-user MSI registration for this version.'
+        $registrations[0].DisplayName -cne 'opssh' -or $registrations[0].DisplayVersion -cne $Package.Version) {
+        throw 'Expected exactly one visible uninstall entry for the per-user MSI.'
     }
+    $script:checkpoint = 'per-user Start menu shortcut'
     if (!(Test-Path -LiteralPath $shortcut -PathType Leaf) -or (Test-Path -LiteralPath $machineShortcut)) {
         throw 'Expected only a per-user Start menu shortcut.'
     }
@@ -211,6 +258,7 @@ function Assert-Installed($Package, $Other) {
     } finally {
         [void][Runtime.InteropServices.Marshal]::ReleaseComObject($shell)
     }
+    $script:checkpoint = 'installed payload bytes'
     $actual = @(Get-ChildItem -LiteralPath $installDirectory -Recurse -Force -File)
     if ($actual.Count -ne $Package.Files.Count) { throw 'Installed file count differs from the payload.' }
     foreach ($file in $Package.Files) {
@@ -374,24 +422,27 @@ try {
     # Keep installer log paths and raw host errors inside the disposable job.
     $failed = $true
     $failureKind = $_.Exception.GetType().Name
+    $failureCheck = $checkpoint
 } finally {
     if ($failed -and $startedCases) {
         $failedStage = $stage
         $stage = 'remove any remaining owned lifecycle MSI'
         try {
+            $checkpoint = 'owned MSI cleanup inventory'
             foreach ($package in @($candidate, $previous)) {
-                if ($installer.ProductState($package.ProductCode) -ne 5) { continue }
-                $owned = @(Get-Registration 'HKCU:\' | Where-Object {
-                    $_.PSChildName -ieq $package.ProductCode -and $_.WindowsInstaller -eq 1
-                })
-                if ($owned.Count -ne 1 -or @(Get-Registration 'HKLM:\').Count) {
+                $owned = @(Get-MsiInstallations $package)
+                if (!$owned.Count) { continue }
+                if ($owned.Count -ne 1 -or !$owned[0].owned -or !$owned[0].installed) {
                     throw 'The remaining product is not a verified per-user lifecycle MSI.'
                 }
+                $checkpoint = 'owned MSI cleanup transaction'
                 Invoke-Setup $package 'msi' 'uninstall' 'success'
+                $checkpoint = 'owned MSI cleanup inventory'
             }
             Assert-Uninstalled
         } catch {
             $cleanupFailed = $true
+            $cleanupFailureCheck = $checkpoint
         } finally {
             $stage = $failedStage
         }
@@ -403,6 +454,8 @@ try {
         verifiedStandardUser = $verifiedToken
         installerCleanupPassed = !$cleanupFailed
         failureKind = $failureKind
+        failureCheck = $failureCheck
+        cleanupFailureCheck = $cleanupFailureCheck
         steps = $steps
     }
     $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ResultDirectory 'lifecycle-report.json') -Encoding utf8
