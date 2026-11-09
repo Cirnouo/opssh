@@ -27,6 +27,12 @@ jobs:
       - name: Verify agent and distributable
         shell: pwsh
         run: ./tools/Test-Windows.ps1 -OutputDirectory .artifacts/ci
+      - name: Exercise staged validation in disposable repositories
+        shell: pwsh
+        run: |
+          ./tools/tests/Test-StagedSnapshot.ps1
+          ./tools/tests/Test-ValidationProcess.ps1
+          ./tools/tests/Test-CommitGate.ps1
       - name: Preserve the validated release folder
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

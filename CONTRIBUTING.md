@@ -4,12 +4,11 @@ Read [AGENTS.md](AGENTS.md) for repository boundaries, the [Windows agent specif
 
 ## Prepare a worktree
 
-Use the Go and .NET versions pinned in [go.mod](go.mod) and [global.json](global.json), PowerShell 7 and Windows x64 system OpenSSH. Create a focused topic branch in an isolated worktree using the [repository workflow](docs/policies/repository-governance.md#branch-and-pull-request-lifecycle). Enable the repository hooks in the worktree where you will commit.
+Use the Go and .NET versions pinned in [go.mod](go.mod) and [global.json](global.json), PowerShell 7.4 or newer, Git for Windows 2.56 or newer, and Windows x64 system OpenSSH. Create a focused topic branch in an isolated worktree using the [repository workflow](docs/policies/repository-governance.md#branch-and-pull-request-lifecycle). Install and check the hooks in the worktree where you will commit.
 
 ```powershell
-git config --local extensions.worktreeConfig true
-git config --worktree core.hooksPath .githooks
-git config --worktree --get core.hooksPath
+./tools/Install-TestHooks.ps1 -Install
+./tools/Install-TestHooks.ps1 -Check
 ```
 
 ## Verify and submit
