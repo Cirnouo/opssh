@@ -35,6 +35,7 @@ type Message struct {
 type Result struct {
 	OK              bool   `json:"ok"`
 	Error           string `json:"error,omitempty"`
+	ErrorCode       string `json:"errorCode,omitempty"`
 	State           any    `json:"state,omitempty"`
 	RestartRequired bool   `json:"restartRequired,omitempty"`
 }
@@ -298,7 +299,9 @@ func (c *Channel) Run(ctx context.Context, handle func(context.Context, Message)
 			select {
 			case commands <- msg:
 			default:
-				if err := c.Send(Event("result", msg.ID, Result{Error: "Too many pending commands."})); err != nil {
+				if err := c.Send(Event("result", msg.ID, Result{
+					Error: "Too many pending commands.", ErrorCode: "too-many-commands",
+				})); err != nil {
 					return err
 				}
 			}

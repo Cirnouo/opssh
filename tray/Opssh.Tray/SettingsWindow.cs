@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -8,30 +10,30 @@ namespace Opssh.Tray;
 
 public sealed partial class SettingsWindow : Window
 {
-    private readonly TextBlock status = Ui.Text("Starting…");
+    private readonly TextBlock status = Ui.Text(Strings.Get("Settings.Starting"));
     private readonly TextBlock pending = Ui.Text("—");
-    private readonly TextBlock accountValue = Ui.Text("Not connected");
+    private readonly TextBlock accountValue = Ui.Text(Strings.Get("Settings.NotConnected"));
     private readonly TextBlock providerStatus = Ui.Text("—");
-    private readonly TextBlock indexStatus = Ui.Text("Not indexed");
+    private readonly TextBlock indexStatus = Ui.Text(Strings.Get("Settings.NotIndexed"));
     private readonly TextBlock indexDescription = Ui.Text("");
-    private readonly TextBlock keyCount = Ui.Text("0 usable keys");
-    private readonly TextBlock keyDetails = Ui.Text("No usable SSH keys.");
+    private readonly TextBlock keyCount = Ui.Text(Strings.Get("Settings.KeyCountMany", 0));
+    private readonly TextBlock keyDetails = Ui.Text(Strings.Get("Settings.NoKeys"));
     private readonly TextBlock version = Ui.Text("—");
     private readonly InfoBar message = new() { IsClosable = true };
     private readonly TextBox account = new()
     {
-        Header = "Account name or ID",
+        Header = Strings.Get("Settings.AccountName"),
         MaxLength = 256,
-        PlaceholderText = "Account sidebar name or UUID",
+        PlaceholderText = Strings.Get("Settings.AccountPlaceholder"),
         HorizontalAlignment = HorizontalAlignment.Stretch
     };
     private readonly TextBox command = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-    private readonly ComboBox keys = new() { Header = "Indexed SSH key", HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly PolicyInputs keyPolicy = new("Private-key cache");
-    private readonly PolicyInputs approvalPolicy = new("Approval cache");
+    private readonly ComboBox keys = new() { Header = Strings.Get("Settings.IndexedKey"), HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly PolicyInputs keyPolicy = new(Strings.Get("Settings.KeyCache"));
+    private readonly PolicyInputs approvalPolicy = new(Strings.Get("Settings.ApprovalCache"));
     private readonly TextBlock keyPolicyValue = Ui.Text("—");
     private readonly TextBlock approvalPolicyValue = Ui.Text("—");
-    private readonly TextBlock approvalKey = Ui.Text("No indexed SSH key selected.");
+    private readonly TextBlock approvalKey = Ui.Text(Strings.Get("Settings.NoKeySelected"));
     private readonly ContentControl connectControls;
     private readonly ContentControl keyControls;
     private readonly ContentControl cacheControls;
@@ -46,6 +48,7 @@ public sealed partial class SettingsWindow : Window
     private readonly Button revokeSelected;
     private readonly NavigationView navigation;
     private readonly NavigationViewItem discoveryPage;
+    private readonly NavigationViewItem appearancePage;
     private string? pipe;
     private string currentAccount = "";
     private bool connected;
@@ -54,45 +57,58 @@ public sealed partial class SettingsWindow : Window
     private bool locked;
     private bool initialized;
     private bool updatingKeys;
+    private CoreState? displayedState;
 
-    internal SettingsWindow(Func<string, object?, bool, Task> send, Func<string, object?, Task> sendUrgent, Func<Task> start)
+    internal SettingsWindow(Func<string, object?, bool, Task> send, Func<string, object?, Task> sendUrgent,
+        Func<Task> start, UiPreferences preferences, Func<UiPreferences, bool> applyAppearance)
     {
         InitializeComponent();
-        Title = "opssh Settings";
-        AppWindow.Resize(new SizeInt32(1060, 800));
+        Title = Strings.Get("Settings.Title");
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            ExtendsContentIntoTitleBar = true;
+            SettingsTitleBar.Title = Title;
+            SetTitleBar(SettingsTitleBar);
+        }
+        else
+        {
+            SettingsTitleBar.Visibility = Visibility.Collapsed;
+        }
+        ResizeToWorkArea();
+        ApplyTheme(preferences.Theme);
         status.MaxWidth = 260;
         accountValue.MaxWidth = 260;
 
-        restart = Ui.Button("Restart core", async () => await start());
-        toggleLock = Ui.Button("Lock", async () =>
+        restart = Ui.Button(Strings.Get("Settings.RestartCore"), async () => await start());
+        toggleLock = Ui.Button(Strings.Get("Settings.Lock"), async () =>
         {
             if (locked)
                 await send("unlock", null, false);
             else
                 await sendUrgent("lock", null);
         });
-        showCommand = Ui.Button("Show command", ToggleShellCommand);
-        AutomationProperties.SetName(command, "Temporary PowerShell environment command");
-        refreshIndex = Ui.Button("Refresh index", async () => await send("refresh-index", null, false));
-        preload = Ui.Button("Preload selected", async () =>
+        showCommand = Ui.Button(Strings.Get("Settings.ShowCommand"), ToggleShellCommand);
+        AutomationProperties.SetName(command, Strings.Get("Settings.CommandAutomationName"));
+        refreshIndex = Ui.Button(Strings.Get("Settings.RefreshIndex"), async () => await send("refresh-index", null, false));
+        preload = Ui.Button(Strings.Get("Settings.PreloadSelected"), async () =>
         {
             if (SelectedKey is { } key)
                 await send("preload", new { keyId = key.Id }, false);
         });
-        evict = Ui.Button("Evict loaded keys", async () => await sendUrgent("evict-keys", null));
-        revokeAll = Ui.Button("Revoke all approvals", async () => await sendUrgent("revoke", null));
-        revokeSelected = Ui.Button("Revoke selected", async () =>
+        evict = Ui.Button(Strings.Get("Settings.EvictKeys"), async () => await sendUrgent("evict-keys", null));
+        revokeAll = Ui.Button(Strings.Get("Settings.RevokeAll"), async () => await sendUrgent("revoke", null));
+        revokeSelected = Ui.Button(Strings.Get("Settings.RevokeSelected"), async () =>
         {
             if (SelectedKey is { } key)
                 await sendUrgent("revoke", new { keyId = key.Id });
         });
 
-        var connect = Ui.Button("Connect", async () =>
+        var connect = Ui.Button(Strings.Get("Settings.Connect"), async () =>
         {
             var requestedAccount = account.Text.Trim();
             if (requestedAccount.Length == 0)
             {
-                ShowMessage("Enter the name or ID of an account signed in to 1Password.");
+                ShowMessage(Strings.Get("Settings.EnterAccount"));
                 account.Focus(FocusState.Programmatic);
                 return;
             }
@@ -105,16 +121,19 @@ public sealed partial class SettingsWindow : Window
         keys.SelectionChanged += (_, _) =>
         {
             if (!updatingKeys)
+            {
                 UpdateKeyDetails();
+                UpdateAvailability();
+            }
         };
         keyControls = Container(Flow(keys, keyDetails, preload));
         scope = new SettingsScopeEditor(rule => send("set-scope", rule, false), ShowMessage);
 
-        var saveCaches = Ui.Button("Apply cache settings", async () =>
+        var saveCaches = Ui.Button(Strings.Get("Settings.ApplyCaches"), async () =>
         {
             if (!keyPolicy.TryRead(out var keyCache) || !approvalPolicy.TryRead(out var approvalCache))
             {
-                ShowMessage($"Enter a whole number of seconds from 1 to {CachePolicy.MaxSeconds} for each timed cache.");
+                ShowMessage(Strings.Get("Settings.CacheDurationError", CachePolicy.MaxSeconds));
                 return;
             }
             await send("settings", new { account = currentAccount, keyCache, approvalCache }, false);
@@ -124,10 +143,11 @@ public sealed partial class SettingsWindow : Window
             SettingsLayout.Row(approvalPolicy.Mode, approvalPolicy.Seconds),
             saveCaches));
 
-        var overview = NavigationItem("Overview", "\uE80F", BuildOverview());
-        discoveryPage = NavigationItem("1Password & keys", "\uE8D7", BuildDiscovery());
-        var policies = NavigationItem("Approval & caches", "\uE72E", BuildPolicies());
-        var about = NavigationItem("About", "\uE946", BuildAbout());
+        var overview = NavigationItem(Strings.Get("Settings.Overview"), "\uE80F", BuildOverview());
+        discoveryPage = NavigationItem(Strings.Get("Settings.Discovery"), "\uE8D7", BuildDiscovery());
+        var policies = NavigationItem(Strings.Get("Settings.Policies"), "\uE72E", BuildPolicies());
+        appearancePage = NavigationItem(Strings.Get("Settings.Appearance"), "\uE790", BuildAppearance(preferences, applyAppearance));
+        var about = NavigationItem(Strings.Get("Settings.About"), "\uE946", BuildAbout());
         var page = new ScrollViewer { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition());
@@ -139,7 +159,6 @@ public sealed partial class SettingsWindow : Window
 
         navigation = new NavigationView
         {
-            PaneTitle = "opssh",
             PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
             OpenPaneLength = 224,
             ExpandedModeThresholdWidth = 880,
@@ -147,72 +166,75 @@ public sealed partial class SettingsWindow : Window
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             IsSettingsVisible = false,
             AlwaysShowHeader = false,
+            IsTitleBarAutoPaddingEnabled = false,
             Content = content
         };
-        AutomationProperties.SetName(navigation, "Settings");
+        AutomationProperties.SetName(navigation, Strings.Get("Settings.Settings"));
         navigation.MenuItems.Add(overview);
         navigation.MenuItems.Add(discoveryPage);
         navigation.MenuItems.Add(policies);
+        navigation.MenuItems.Add(appearancePage);
         navigation.FooterMenuItems.Add(about);
         navigation.SelectionChanged += (_, args) =>
         {
-            if (args.SelectedItem is NavigationViewItem { Tag: StackPanel selected })
+            if (args.SelectedItem is NavigationViewItem { Tag: StackPanel selected } && !ReferenceEquals(page.Content, selected))
             {
                 page.Content = selected;
                 page.ChangeView(null, 0, null, true);
             }
         };
+        Grid.SetRow(navigation, 1);
         SettingsRoot.Children.Add(navigation);
         page.Content = overview.Tag;
         navigation.SelectedItem = overview;
-        SetAvailability(false, false, "Starting the core…");
+        SetAvailability(false, false, Strings.Get("Settings.StartingCore"));
     }
 
     private StackPanel BuildOverview()
     {
-        var page = Page("Overview", "Manage the SSH agent on this PC.");
-        page.Children.Add(Section("Agent status",
-            Card("\uE968", "Core status", "The local process that handles SSH requests.", Flow(status, restart)),
-            Card("\uE7F4", "Pending approvals", "SSH requests waiting for a decision.", pending),
-            Card("\uE72E", "Agent lock", "Locking clears loaded private keys and existing approvals.", toggleLock)));
-        page.Children.Add(Section("SSH client setup",
-            Card("\uE756", "PowerShell", "Select opssh as the SSH agent for the current PowerShell session.", showCommand, command)));
+        var page = Page(Strings.Get("Settings.Overview"), Strings.Get("Settings.OverviewDescription"));
+        page.Children.Add(Section(Strings.Get("Settings.AgentStatus"),
+            Card("\uE968", Strings.Get("Settings.CoreStatus"), Strings.Get("Settings.CoreStatusDescription"), Flow(status, restart)),
+            Card("\uE7F4", Strings.Get("Settings.PendingApprovals"), Strings.Get("Settings.PendingApprovalsDescription"), pending),
+            Card("\uE72E", Strings.Get("Settings.AgentLock"), Strings.Get("Settings.AgentLockDescription"), toggleLock)));
+        page.Children.Add(Section(Strings.Get("Settings.ClientSetup"),
+            Card("\uE756", "PowerShell", Strings.Get("Settings.PowerShellDescription"), showCommand, command)));
         return page;
     }
 
     private StackPanel BuildDiscovery()
     {
-        var page = Page("1Password & keys", "Connect an account, choose its SSH items, and see which keys are ready to use.");
-        page.Children.Add(Section("Account",
-            Card("\uE77B", "1Password account", "Sign in to the 1Password desktop app. Under Settings → Developer, turn on Integrate with 1Password SDKs. Complete any verification in the 1Password window.",
+        var page = Page(Strings.Get("Settings.Discovery"), Strings.Get("Settings.DiscoveryDescription"));
+        page.Children.Add(Section(Strings.Get("Settings.Account"),
+            Card("\uE77B", Strings.Get("Settings.ProviderAccount"), Strings.Get("Settings.ProviderAccountDescription"),
                 accountValue, connectControls),
-            Card("\uE8D7", "Desktop access", "The result of the most recent request to 1Password.", providerStatus)));
-        page.Children.Add(Section("SSH key discovery",
-            Card("\uE721", "Public index", "Discover SSH items and refresh their public keys.", Flow(indexStatus, refreshIndex), indexDescription),
+            Card("\uE8D7", Strings.Get("Settings.DesktopAccess"), Strings.Get("Settings.DesktopAccessDescription"), providerStatus)));
+        page.Children.Add(Section(Strings.Get("Settings.KeyDiscovery"),
+            Card("\uE721", Strings.Get("Settings.PublicIndex"), Strings.Get("Settings.PublicIndexDescription"), Flow(indexStatus, refreshIndex), indexDescription),
             scope.View,
-            Card("\uE192", "Usable SSH keys", "Indexed public keys are available to SSH. Private keys load after approval or when you preload them here.",
+            Card("\uE192", Strings.Get("Settings.UsableKeys"), Strings.Get("Settings.UsableKeysDescription"),
                 keyCount, keyControls)));
         return page;
     }
 
     private StackPanel BuildPolicies()
     {
-        var page = Page("Approval & caches", "Manage SSH approvals and how long opssh keeps them and loaded private keys.");
-        page.Children.Add(Section("Local controls",
-            Card("\uE8C9", "Loaded private keys", "Clear private key material from the local cache.", evict),
-            Card("\uE73E", "Process approvals", "Clear approvals granted to SSH clients and hosts.", revokeAll),
-            Card("\uE192", "Approvals for one key", "Revoke approvals for the key selected on the 1Password & keys page.",
-                revokeSelected, SettingsLayout.Row(approvalKey, Ui.Button("Go to keys", () =>
+        var page = Page(Strings.Get("Settings.Policies"), Strings.Get("Settings.PoliciesDescription"));
+        page.Children.Add(Section(Strings.Get("Settings.LocalControls"),
+            Card("\uE8C9", Strings.Get("Settings.LoadedPrivateKeys"), Strings.Get("Settings.LoadedPrivateKeysDescription"), evict),
+            Card("\uE73E", Strings.Get("Settings.ProcessApprovals"), Strings.Get("Settings.ProcessApprovalsDescription"), revokeAll),
+            Card("\uE192", Strings.Get("Settings.KeyApprovals"), Strings.Get("Settings.KeyApprovalsDescription"),
+                revokeSelected, SettingsLayout.Row(approvalKey, Ui.Button(Strings.Get("Settings.GoToKeys"), () =>
                 {
                     navigation.SelectedItem = discoveryPage;
                     discoveryPage.Focus(FocusState.Programmatic);
                 })))));
-        page.Children.Add(Section("Cache policies",
-            Card("\uE8D7", "Private-key cache", "Controls how long loaded private keys are kept in memory.", keyPolicyValue),
-            Card("\uE73E", "Approval cache", "Controls how long process approvals can be reused.", approvalPolicyValue),
+        page.Children.Add(Section(Strings.Get("Settings.CachePolicies"),
+            Card("\uE8D7", Strings.Get("Settings.KeyCache"), Strings.Get("Settings.KeyCacheDescription"), keyPolicyValue),
+            Card("\uE73E", Strings.Get("Settings.ApprovalCache"), Strings.Get("Settings.ApprovalCacheDescription"), approvalPolicyValue),
             new Expander
             {
-                Header = "Change cache policies",
+                Header = Strings.Get("Settings.ChangeCaches"),
                 Content = cacheControls,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch
@@ -220,11 +242,74 @@ public sealed partial class SettingsWindow : Window
         return page;
     }
 
+    private StackPanel BuildAppearance(UiPreferences preferences, Func<UiPreferences, bool> applyAppearance)
+    {
+        var page = Page(Strings.Get("Settings.Appearance"), Strings.Get("Settings.AppearanceDescription"));
+        var language = AppearanceChoice(Strings.Get("Settings.Language"), preferences.Language,
+            ("en", Strings.Get("Settings.LanguageEnglish")), ("zh-Hans", Strings.Get("Settings.LanguageChinese")));
+        var theme = AppearanceChoice(Strings.Get("Settings.Theme"), preferences.Theme,
+            ("system", Strings.Get("Settings.ThemeSystem")), ("light", Strings.Get("Settings.ThemeLight")), ("dark", Strings.Get("Settings.ThemeDark")));
+
+        var restoring = false;
+        void ChangeAppearance(ComboBox sender, SelectionChangedEventArgs args)
+        {
+            if (restoring || language.SelectedItem is not ComboBoxItem { Tag: string languageId } ||
+                theme.SelectedItem is not ComboBoxItem { Tag: string themeId })
+                return;
+
+            var requested = new UiPreferences(languageId, themeId);
+            if (applyAppearance(requested))
+                return;
+
+            restoring = true;
+            sender.SelectedItem = args.RemovedItems.FirstOrDefault();
+            restoring = false;
+            ShowMessage(Strings.Get("Settings.AppearanceSaveFailed"));
+        }
+
+        language.SelectionChanged += (sender, args) => ChangeAppearance((ComboBox)sender, args);
+        theme.SelectionChanged += (sender, args) => ChangeAppearance((ComboBox)sender, args);
+        page.Children.Add(Card("\uE775", Strings.Get("Settings.Language"), Strings.Get("Settings.LanguageDescription"), language));
+        page.Children.Add(Card("\uE790", Strings.Get("Settings.Theme"), Strings.Get("Settings.ThemeDescription"), theme));
+        return page;
+    }
+
+    private static ComboBox AppearanceChoice(string name, string selected, params (string Id, string Label)[] options)
+    {
+        var choice = new ComboBox { MinWidth = 156 };
+        AutomationProperties.SetName(choice, name);
+        foreach (var (id, label) in options)
+        {
+            var item = new ComboBoxItem { Content = label, Tag = id };
+            choice.Items.Add(item);
+            if (id == selected)
+                choice.SelectedItem = item;
+        }
+        return choice;
+    }
+
+    internal void ApplyTheme(string theme) => WindowTheme.Apply(this, SettingsRoot, theme);
+
+    internal void SelectAppearance() => navigation.SelectedItem = appearancePage;
+
+    private void ResizeToWorkArea()
+    {
+        var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var scale = dpi == 0 ? 1.0 : dpi / 96.0;
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+        AppWindow.Resize(new SizeInt32(
+            Math.Min(workArea.Width, (int)Math.Round(1060 * scale)),
+            Math.Min(workArea.Height, (int)Math.Round(800 * scale))));
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
+
     private StackPanel BuildAbout()
     {
-        var page = Page("About", "opssh connects Windows SSH clients to SSH keys stored in 1Password.");
-        page.Children.Add(Section("Version",
-            Card("\uE946", "Core version", "Version reported by the bundled SSH agent.", version)));
+        var page = Page(Strings.Get("Settings.About"), Strings.Get("Settings.AboutDescription"));
+        page.Children.Add(Section(Strings.Get("Settings.Version"),
+            Card("\uE946", Strings.Get("Settings.CoreVersion"), Strings.Get("Settings.CoreVersionDescription"), version)));
         return page;
     }
 
@@ -293,13 +378,13 @@ public sealed partial class SettingsWindow : Window
         if (command.Visibility == Visibility.Visible)
         {
             command.Visibility = Visibility.Collapsed;
-            showCommand.Content = "Show command";
+            showCommand.Content = Strings.Get("Settings.ShowCommand");
         }
         else if (pipe is not null && pipe.StartsWith(@"\\.\pipe\", StringComparison.OrdinalIgnoreCase))
         {
             command.Text = "$env:SSH_AUTH_SOCK = '" + pipe.Replace("'", "''") + "'";
             command.Visibility = Visibility.Visible;
-            showCommand.Content = "Hide command";
+            showCommand.Content = Strings.Get("Settings.HideCommand");
         }
     }
 
@@ -312,15 +397,18 @@ public sealed partial class SettingsWindow : Window
         {
             pending.Text = providerStatus.Text = version.Text = "—";
             keyPolicyValue.Text = approvalPolicyValue.Text = "—";
-            accountValue.Text = "Not connected";
+            accountValue.Text = Strings.Get("Settings.NotConnected");
             account.Text = currentAccount = "";
             command.Visibility = Visibility.Collapsed;
             command.Text = "";
-            showCommand.Content = "Show command";
+            showCommand.Content = Strings.Get("Settings.ShowCommand");
             pipe = null;
             initialized = busy = urgentBusy = locked = false;
-            toggleLock.Content = "Lock";
+            displayedState = null;
+            toggleLock.Content = Strings.Get("Settings.Lock");
+            updatingKeys = true;
             keys.Items.Clear();
+            updatingKeys = false;
             scope.Reset();
             UpdateDiscoveryStatus(null, []);
             UpdateKeyDetails();
@@ -330,21 +418,27 @@ public sealed partial class SettingsWindow : Window
 
     internal void SetBusy(bool value)
     {
-        busy = value;
-        UpdateAvailability();
+        if (busy != value)
+        {
+            busy = value;
+            UpdateAvailability();
+        }
     }
 
     internal void SetUrgentBusy(bool value)
     {
-        urgentBusy = value;
-        UpdateAvailability();
+        if (urgentBusy != value)
+        {
+            urgentBusy = value;
+            UpdateAvailability();
+        }
     }
 
     internal void SetLockState(bool value)
     {
         locked = value;
-        toggleLock.Content = locked ? "Unlock" : "Lock";
-        status.Text = locked ? "Core locked" : "Core connected";
+        toggleLock.Content = locked ? Strings.Get("Settings.Unlock") : Strings.Get("Settings.Lock");
+        status.Text = locked ? Strings.Get("Settings.CoreLocked") : Strings.Get("Settings.CoreConnected");
         UpdateAvailability();
     }
 
@@ -353,16 +447,17 @@ public sealed partial class SettingsWindow : Window
         var ready = connected && initialized && !busy && !urgentBusy;
         var canUseAccount = ready && !locked;
         var canUseKeys = canUseAccount && currentAccount.Length > 0;
+        var selected = SelectedKey;
         connectControls.IsEnabled = canUseAccount;
         refreshIndex.IsEnabled = canUseKeys;
         scope.View.IsEnabled = canUseAccount;
-        keyControls.IsEnabled = connected && initialized && SelectedKey is not null;
-        preload.IsEnabled = canUseKeys && SelectedKey is { Fingerprint.Length: > 0 };
+        keyControls.IsEnabled = connected && initialized && selected is not null;
+        preload.IsEnabled = canUseKeys && selected is { Fingerprint.Length: > 0 };
         cacheControls.IsEnabled = ready;
         showCommand.IsEnabled = connected && pipe is not null;
         toggleLock.IsEnabled = connected && !urgentBusy && (!locked || (initialized && !busy));
         evict.IsEnabled = revokeAll.IsEnabled = connected && !urgentBusy;
-        revokeSelected.IsEnabled = connected && initialized && !urgentBusy && SelectedKey is not null;
+        revokeSelected.IsEnabled = connected && initialized && !urgentBusy && selected is not null;
     }
 
     internal void ShowMessage(string text)
@@ -380,18 +475,29 @@ public sealed partial class SettingsWindow : Window
 
     internal void ShowState(CoreState state, bool resetSettings)
     {
-        locked = state.Locked;
-        toggleLock.Content = locked ? "Unlock" : "Lock";
-        status.Text = locked ? "Core locked" : "Core connected";
+        var previous = displayedState;
+        var accountChanged = !initialized || currentAccount != state.Account;
+        var lockChanged = !initialized || locked != state.Locked;
+        var pipeChanged = pipe != state.Pipe;
+        var keysChanged = previous is null || !previous.Keys.SequenceEqual(state.Keys);
+        displayedState = state;
+
+        if (lockChanged)
+        {
+            locked = state.Locked;
+            toggleLock.Content = locked ? Strings.Get("Settings.Unlock") : Strings.Get("Settings.Lock");
+            status.Text = locked ? Strings.Get("Settings.CoreLocked") : Strings.Get("Settings.CoreConnected");
+        }
         pipe = state.Pipe;
-        pending.Text = state.Pending.ToString();
-        providerStatus.Text = ProviderStatus(state.Provider);
-        if (!initialized || currentAccount != state.Account)
+        if (previous?.Pending != state.Pending)
+            pending.Text = state.Pending.ToString();
+        if (previous?.Provider != state.Provider)
+            providerStatus.Text = ProviderStatus(state.Provider);
+        if (accountChanged)
         {
             currentAccount = state.Account;
             account.Text = currentAccount;
-            accountValue.Text = currentAccount.Length == 0 ? "Not connected" : currentAccount;
-            scope.Reset();
+            accountValue.Text = currentAccount.Length == 0 ? Strings.Get("Settings.NotConnected") : currentAccount;
         }
 
         if (!initialized || resetSettings)
@@ -400,98 +506,116 @@ public sealed partial class SettingsWindow : Window
             approvalPolicy.Set(state.ApprovalCache);
         }
         initialized = true;
-        keyPolicyValue.Text = PolicyInputs.Describe(state.KeyCache);
-        approvalPolicyValue.Text = PolicyInputs.Describe(state.ApprovalCache);
-        scope.Update(state.Scope, state.Vaults ?? []);
-        UpdateDiscoveryStatus(state.Index, state.Keys);
+        if (previous?.KeyCache != state.KeyCache)
+            keyPolicyValue.Text = PolicyInputs.Describe(state.KeyCache);
+        if (previous?.ApprovalCache != state.ApprovalCache)
+            approvalPolicyValue.Text = PolicyInputs.Describe(state.ApprovalCache);
+        scope.Update(state.Scope, state.Vaults ?? [], reset: accountChanged);
+        if (previous is null || previous.Index != state.Index || accountChanged || keysChanged)
+            UpdateDiscoveryStatus(state.Index, state.Keys);
 
-        if (!keys.Items.OfType<ComboBoxItem>().Select(i => i.Tag as PublicKey).SequenceEqual(state.Keys))
+        if (keysChanged)
         {
             var selectedId = SelectedKey?.Id;
-            updatingKeys = true;
-            keys.Items.Clear();
-            var labels = SettingsLabels.ById(state.Keys.Select(key => (key.Id, key.Name)));
-            foreach (var key in state.Keys)
-                keys.Items.Add(new ComboBoxItem
-                {
-                    Content = new TextBlock { Text = labels[key.Id], TextWrapping = TextWrapping.Wrap },
-                    Tag = key
-                });
-            keys.SelectedItem = keys.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (i.Tag as PublicKey)?.Id == selectedId)
-                ?? keys.Items.FirstOrDefault();
-            updatingKeys = false;
+            // Loading/error changes update the existing items, preserving focus and an open list.
+            if (previous is not null && previous.Keys.Length == state.Keys.Length &&
+                previous.Keys.Zip(state.Keys).All(pair => pair.First.Id == pair.Second.Id &&
+                    pair.First.Name == pair.Second.Name && pair.First.Unnamed == pair.Second.Unnamed))
+            {
+                for (var i = 0; i < state.Keys.Length; i++)
+                    ((ComboBoxItem)keys.Items[i]).Tag = state.Keys[i];
+            }
+            else
+            {
+                updatingKeys = true;
+                keys.Items.Clear();
+                var labels = SettingsLabels.ById(state.Keys.Select(key => (key.Id, KeyDisplayName(key))));
+                foreach (var key in state.Keys)
+                    keys.Items.Add(new ComboBoxItem
+                    {
+                        Content = new TextBlock { Text = labels[key.Id], TextWrapping = TextWrapping.Wrap },
+                        Tag = key
+                    });
+                keys.SelectedItem = keys.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (i.Tag as PublicKey)?.Id == selectedId)
+                    ?? keys.Items.FirstOrDefault();
+                updatingKeys = false;
+            }
             UpdateKeyDetails();
         }
-        UpdateAvailability();
+
+        if (accountChanged || lockChanged || pipeChanged || keysChanged)
+            UpdateAvailability();
     }
 
     private void UpdateDiscoveryStatus(string? index, PublicKey[] list)
     {
         (indexStatus.Text, indexDescription.Text) = index switch
         {
-            "ready" => ("Ready", "Discovery completed for the current scope."),
-            "partial" => ("Partially indexed", "Some SSH items could not be indexed. Refresh to try again."),
-            "unavailable" => ("Unavailable", "The index could not be refreshed. Check 1Password access and try again."),
-            "scope-too-broad" => ("Scope too broad", "Narrow the scope to index up to 64 keys. Discovery can scan up to 256 vaults and 8,192 entries per eligible vault. If the account exceeds the vault limit, use an account with fewer vaults. If a vault exceeds the entry limit, exclude it and remove its item include rules, or reduce its entries."),
-            _ => ("Not indexed", currentAccount.Length == 0 ? "Connect an account to discover SSH keys." : "Refresh the index to discover SSH keys.")
+            "ready" => (Strings.Get("Settings.IndexReady"), Strings.Get("Settings.IndexReadyDescription")),
+            "partial" => (Strings.Get("Settings.IndexPartial"), Strings.Get("Settings.IndexPartialDescription")),
+            "unavailable" => (Strings.Get("Settings.Unavailable"), Strings.Get("Settings.IndexUnavailableDescription")),
+            "scope-too-broad" => (Strings.Get("Settings.IndexScopeTooBroad"), Strings.Get("Settings.IndexScopeTooBroadDescription")),
+            _ => (Strings.Get("Settings.NotIndexed"), currentAccount.Length == 0 ? Strings.Get("Settings.IndexConnect") : Strings.Get("Settings.IndexRefresh"))
         };
         var count = list.Count(key => key.Fingerprint.Length > 0);
-        keyCount.Text = count == 1 ? "1 usable key" : $"{count} usable keys";
+        keyCount.Text = Strings.Get(count == 1 ? "Settings.KeyCountOne" : "Settings.KeyCountMany", count);
     }
+
+    private static string KeyDisplayName(PublicKey key) =>
+        key.Unnamed ? Strings.Get("Approval.UnnamedKey", key.ItemId[..8]) : key.Name;
 
     private PublicKey? SelectedKey => (keys.SelectedItem as ComboBoxItem)?.Tag as PublicKey;
 
     private void UpdateKeyDetails()
     {
-        UpdateAvailability();
         if (SelectedKey is not { } key)
         {
-            approvalKey.Text = keyDetails.Text = "No indexed SSH key selected.";
+            approvalKey.Text = keyDetails.Text = Strings.Get("Settings.NoKeySelected");
             return;
         }
-        approvalKey.Text = ((keys.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? key.Name;
+        approvalKey.Text = ((keys.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? KeyDisplayName(key);
         var error = key.Error switch
         {
-            "provider" => "1Password could not read the item.",
-            "load-timeout" => "The item read timed out.",
-            "invalid-key" => "The item has an unsupported or invalid SSH key.",
-            "key-mismatch" => "The private key differs from the indexed public key. Refresh the index.",
-            "public-index-missing" => "The public index entry is missing. Refresh the index.",
+            "provider" => Strings.Get("Settings.KeyErrorProvider"),
+            "load-timeout" => Strings.Get("Settings.KeyErrorTimeout"),
+            "invalid-key" => Strings.Get("Settings.KeyErrorInvalid"),
+            "key-mismatch" => Strings.Get("Settings.KeyErrorMismatch"),
+            "public-index-missing" => Strings.Get("Settings.KeyErrorIndexMissing"),
             null or "" => "",
-            _ => "The key could not be loaded."
+            _ => Strings.Get("Settings.KeyErrorGeneric")
         };
-        var loadStatus = key.Loading ? "Loading" : key.Loaded ? "Loaded" : "Unloaded";
-        keyDetails.Text = (key.Fingerprint.Length == 0 ? "No usable public key" : key.Fingerprint) + "   ·   " + loadStatus +
+        var loadStatus = key.Loading ? Strings.Get("Settings.KeyLoading") : key.Loaded ? Strings.Get("Settings.KeyLoaded") : Strings.Get("Settings.KeyUnloaded");
+        keyDetails.Text = (key.Fingerprint.Length == 0 ? Strings.Get("Settings.KeyNoPublic") : key.Fingerprint) + "   ·   " + loadStatus +
             (error.Length == 0 ? "" : Environment.NewLine + error);
     }
 
     private static string ProviderStatus(string status) => status switch
     {
-        "unconfigured" => "Account setup required",
-        "reading" => "Waiting for 1Password",
-        "last-success" => "Last request succeeded",
-        "denied" => "Access denied",
-        "unavailable" => "Unavailable",
-        "timed-out" => "Request timed out",
-        "canceled" => "Request canceled",
-        "offline-fixture" => "Offline test fixture",
-        _ => "Access has not been verified"
+        "unconfigured" => Strings.Get("Settings.ProviderUnconfigured"),
+        "reading" => Strings.Get("Settings.ProviderReading"),
+        "last-success" => Strings.Get("Settings.ProviderLastSuccess"),
+        "denied" => Strings.Get("Settings.ProviderDenied"),
+        "unavailable" => Strings.Get("Settings.Unavailable"),
+        "timed-out" => Strings.Get("Settings.ProviderTimedOut"),
+        "canceled" => Strings.Get("Settings.ProviderCanceled"),
+        "offline-fixture" => Strings.Get("Settings.ProviderOfflineFixture"),
+        _ => Strings.Get("Settings.ProviderUnverified")
     };
 
     private sealed class PolicyInputs
     {
         internal readonly ComboBox Mode;
-        internal readonly NumberBox Seconds = new() { Header = "Seconds", Width = 114, Minimum = 1, Maximum = CachePolicy.MaxSeconds };
+        internal readonly NumberBox Seconds = new() { Header = Strings.Get("Settings.Seconds"), Width = 114, Minimum = 1, Maximum = CachePolicy.MaxSeconds };
         private static readonly string[] modes = ["off", "fixed", "idle", "until-lock"];
 
         internal PolicyInputs(string label)
         {
             Mode = new ComboBox { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch };
-            foreach (var option in new[] { "Off", "Fixed duration", "Idle timeout", "Until lock" })
+            foreach (var option in new[] { Strings.Get("Settings.CacheOff"), Strings.Get("Settings.CacheFixed"), Strings.Get("Settings.CacheIdle"), Strings.Get("Settings.CacheUntilLock") })
                 Mode.Items.Add(option);
             Mode.SelectionChanged += (_, _) => Seconds.IsEnabled = Mode.SelectedIndex is 1 or 2;
             Set(new CachePolicy("off", 0));
-            AutomationProperties.SetName(Seconds, label + " duration in seconds");
+            AutomationProperties.SetName(Seconds, Strings.Get("Settings.CacheSecondsAutomationName", label));
         }
 
         internal void Set(CachePolicy policy)
@@ -515,10 +639,10 @@ public sealed partial class SettingsWindow : Window
 
         internal static string Describe(CachePolicy policy) => policy.Mode switch
         {
-            "fixed" => $"{policy.Seconds} s fixed",
-            "idle" => $"{policy.Seconds} s idle",
-            "until-lock" => "Until lock",
-            _ => "Off"
+            "fixed" => Strings.Get("Settings.CacheFixedValue", policy.Seconds),
+            "idle" => Strings.Get("Settings.CacheIdleValue", policy.Seconds),
+            "until-lock" => Strings.Get("Settings.CacheUntilLock"),
+            _ => Strings.Get("Settings.CacheOff")
         };
     }
 }
@@ -538,9 +662,13 @@ internal static class SettingsLayout
         label.VerticalAlignment = action.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(action, 1);
         row.Children.Add(action);
+        var stacked = false;
         row.SizeChanged += (_, args) =>
         {
             var stack = args.NewSize.Width < 420;
+            if (stack == stacked)
+                return;
+            stacked = stack;
             Grid.SetColumnSpan(label, stack ? 2 : 1);
             Grid.SetRow(action, stack ? 1 : 0);
             Grid.SetColumn(action, stack ? 0 : 1);
@@ -564,11 +692,4 @@ internal static class Ui
         return button;
     }
 
-    internal static StackPanel Row(params UIElement[] children)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        foreach (var child in children)
-            row.Children.Add(child);
-        return row;
-    }
 }

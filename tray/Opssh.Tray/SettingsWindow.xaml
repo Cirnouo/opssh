@@ -17,5 +17,10 @@
             </Style>
             <Style x:Key="SettingsConnectButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}" />
         </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TitleBar x:Name="SettingsTitleBar" />
     </Grid>
 </Window>
