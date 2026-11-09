@@ -23,7 +23,8 @@ $expectedSources = switch ($Language) {
     'csharp' {
         'tray/Opssh.Tray/App.cs'
         'tray/Opssh.Tray/CoreSession.cs'
-        'tray/Opssh.Tray/SettingsWindow.cs'
+        'tray/Opssh.Tray/DashboardWindow.cs'
+        'tray/Opssh.Tray/DashboardWindow.Settings.cs'
         'tray/Opssh.Tray/TrayIcon.cs'
         'tray/Opssh.Tray.Tests/Program.cs'
     }
