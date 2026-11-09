@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible problem in opssh
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report suspected security vulnerabilities through [the private reporting procedure](https://github.com/Cirnouo/opssh/blob/main/SECURITY.md).
+        Use synthetic examples and remove keys, credentials, account or vault identifiers, personal paths and SSH destinations.
+  - type: input
+    id: version
+    attributes:
+      label: opssh version or commit
+      description: For a built copy, include the revision or the versions shown in About.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Tray, settings, or approvals
+        - Built-in Windows OpenSSH
+        - 1Password Desktop integration
+        - Build or installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include relevant OpenSSH or provider version details when available. Use generated keys and disposable test data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include only sanitized error categories and observed behavior. Leave raw logs, dumps and settings files out.
+    validations:
+      required: true

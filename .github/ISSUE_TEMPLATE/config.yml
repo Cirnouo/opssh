@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup and support
+    url: https://github.com/Cirnouo/opssh/blob/main/SUPPORT.md
+    about: Find setup help and guidance for ordinary bug reports and questions.
+  - name: Report a security vulnerability privately
+    url: https://github.com/Cirnouo/opssh/blob/main/SECURITY.md
+    about: Use GitHub private reporting or ask for a secure contact method.
