@@ -10,18 +10,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type grantID struct {
-	scope    string
-	instance Instance
-}
-
-type grant struct {
-	expiry   time.Time
-	lastUsed time.Time
-}
-
 type signRequest struct {
 	entry         *keyEntry
+	keyName       string
 	version       context.Context
 	revision      uint64
 	peer          Peer
@@ -31,9 +22,20 @@ type signRequest struct {
 	approvedUntil time.Time
 }
 
+type SignObservation struct {
+	KeyName string
+	Anchor  Process
+}
+
 // Sign validates and authorizes a single signature. The publisher must finish
 // synchronously with a bounded write, and must not call back into the engine.
 func (e *Engine) Sign(ctx context.Context, peer Peer, public, data []byte, flags uint32, publish func(*ssh.Signature) error) error {
+	return e.SignObserved(ctx, peer, public, data, flags, publish, nil)
+}
+
+// SignObserved reports the selected key and approval anchor outside the engine
+// lock before returning. A request without a reusable approval has no anchor.
+func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byte, flags uint32, publish func(*ssh.Signature) error, observe func(SignObservation)) error {
 	if len(public) == 0 || len(public) > maxPublicKey || len(data) > maxSignData || publish == nil || !validPeer(peer) {
 		return ErrInvalidRequest
 	}
@@ -43,6 +45,9 @@ func (e *Engine) Sign(ctx context.Context, peer Peer, public, data []byte, flags
 	defer func() { <-e.requests }()
 	peer.Chain = slices.Clone(peer.Chain)
 	request, prompt, err := e.beginSign(ctx, peer, public, flags)
+	if observe != nil {
+		defer func() { observe(SignObservation{KeyName: request.keyName, Anchor: request.anchor()}) }()
+	}
 	if err != nil {
 		return err
 	}
@@ -50,6 +55,10 @@ func (e *Engine) Sign(ctx context.Context, peer Peer, public, data []byte, flags
 	defer cancel()
 	stop := context.AfterFunc(request.version, cancel)
 	defer stop()
+	if request.grant != nil {
+		stopGrant := context.AfterFunc(request.grant.ctx, cancel)
+		defer stopGrant()
+	}
 	if prompt != nil {
 		approval, err := e.ask(ctx, *prompt)
 		if currentErr := e.checkSign(ctx, request); currentErr != nil {
@@ -81,6 +90,15 @@ func (e *Engine) Sign(ctx context.Context, peer Peer, public, data []byte, flags
 	return e.signAndPublish(ctx, request, material, data, publish)
 }
 
+func (request signRequest) anchor() Process {
+	for _, process := range request.peer.Chain {
+		if process.Instance == request.grantID.instance {
+			return process
+		}
+	}
+	return Process{}
+}
+
 func validPeer(peer Peer) bool {
 	if peer.Alive == nil || peer.Connected == nil || len(peer.Chain) == 0 || len(peer.Chain) > maxPeerChain {
 		return false
@@ -98,20 +116,22 @@ func validPeer(peer Peer) bool {
 func (e *Engine) beginSign(ctx context.Context, peer Peer, public []byte, flags uint32) (signRequest, *Prompt, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	var entry *keyEntry
+	request := signRequest{peer: peer}
 	if key := e.keys.byPublic[string(public)]; key != nil {
-		entry = e.state[key.key.ID]
+		request.entry = e.state[key.key.ID]
+		request.keyName = key.key.Name
 	}
+	entry := request.entry
 	if err := e.keyErrorLocked(entry); err != nil {
-		return signRequest{}, nil, err
+		return request, nil, err
 	}
 	algorithm, err := signatureAlgorithm(entry.algorithm, flags)
 	if err != nil {
-		return signRequest{}, nil, err
+		return request, nil, err
 	}
-	request := signRequest{entry: entry, version: entry.signVersion, revision: entry.materialRevision, peer: peer, algorithm: algorithm}
+	request.version, request.revision, request.algorithm = entry.signVersion, entry.materialRevision, algorithm
 	if err := e.checkSignLocked(ctx, request); err != nil {
-		return signRequest{}, nil, err
+		return request, nil, err
 	}
 	for i, process := range peer.Chain {
 		if !peer.Alive(process.Instance) {
@@ -250,33 +270,4 @@ func (e *Engine) signAndPublish(ctx context.Context, request signRequest, materi
 		e.useGrantLocked(request, now)
 	}
 	return nil
-}
-
-func (e *Engine) useGrantLocked(request signRequest, now time.Time) {
-	grants := request.entry.grants
-	current := request.grant
-	if current == nil {
-		current = grants[request.grantID]
-		if current == nil || expired(current.expiry, now) {
-			current = &grant{expiry: request.approvedUntil}
-			if grants == nil {
-				grants = make(map[grantID]*grant)
-				request.entry.grants = grants
-			}
-			if _, replacing := grants[request.grantID]; !replacing && len(grants) == maxGrants {
-				var oldest grantID
-				for id, cached := range grants {
-					if grants[oldest] == nil || cached.lastUsed.Before(grants[oldest].lastUsed) {
-						oldest = id
-					}
-				}
-				delete(grants, oldest)
-			}
-			grants[request.grantID] = current
-		}
-	}
-	current.lastUsed = now
-	if e.approvalPolicy.Mode == "idle" {
-		current.expiry = e.approvalPolicy.expiry(now)
-	}
 }

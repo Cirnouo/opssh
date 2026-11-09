@@ -20,6 +20,7 @@ func main() {
 			cfg, err := config.Read(path)
 			return path, cfg, err
 		},
+		endpoint: winipc.Endpoint,
 		listen:   winipc.Listen,
 		newVault: func(account string) vault { return desktop.New(account) },
 	}

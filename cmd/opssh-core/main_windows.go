@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"opssh/internal/activity"
 	"opssh/internal/agentwire"
 	"opssh/internal/config"
 	"opssh/internal/control"
@@ -18,11 +19,16 @@ import (
 
 type startup struct {
 	readConfig func() (string, config.Settings, error)
+	endpoint   func() (string, error)
 	listen     func() (*winipc.Listener, error)
 	newVault   func(string) vault
 }
 
 func run(args []string, boot startup) error {
+	candidate := len(args) == 5 && args[4] == "--candidate"
+	if candidate {
+		args = args[:4]
+	}
 	pipe, tray, err := launchHandles(args)
 	if err != nil {
 		return err
@@ -38,19 +44,27 @@ func run(args []string, boot startup) error {
 	if err != nil {
 		return startupError(ch, "invalid-configuration", "The public configuration is invalid or unreadable.")
 	}
-	listener, err := boot.listen()
+	address, err := boot.endpoint()
 	if err != nil {
 		return startupError(ch, "pipe-unavailable", "The SSH agent pipe is unavailable or already in use.")
 	}
-	defer listener.Close()
-	app, err := newApplication(path, listener.Addr(), settings, ch, boot.newVault)
+	app, err := newApplication(path, address, settings, ch, boot.newVault)
 	if err != nil {
 		return startupError(ch, "index-unreadable", "The public key index could not be opened.")
 	}
 	defer app.engine.Close()
+	defer app.activity.Close()
+	app.candidate = candidate
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := ch.Send(control.Event("hello", "", map[string]string{"pipe": listener.Addr(), "version": version})); err != nil {
+	server := &sshEndpoint{ctx: ctx, fail: cancel, open: boot.listen, app: app}
+	defer server.stop()
+	if !candidate {
+		if err := server.start(); err != nil {
+			return startupError(ch, "pipe-unavailable", "The SSH agent pipe is unavailable or already in use.")
+		}
+	}
+	if err := ch.Send(control.Event("hello", "", map[string]string{"pipe": address, "version": version})); err != nil {
 		return err
 	}
 	go func() {
@@ -62,11 +76,104 @@ func run(args []string, boot startup) error {
 		case <-ctx.Done():
 		}
 	}()
+	return ch.Run(ctx, server.command, app.priority)
+}
+
+// The command worker is the only writer of the endpoint during its lifetime.
+// Closing the control channel cancels and joins the worker before cleanup.
+type sshEndpoint struct {
+	ctx      context.Context
+	fail     context.CancelFunc
+	open     func() (*winipc.Listener, error)
+	app      *application
+	close    context.CancelFunc
+	done     chan struct{}
+	listener *winipc.Listener
+}
+
+func (s *sshEndpoint) start() error {
+	listener, err := s.open()
+	if err != nil {
+		return errPipeUnavailable
+	}
+	if listener.Addr() != s.app.endpoint {
+		_ = listener.Close()
+		return errPipeUnavailable
+	}
+	s.listener = listener
+	ctx, cancel := context.WithCancel(s.ctx)
+	done := make(chan struct{})
+	s.close, s.done = cancel, done
 	go func() {
-		defer cancel()
-		acceptSSH(ctx, listener, app.engine)
+		defer close(done)
+		acceptSSH(ctx, listener, s.app.engine, s.app.activity)
+		if ctx.Err() == nil {
+			s.fail()
+		}
 	}()
-	return ch.Run(ctx, app.command, app.priority)
+	return nil
+}
+
+func (s *sshEndpoint) stop() {
+	if s.listener == nil {
+		return
+	}
+	s.close()
+	_ = s.listener.Close()
+	<-s.done
+	s.listener = nil
+}
+
+func (s *sshEndpoint) command(ctx context.Context, msg control.Message) control.Result {
+	a := s.app
+	switch msg.Type {
+	case "pause-ssh":
+		if len(msg.Body) != 0 || a.candidate || a.restartRequired {
+			return commandResult(errCommand)
+		}
+		if !a.paused {
+			a.paused = true
+			a.engine.SuspendIndex()
+			s.stop()
+		}
+		return commandResult(nil)
+	case "resume-ssh":
+		if len(msg.Body) != 0 || a.candidate || a.restartRequired {
+			return commandResult(errCommand)
+		}
+		if a.paused {
+			current, err := config.Read(a.path)
+			if err != nil || current.Account != a.settings.Account {
+				return commandResult(errAccountChanged)
+			}
+			if err := s.start(); err != nil {
+				return commandResult(err)
+			}
+			a.paused = false
+			a.engine.ResumeIndex()
+		}
+		return commandResult(nil)
+	case "activate-account":
+		if len(msg.Body) != 0 || !a.candidate || a.prepared == nil {
+			return commandResult(errCommand)
+		}
+		// Reserve the same endpoint before the durable account commit, but
+		// hide all old identities while it is being handed over.
+		a.engine.SuspendIndex()
+		if err := s.start(); err != nil {
+			return commandResult(err)
+		}
+		if err := a.activateAccount(ctx); err != nil {
+			s.stop()
+			return commandResult(err)
+		}
+		a.engine.ResumeIndex()
+		result := commandResult(nil)
+		result.State = a.status()
+		return result
+	default:
+		return a.command(ctx, msg)
+	}
 }
 
 func startupError(ch *control.Channel, code, message string) error {
@@ -86,7 +193,7 @@ func launchHandles(args []string) (uintptr, uintptr, error) {
 	return uintptr(a), uintptr(b), nil
 }
 
-func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine) {
+func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine, history *activity.Log) {
 	stop := context.AfterFunc(ctx, func() { listener.Close() })
 	defer stop()
 	for {
@@ -98,14 +205,15 @@ func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine)
 			defer conn.Close()
 			closeOnCancel := context.AfterFunc(ctx, func() { conn.Close() })
 			defer closeOnCancel()
-			_ = agentwire.Serve(ctx, conn, sshHandler{conn: conn, engine: e})
+			_ = agentwire.Serve(ctx, conn, sshHandler{conn: conn, engine: e, history: history})
 		}()
 	}
 }
 
 type sshHandler struct {
-	conn   *winipc.Conn
-	engine *engine.Engine
+	conn    *winipc.Conn
+	engine  *engine.Engine
+	history *activity.Log
 }
 
 func (h sshHandler) List() []agentwire.Identity {
@@ -117,7 +225,8 @@ func (h sshHandler) List() []agentwire.Identity {
 	return ids
 }
 
-func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32, publish func(*ssh.Signature) error) error {
+func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32, publish func(*ssh.Signature) error) (result error) {
+	attempt := h.history.Begin()
 	client, err := h.conn.Peer()
 	if err != nil {
 		return engine.ErrPeerGone
@@ -126,10 +235,17 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 	if len(client.Chain) == 0 {
 		return engine.ErrPeerGone
 	}
+	entry := activity.Entry{App: client.Chain[0].Path, PID: client.Chain[0].PID}
+	attempt.Capture(func() (activity.Source, bool) { return client.RetainRequester() })
+	defer func() {
+		entry.Result = activityResult(result)
+		attempt.Finish(entry)
+	}()
 	peer := engine.Peer{
 		Chain:     make([]engine.Process, 0, len(client.Chain)),
 		Alive:     func(p engine.Instance) bool { return client.Alive(p.PID, p.Created) },
 		Connected: h.conn.Connected,
+		Retain:    func(p engine.Instance) (func() bool, func(), bool) { return client.Retain(p.PID, p.Created) },
 	}
 	for _, p := range client.Chain {
 		peer.Chain = append(peer.Chain, engine.Process{Instance: engine.Instance{PID: p.PID, Created: p.Created}, Path: p.Path})
@@ -138,7 +254,12 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 	stopped := make(chan struct{})
 	go watchRequester(ctx, cancel, peer, stopped)
 	defer func() { cancel(); <-stopped }()
-	return h.engine.Sign(ctx, peer, public, data, flags, publish)
+	return h.engine.SignObserved(ctx, peer, public, data, flags, publish, func(observed engine.SignObservation) {
+		entry.Key = observed.KeyName
+		if observed.Anchor.PID != 0 {
+			entry.App, entry.PID = observed.Anchor.Path, observed.Anchor.PID
+		}
+	})
 }
 
 func watchRequester(ctx context.Context, cancel context.CancelFunc, peer engine.Peer, stopped chan<- struct{}) {

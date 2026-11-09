@@ -84,7 +84,7 @@ func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	done := make(chan struct{})
-	go func() { defer close(done); acceptSSH(ctx, listener, agent) }()
+	go func() { defer close(done); acceptSSH(ctx, listener, agent, nil) }()
 	defer func() { cancel(); listener.Close(); <-done }()
 	env := make([]string, 0)
 	for _, v := range os.Environ() {
@@ -108,29 +108,36 @@ func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
 	dir := t.TempDir()
 	keyFile := filepath.Join(dir, "test.pub")
 	signers := filepath.Join(dir, "allowed_signers")
-	signatureFile := filepath.Join(dir, "offline.sig")
+	messageFile := filepath.Join(dir, "offline")
+	signatureFile := messageFile + ".sig"
 	if err := os.WriteFile(keyFile, ssh.MarshalAuthorizedKey(public), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(signers, append([]byte("test "), ssh.MarshalAuthorizedKey(public)...), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(messageFile, []byte("offline message"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	for range 2 {
-		cmd := command(keygen, "-Y", "sign", "-f", keyFile, "-n", "file")
-		cmd.Stdin = strings.NewReader("offline message")
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		signature, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("ssh-keygen sign: %v %s", err, &stderr)
+		// System OpenSSH can block on Go's anonymous stdin pipe in an
+		// SSH session. Use a regular file for both sides of the round trip.
+		if out, err := command(keygen, "-Y", "sign", "-f", keyFile, "-n", "file", messageFile).CombinedOutput(); err != nil {
+			t.Fatalf("ssh-keygen sign: %v %s", err, out)
 		}
-		if err := os.WriteFile(signatureFile, signature, 0600); err != nil {
+		input, err := os.Open(messageFile)
+		if err != nil {
 			t.Fatal(err)
 		}
 		verify := command(keygen, "-Y", "verify", "-f", signers, "-I", "test", "-n", "file", "-s", signatureFile)
-		verify.Stdin = strings.NewReader("offline message")
-		if out, err := verify.CombinedOutput(); err != nil {
+		verify.Stdin = input
+		out, err := verify.CombinedOutput()
+		input.Close()
+		if err != nil {
 			t.Fatalf("OpenSSH rejected signature: %v %s", err, out)
+		}
+		if err := os.Remove(signatureFile); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if prompts, loads := promptCount.Load(), store.loads.Load(); prompts != 1 || loads != 1 {

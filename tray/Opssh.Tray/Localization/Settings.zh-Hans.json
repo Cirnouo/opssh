@@ -105,6 +105,7 @@
   "Settings.CacheOff": "关闭",
   "Settings.CacheFixed": "固定时长",
   "Settings.CacheIdle": "空闲超时",
+  "Settings.CacheUntilExit": "直到 opssh 退出",
   "Settings.CacheUntilLock": "直到锁定",
   "Settings.CacheSecondsAutomationName": "{0}的时长（秒）",
   "Settings.CacheFixedValue": "固定时长 {0} 秒",

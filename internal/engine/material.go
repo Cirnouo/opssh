@@ -29,6 +29,7 @@ func (material *keyMaterial) dispose() {
 
 type loadFlight struct {
 	entry     *keyEntry
+	key       Key
 	ctx       context.Context
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -37,6 +38,11 @@ type loadFlight struct {
 	transient bool
 	material  *keyMaterial
 	err       error
+}
+
+type materialSnapshot struct {
+	entry    *keyEntry
+	revision uint64
 }
 
 func (e *Engine) Preload(ctx context.Context, keyID string) error {
@@ -50,9 +56,47 @@ func (e *Engine) Preload(ctx context.Context, keyID string) error {
 		e.mu.Unlock()
 		return err
 	}
-	revision := entry.materialRevision
+	snapshot := materialSnapshot{entry: entry, revision: entry.materialRevision}
 	e.mu.Unlock()
-	_, flight, err := e.getMaterial(ctx, entry, nil, revision)
+	return e.preload(ctx, snapshot)
+}
+
+// PreloadAll loads the catalog in order using one request slot. Capturing
+// every revision before the first load prevents a batch from restoring
+// material evicted while an earlier key was loading.
+func (e *Engine) PreloadAll(ctx context.Context) error {
+	if !reserve(e.requests) {
+		return ErrBusy
+	}
+	defer func() { <-e.requests }()
+	e.mu.Lock()
+	if err := e.indexErrorLocked(); err != nil {
+		e.mu.Unlock()
+		return err
+	}
+	keys := make([]materialSnapshot, 0, len(e.keys.entries))
+	for _, key := range e.keys.entries {
+		entry := e.state[key.key.ID]
+		keys = append(keys, materialSnapshot{entry: entry, revision: entry.materialRevision})
+	}
+	e.mu.Unlock()
+	var firstErr error
+	for _, snapshot := range keys {
+		if ctx.Err() != nil {
+			break
+		}
+		if err := e.preload(ctx, snapshot); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return firstErr
+}
+
+func (e *Engine) preload(ctx context.Context, snapshot materialSnapshot) error {
+	_, flight, err := e.getMaterial(ctx, snapshot.entry, nil, snapshot.revision)
 	if flight != nil {
 		e.releaseFlight(flight)
 	}
@@ -77,7 +121,7 @@ func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version conte
 			return nil, nil, ErrBusy
 		}
 		loadCtx, cancel := context.WithTimeout(context.Background(), e.loadTimeout)
-		flight = &loadFlight{entry: entry, ctx: loadCtx, cancel: cancel, done: make(chan struct{})}
+		flight = &loadFlight{entry: entry, key: entry.key, ctx: loadCtx, cancel: cancel, done: make(chan struct{})}
 		e.flights[flight] = struct{}{}
 		entry.flight = flight
 		go e.load(flight)
@@ -117,7 +161,7 @@ func (e *Engine) load(flight *loadFlight) {
 	if flight.ctx.Err() != nil {
 		return
 	}
-	material, err := e.fetch(flight.ctx, flight.entry.key)
+	material, err := e.fetch(flight.ctx, flight.key)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if flight.completed {

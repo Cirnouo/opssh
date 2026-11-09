@@ -37,6 +37,7 @@ type Result struct {
 	Error           string `json:"error,omitempty"`
 	ErrorCode       string `json:"errorCode,omitempty"`
 	State           any    `json:"state,omitempty"`
+	Data            any    `json:"data,omitempty"`
 	RestartRequired bool   `json:"restartRequired,omitempty"`
 }
 
@@ -252,9 +253,16 @@ func (c *Channel) read() (Message, error) {
 func (c *Channel) Run(ctx context.Context, handle func(context.Context, Message) Result, priority func(Message) (Result, bool)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(ctx, c.Close)
-	defer func() { cancel(); stop(); c.Close() }()
+	workerDone := make(chan struct{})
+	defer func() {
+		cancel()
+		stop()
+		c.Close()
+		<-workerDone
+	}()
 	commands := make(chan Message, maxCommands)
 	go func() {
+		defer close(workerDone)
 		for {
 			select {
 			case <-ctx.Done():

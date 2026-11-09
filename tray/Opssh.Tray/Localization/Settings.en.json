@@ -105,6 +105,7 @@
   "Settings.CacheOff": "Off",
   "Settings.CacheFixed": "Fixed duration",
   "Settings.CacheIdle": "Idle timeout",
+  "Settings.CacheUntilExit": "Until opssh exits",
   "Settings.CacheUntilLock": "Until lock",
   "Settings.CacheSecondsAutomationName": "Duration in seconds for {0}",
   "Settings.CacheFixedValue": "{0} s fixed",

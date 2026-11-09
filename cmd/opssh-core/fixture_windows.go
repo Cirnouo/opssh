@@ -8,9 +8,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/hex"
+	"crypto/sha256"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -44,6 +45,10 @@ func (v *fixtureVault) Private(_ context.Context, vault, item string) ([]byte, e
 	return bytes.Clone(v.private), nil
 }
 func (*fixtureVault) Status() string { return "offline-fixture" }
+
+func (*fixtureVault) ListVaults(context.Context) ([]desktop.Vault, error) {
+	return []desktop.Vault{{ID: fixtureVaultID, Name: "Offline test vault", Items: []desktop.Item{}}}, nil
+}
 
 func (*fixtureVault) Discover(context.Context, config.Scope) ([]desktop.Vault, error) {
 	return []desktop.Vault{{ID: fixtureVaultID, Name: "Offline test vault",
@@ -87,15 +92,23 @@ func runFixture() bool {
 		cfg.Keys = []config.Key{{VaultID: fixtureVaultID, ItemID: fixtureItemID, Name: fixtureKeyName, Public: store.public}}
 		cfg.Index = config.IndexReady
 	}
+	path := filepath.Join(dir, "fixture-settings.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := config.Save(path, cfg); err != nil {
+			return false
+		}
+	}
+	digest := sha256.Sum256([]byte(dir))
+	endpoint := fmt.Sprintf(`\\.\pipe\opssh-fixture-%x`, digest[:8])
 	boot := startup{
-		readConfig: func() (string, config.Settings, error) { return filepath.Join(dir, "fixture-settings.json"), cfg, nil },
-		newVault:   func(string) vault { return store },
+		readConfig: func() (string, config.Settings, error) {
+			saved, err := config.Read(path)
+			return path, saved, err
+		},
+		endpoint: func() (string, error) { return endpoint, nil },
+		newVault: func(string) vault { return store },
 		listen: func() (*winipc.Listener, error) {
-			var nonce [8]byte
-			if _, err := rand.Read(nonce[:]); err != nil {
-				return nil, err
-			}
-			l, err := winipc.ListenNamed(`\\.\pipe\opssh-fixture-` + hex.EncodeToString(nonce[:]))
+			l, err := winipc.ListenNamed(endpoint)
 			if err != nil {
 				return nil, err
 			}

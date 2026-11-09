@@ -16,7 +16,7 @@ internal sealed record CachePolicy(
 
     internal bool IsValid => Mode switch
     {
-        "off" or "until-lock" => Seconds == 0,
+        "off" or "until-lock" or "until-exit" => Seconds == 0,
         "fixed" or "idle" => Seconds is > 0 and <= MaxSeconds,
         _ => false
     };
@@ -31,7 +31,8 @@ internal sealed record PublicKey(
     [property: JsonRequired] bool Loaded,
     [property: JsonRequired] bool Loading,
     string? Error,
-    bool Unnamed = false);
+    bool Unnamed = false,
+    int Grants = 0);
 
 internal sealed record DiscoveryScope(
     [property: JsonRequired] string Default,
@@ -62,9 +63,13 @@ internal sealed record CoreState(
     [property: JsonRequired] int Pending,
     DiscoveryScope? Scope = null,
     DiscoveredVault[]? Vaults = null,
-    string? Index = null);
+    string? Index = null,
+    string? AccountName = null,
+    string? LastProvider = null,
+    DateTimeOffset? ProviderAt = null);
 
-internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired, string? ErrorCode = null);
+internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired, string? ErrorCode = null,
+    JsonElement? Data = null);
 internal sealed record ProcessIdentity(uint Pid, ulong Created, string Path);
 internal sealed record Approval(string Id, string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline,
     bool CacheAllowed, string? NameHint = null);
@@ -74,6 +79,8 @@ internal static class CoreFeedback
     // Older cores only send English text. Match only known, safe messages.
     internal static string ResultKey(string? code, string? legacy) => (code ?? legacy) switch
     {
+        "pipe-unavailable" => "Error.PipeUnavailable",
+        "account-changed" or "unknown-grant" => "Error.RequestRejected",
         "invalid-command" or "Invalid command or settings." => "Error.InvalidCommand",
         "configuration-write" or "Could not save the public configuration." => "Error.ConfigurationWrite",
         "already-selected" or "This item is already selected." => "Error.AlreadySelected",
@@ -334,6 +341,8 @@ internal sealed class CoreSession : IDisposable
 
         if (!string.Equals(state.Pipe, pipeName, StringComparison.OrdinalIgnoreCase) ||
             !ValidText(state.Account, 256) ||
+            (state.AccountName is not null && !ValidText(state.AccountName, 256)) ||
+            (state.LastProvider is not null && !ValidText(state.LastProvider, 64)) ||
             state.Keys is not { Length: <= 64 } keys ||
             (state.Account.Length == 0 && keys.Length != 0) ||
             state.KeyCache is not { IsValid: true } || state.ApprovalCache is not { IsValid: true } ||
@@ -341,6 +350,8 @@ internal sealed class CoreSession : IDisposable
             state.Pending is < 0 or > 64)
             throw new IOException("Invalid control state.");
 
+        if (keys.Any(key => key is null || key.Grants is < 0 or > 64))
+            throw new IOException("Invalid process approval counts.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var key in keys)
         {

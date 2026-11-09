@@ -6,8 +6,10 @@ namespace Opssh.Tray;
 internal sealed record UiPreferences(string Language, string Theme, bool AutoCheckUpdates = true)
 {
     private const int MaxSize = 4096;
+    private const int CurrentVersion = 1;
+    public int Version { get; init; } = CurrentVersion;
 
-    internal bool IsValid => (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
+    internal bool IsValid => Version == CurrentVersion && (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
 
     private static string SettingsPath =>
         Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "", "opssh", "tray-settings.json");
@@ -29,7 +31,17 @@ internal sealed record UiPreferences(string Language, string Theme, bool AutoChe
             stream.ReadExactly(data);
             if (stream.ReadByte() != -1)
                 return fallback;
-            var saved = JsonSerializer.Deserialize<UiPreferences>(data, Protocol.Json);
+            using var document = JsonDocument.Parse(data);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return fallback;
+            var version = 0;
+            if (root.TryGetProperty("version", out var field) &&
+                (field.ValueKind != JsonValueKind.Number || !field.TryGetInt32(out version)))
+                return fallback;
+            var saved = root.Deserialize<UiPreferences>(Protocol.Json);
+            if (version == 0 && saved is not null)
+                saved = saved with { Version = 1 };
             return saved is { IsValid: true } ? saved : fallback;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

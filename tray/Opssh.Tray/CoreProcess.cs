@@ -20,7 +20,7 @@ internal sealed class CoreProcess : IDisposable
         this.process = process;
     }
 
-    internal static async Task<CoreProcess> StartAsync(CancellationToken token)
+    internal static async Task<CoreProcess> StartAsync(CancellationToken token, bool candidate = false)
     {
         var exe = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "opssh-core.exe"));
         if (!File.Exists(exe))
@@ -44,7 +44,7 @@ internal sealed class CoreProcess : IDisposable
             token.ThrowIfCancellationRequested();
             using var childPipe = Duplicate(client.DangerousGetHandle(), 0, sameAccess: true);
             using var trayProcess = Duplicate(new nint(-1), 0x00100000 | 0x1000, sameAccess: false);
-            var child = Launch(exe, childPipe, trayProcess);
+            var child = Launch(exe, childPipe, trayProcess, candidate);
             return new CoreProcess(server, child);
         }
         catch
@@ -105,7 +105,7 @@ internal sealed class CoreProcess : IDisposable
         return result;
     }
 
-    private static SafeWaitHandle Launch(string exe, SafeWaitHandle pipe, SafeWaitHandle tray)
+    private static SafeWaitHandle Launch(string exe, SafeWaitHandle pipe, SafeWaitHandle tray, bool candidate)
     {
         const uint extendedStartupInfo = 0x00080000;
         const uint createNoWindow = 0x08000000;
@@ -138,6 +138,8 @@ internal sealed class CoreProcess : IDisposable
             };
             var command = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
                 $"\"{exe}\" --control-handle {(nuint)pipeHandle} --tray-handle {(nuint)trayHandle}"));
+            if (candidate)
+                command.Append(" --candidate");
             if (!Native.CreateProcessW(exe, command, 0, 0, true, extendedStartupInfo | createNoWindow,
                     0, Path.GetDirectoryName(exe)!, ref startup, out var info))
                 throw Failure("Could not start the bundled opssh core.");

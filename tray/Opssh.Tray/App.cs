@@ -451,7 +451,7 @@ public sealed partial class App : Application
                 settings?.ShowState(latest, result.Ok && (command is "settings" or "connect"));
                 icon.SetTip(latest.Locked ? "Tray.Locked" : "Tray.Connected");
             }
-            restart = result.Ok && result.RestartRequired && command == "connect" && !afterAccountRestart;
+            restart = result.Ok && result.RestartRequired && (command == "logout" || command == "connect" && !afterAccountRestart);
             if (!result.Ok)
                 ShowMessage(CoreFeedback.ResultKey(result.ErrorCode, result.Error));
             else if (!background)
@@ -481,7 +481,7 @@ public sealed partial class App : Application
             SetAvailability(false, false, "App.Restarting");
             await StopCoreAsync();
             transitioning = false;
-            await StartCoreAsync(body);
+            await StartCoreAsync(command == "connect" ? body : null);
         }
         else if (refresh && current == session)
         {
@@ -663,6 +663,7 @@ public sealed partial class App : Application
             return;
         quitting = true;
         updateCancellation?.Cancel();
+        accountTransition?.Cancel();
         releaseClient?.Dispose();
         icon.CanRestart = false;
         settings?.Close();

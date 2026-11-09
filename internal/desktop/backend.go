@@ -6,6 +6,7 @@ import (
 	"errors"
 	"runtime"
 	"sync/atomic"
+	"time"
 
 	onepassword "github.com/1password/onepassword-sdk-go"
 	"golang.org/x/crypto/ssh"
@@ -36,7 +37,11 @@ func (c desktopClient) Resolve(ctx context.Context, reference string) (string, e
 
 type newClient func(context.Context, string) (resolver, error)
 
-type observation struct{ status string }
+type observation struct {
+	status     string
+	lastStatus string
+	at         time.Time
+}
 
 type Backend struct {
 	account string
@@ -60,14 +65,19 @@ func New(account string) *Backend {
 func newBackend(account string, init newClient) *Backend {
 	b := &Backend{account: account, init: init, work: make(chan struct{}, 1)}
 	if account == "" {
-		b.state.Store(&observation{"unconfigured"})
+		b.state.Store(&observation{status: "unconfigured"})
 	} else {
-		b.state.Store(&observation{"unknown"})
+		b.state.Store(&observation{status: "unknown"})
 	}
 	return b
 }
 
 func (b *Backend) Status() string { return b.state.Load().status }
+
+func (b *Backend) Observation() (status, last string, at time.Time) {
+	state := b.state.Load()
+	return state.status, state.lastStatus, state.at
+}
 
 func (b *Backend) Public(ctx context.Context, vault, item string) ([]byte, error) {
 	return b.resolve(ctx, vault, item, "public key", func(value string) ([]byte, error) {
@@ -126,9 +136,18 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 	default:
 		return zero, ErrBusy
 	}
-	reading := &observation{"reading"}
+	prior := b.state.Load()
+	reading := &observation{status: "reading", lastStatus: prior.lastStatus, at: prior.at}
 	b.state.Store(reading)
-	setStatus := func(status string) { b.state.CompareAndSwap(reading, &observation{status}) }
+	var invoked atomic.Bool
+	setStatus := func(status string) {
+		result := &observation{status: status, lastStatus: reading.lastStatus, at: reading.at}
+		if invoked.Load() {
+			result.lastStatus = status
+			result.at = time.Now().UTC()
+		}
+		b.state.CompareAndSwap(reading, result)
+	}
 	cancelStatus := func() {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			setStatus("timed-out")
@@ -143,12 +162,10 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 	response := make(chan result)
 	go func() {
 		out := func() result {
-			// Release the slot before handing the result to the caller so its
-			// next SDK request can start immediately.
-			defer func() { <-b.work }()
 			if err := ctx.Err(); err != nil {
 				return result{err: err}
 			}
+			invoked.Store(true)
 			if b.client == nil {
 				client, err := b.init(ctx, b.account)
 				if err != nil {
@@ -162,6 +179,16 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 			value, err := read(b.client)
 			return result{value, err}
 		}()
+		// Publish the actual observation before releasing the native slot.
+		// A new reader can inherit this outcome before this waiter resumes.
+		if ctx.Err() != nil {
+			cancelStatus()
+		} else if out.err != nil && !errors.Is(out.err, ErrScopeTooBroad) && !errors.Is(out.err, ErrScanLimit) {
+			setStatus("unavailable")
+		} else {
+			setStatus("last-success")
+		}
+		<-b.work
 		select {
 		case response <- out:
 		case <-ctx.Done():
@@ -181,11 +208,6 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 			}
 			cancelStatus()
 			return zero, err
-		}
-		if out.err != nil && !errors.Is(out.err, ErrScopeTooBroad) && !errors.Is(out.err, ErrScanLimit) {
-			setStatus("unavailable")
-		} else {
-			setStatus("last-success")
 		}
 		return out.value, out.err
 	}
