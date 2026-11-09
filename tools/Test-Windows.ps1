@@ -22,6 +22,7 @@ function Invoke-Checked([string]$Program, [string[]]$CommandArgs) {
 
 $priorCgo = $env:CGO_ENABLED
 $priorFixture = $env:OPSSH_FIXTURE_DIRECTORY
+$priorUnconfiguredFixture = $env:OPSSH_FIXTURE_UNCONFIGURED
 Push-Location -LiteralPath $repo
 try {
     $env:CGO_ENABLED = '0'
@@ -39,6 +40,7 @@ try {
     Invoke-Checked dotnet @($driver)
 
     $env:OPSSH_FIXTURE_DIRECTORY = $fixtureDir
+    $env:OPSSH_FIXTURE_UNCONFIGURED = '1'
     Invoke-Checked go @('build','-mod=readonly','-trimpath','-tags','opssh_fixture','-ldflags=-H windowsgui','-o',(Join-Path $interopDir 'opssh-core.exe'),'./cmd/opssh-core')
     Invoke-Checked dotnet @($driver,'--go-interop')
 
@@ -55,4 +57,5 @@ try {
     Pop-Location
     $env:CGO_ENABLED = $priorCgo
     $env:OPSSH_FIXTURE_DIRECTORY = $priorFixture
+    $env:OPSSH_FIXTURE_UNCONFIGURED = $priorUnconfiguredFixture
 }

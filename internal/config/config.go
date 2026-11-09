@@ -15,7 +15,20 @@ import (
 )
 
 const maxFile = 256 * 1024
-const MaxKeys = 64
+
+const (
+	MaxKeys   = 64
+	MaxVaults = 64
+	MaxItems  = 128
+)
+
+const (
+	IndexNotIndexed    = "not-indexed"
+	IndexReady         = "ready"
+	IndexPartial       = "partial"
+	IndexUnavailable   = "unavailable"
+	IndexScopeTooBroad = "scope-too-broad"
+)
 
 var ErrInvalid = errors.New("invalid public configuration")
 
@@ -33,11 +46,62 @@ type Key struct {
 
 func (k Key) ID() string { return k.VaultID + "/" + k.ItemID }
 
+type Scope struct {
+	Default string            `json:"default"`
+	Vaults  map[string]string `json:"vaults"`
+	Items   map[string]string `json:"items"`
+}
+
+func (s Scope) Normalized() Scope {
+	if s.Vaults == nil {
+		s.Vaults = make(map[string]string)
+	}
+	if s.Items == nil {
+		s.Items = make(map[string]string)
+	}
+	return s
+}
+
+func (s Scope) Includes(vaultID, itemID string) bool {
+	if rule, ok := s.Items[vaultID+"/"+itemID]; ok {
+		return rule == "include"
+	}
+	return s.IncludesVault(vaultID)
+}
+
+func (s Scope) IncludesVault(vaultID string) bool {
+	if rule, ok := s.Vaults[vaultID]; ok {
+		return rule == "include"
+	}
+	return s.Default == "include"
+}
+
+func (s Scope) Valid() bool {
+	validRule := func(rule string) bool { return rule == "include" || rule == "exclude" }
+	if !validRule(s.Default) || len(s.Vaults) > MaxVaults || len(s.Items) > MaxItems {
+		return false
+	}
+	for id, rule := range s.Vaults {
+		if !ValidID(id) || !validRule(rule) {
+			return false
+		}
+	}
+	for id, rule := range s.Items {
+		vault, item, ok := strings.Cut(id, "/")
+		if !ok || !ValidID(vault) || !ValidID(item) || !validRule(rule) {
+			return false
+		}
+	}
+	return true
+}
+
 type Settings struct {
 	Account       string `json:"account"`
 	KeyCache      Policy `json:"keyCache"`
 	ApprovalCache Policy `json:"approvalCache"`
 	Keys          []Key  `json:"keys"`
+	Scope         Scope  `json:"scope"`
+	Index         string `json:"index"`
 }
 
 func Default() Settings {
@@ -45,6 +109,8 @@ func Default() Settings {
 		KeyCache:      Policy{Mode: "fixed", Seconds: 300},
 		ApprovalCache: Policy{Mode: "fixed", Seconds: 600},
 		Keys:          []Key{},
+		Scope:         Scope{Default: "include"}.Normalized(),
+		Index:         IndexNotIndexed,
 	}
 }
 
@@ -85,13 +151,19 @@ func (p Policy) Valid() bool {
 
 func (s Settings) Validate() error {
 	if !ValidLabel(s.Account) || !s.KeyCache.Valid() || !s.ApprovalCache.Valid() ||
-		len(s.Keys) > MaxKeys || (s.Account == "" && len(s.Keys) > 0) {
+		len(s.Keys) > MaxKeys || (s.Account == "" && len(s.Keys) > 0) || !s.Scope.Valid() {
+		return ErrInvalid
+	}
+	switch s.Index {
+	case IndexNotIndexed, IndexReady, IndexPartial, IndexUnavailable, IndexScopeTooBroad:
+	default:
 		return ErrInvalid
 	}
 	ids := make(map[string]bool, len(s.Keys))
 	blobs := make(map[string]bool, len(s.Keys))
 	for _, k := range s.Keys {
-		if !ValidID(k.VaultID) || !ValidID(k.ItemID) || !ValidLabel(k.Name) || ids[k.ID()] {
+		if !ValidID(k.VaultID) || !ValidID(k.ItemID) || !ValidLabel(k.Name) || ids[k.ID()] ||
+			!s.Scope.Includes(k.VaultID, k.ItemID) {
 			return ErrInvalid
 		}
 		ids[k.ID()] = true
@@ -122,10 +194,46 @@ func Read(path string) (Settings, error) {
 		return Settings{}, ErrInvalid
 	}
 	s := Default()
+	s.Index = ""
+	wire := struct {
+		*Settings
+		Scope json.RawMessage `json:"scope"`
+	}{Settings: &s}
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if err := d.Decode(&s); err != nil {
+	if err := d.Decode(&wire); err != nil {
 		return Settings{}, ErrInvalid
+	}
+	if len(wire.Scope) == 0 {
+		if s.Account != "" {
+			s.Scope.Default = "exclude"
+			for _, k := range s.Keys {
+				s.Scope.Items[k.ID()] = "include"
+			}
+		}
+	} else {
+		s.Scope = Scope{}
+		d := json.NewDecoder(bytes.NewReader(wire.Scope))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&s.Scope); err != nil {
+			return Settings{}, ErrInvalid
+		}
+		s.Scope = s.Scope.Normalized()
+	}
+	if s.Index == "" {
+		s.Index = IndexNotIndexed
+		if len(s.Keys) > 0 {
+			s.Index = IndexReady
+			for _, k := range s.Keys {
+				if len(k.Public) == 0 {
+					s.Index = IndexPartial
+					break
+				}
+			}
+		}
+	}
+	if s.Keys == nil {
+		s.Keys = []Key{}
 	}
 	return s, s.Validate()
 }
@@ -134,6 +242,7 @@ func Save(path string, s Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
+	s.Scope = s.Scope.Normalized()
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

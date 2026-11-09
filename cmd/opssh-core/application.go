@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,11 @@ type vault interface {
 	Public(context.Context, string, string) ([]byte, error)
 	Private(context.Context, string, string) ([]byte, error)
 	Status() string
+}
+
+type discoverableVault interface {
+	vault
+	Discover(context.Context, config.Scope) ([]desktop.Vault, error)
 }
 
 type vaultSlot struct {
@@ -47,6 +53,7 @@ func (s *vaultSlot) Load(ctx context.Context, key engine.Key) ([]byte, error) {
 type application struct {
 	path, endpoint  string
 	settings        config.Settings // changed only by the control command worker
+	vaults          []desktop.Vault // only public discovery metadata, scoped to this account
 	engine          *engine.Engine
 	channel         *control.Channel
 	vault           vaultSlot
@@ -56,7 +63,7 @@ type application struct {
 }
 
 func newApplication(path, endpoint string, cfg config.Settings, ch *control.Channel, factory func(string) vault) (*application, error) {
-	a := &application{path: path, endpoint: endpoint, settings: cfg, channel: ch, newVault: factory}
+	a := &application{path: path, endpoint: endpoint, settings: cfg, vaults: []desktop.Vault{}, channel: ch, newVault: factory}
 	a.vault.set(factory(cfg.Account))
 	opts := engine.DefaultOptions()
 	opts.Keys = engineKeys(cfg)
@@ -136,14 +143,17 @@ type keyDisplay struct {
 	Error       string `json:"error,omitempty"`
 }
 type appState struct {
-	Pipe          string        `json:"pipe"`
-	Locked        bool          `json:"locked"`
-	Account       string        `json:"account"`
-	Keys          []keyDisplay  `json:"keys"`
-	KeyCache      config.Policy `json:"keyCache"`
-	ApprovalCache config.Policy `json:"approvalCache"`
-	Provider      string        `json:"provider"`
-	Pending       int           `json:"pending"`
+	Pipe          string          `json:"pipe"`
+	Locked        bool            `json:"locked"`
+	Account       string          `json:"account"`
+	Keys          []keyDisplay    `json:"keys"`
+	KeyCache      config.Policy   `json:"keyCache"`
+	ApprovalCache config.Policy   `json:"approvalCache"`
+	Provider      string          `json:"provider"`
+	Pending       int             `json:"pending"`
+	Scope         config.Scope    `json:"scope"`
+	Vaults        []desktop.Vault `json:"vaults"`
+	Index         string          `json:"index"`
 }
 
 func (a *application) status() appState {
@@ -152,7 +162,13 @@ func (a *application) status() appState {
 		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account,
 		Keys:     make([]keyDisplay, 0, len(a.settings.Keys)),
 		KeyCache: a.settings.KeyCache, ApprovalCache: a.settings.ApprovalCache,
-		Provider: a.vault.get().Status(),
+		Provider: a.vault.get().Status(), Scope: a.settings.Scope, Vaults: a.vaults, Index: a.settings.Index,
+	}
+	if a.restartRequired {
+		state.Provider = "unknown"
+		if state.Account == "" {
+			state.Provider = "unconfigured"
+		}
 	}
 	if a.channel != nil {
 		state.Pending = a.channel.Pending()
@@ -221,6 +237,27 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	case "status":
 	case "settings":
 		err = a.updateSettings(msg)
+	case "connect":
+		err = a.connect(ctx, msg)
+	case "refresh-index":
+		if len(msg.Body) != 0 {
+			err = errCommand
+		} else {
+			err = a.refreshIndex(ctx, a.copySettings())
+		}
+	case "set-scope":
+		var scope config.Scope
+		if control.DecodeBody(msg, &scope) != nil || !scope.Valid() {
+			err = errCommand
+		} else {
+			next := a.copySettings()
+			next.Scope = scope.Normalized()
+			if next.Account == "" {
+				err = a.persist(next)
+			} else {
+				err = a.refreshIndex(ctx, next)
+			}
+		}
 	case "add-key":
 		err = a.addKey(ctx, msg)
 	case "refresh", "remove-key", "preload":
@@ -242,6 +279,8 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 		case "remove-key":
 			next := a.copySettings()
 			next.Keys = append(next.Keys[:i], next.Keys[i+1:]...)
+			next.Scope.Items[body.KeyID] = "exclude"
+			next.Index = config.IndexPartial
 			err = a.persist(next)
 		case "preload":
 			err = a.engine.Preload(ctx, body.KeyID)
@@ -264,12 +303,14 @@ func (a *application) keyIndex(id string) int {
 func (a *application) copySettings() config.Settings {
 	next := a.settings
 	next.Keys = append([]config.Key{}, next.Keys...)
+	next.Scope.Vaults = maps.Clone(next.Scope.Vaults)
+	next.Scope.Items = maps.Clone(next.Scope.Items)
 	return next
 }
 
 func (a *application) updateSettings(msg control.Message) error {
 	var form struct {
-		Account       string        `json:"account"`
+		Account       *string       `json:"account"`
 		KeyCache      config.Policy `json:"keyCache"`
 		ApprovalCache config.Policy `json:"approvalCache"`
 	}
@@ -277,16 +318,44 @@ func (a *application) updateSettings(msg control.Message) error {
 		return errCommand
 	}
 	next := a.copySettings()
-	next.Account = strings.TrimSpace(form.Account)
+	if form.Account != nil {
+		next.Account = strings.TrimSpace(*form.Account)
+	}
 	next.KeyCache, next.ApprovalCache = form.KeyCache, form.ApprovalCache
+	return a.applySettings(next)
+}
+
+func (a *application) connect(ctx context.Context, msg control.Message) error {
+	var form struct {
+		Account string `json:"account"`
+	}
+	if control.DecodeBody(msg, &form) != nil || strings.TrimSpace(form.Account) == "" {
+		return errCommand
+	}
+	next := a.copySettings()
+	next.Account = strings.TrimSpace(form.Account)
+	if next.Account != a.settings.Account {
+		if err := a.applySettings(next); err != nil || a.restartRequired {
+			return err
+		}
+	}
+	return a.refreshIndex(ctx, a.copySettings())
+}
+
+func (a *application) applySettings(next config.Settings) error {
 	oldAccount := a.settings.Account
 	if next.Account != oldAccount {
 		next.Keys = []config.Key{}
+		next.Index = config.IndexNotIndexed
+		if oldAccount != "" {
+			next.Scope = config.Default().Scope
+		}
 	}
 	if err := a.persist(next); err != nil {
 		return err
 	}
 	if next.Account != oldAccount {
+		a.vaults = []desktop.Vault{}
 		if oldAccount != "" {
 			a.restartMu.Lock()
 			a.engine.Lock()
@@ -317,6 +386,8 @@ func (a *application) addKey(ctx context.Context, msg control.Message) error {
 	}
 	next := a.copySettings()
 	next.Keys = append(next.Keys, k)
+	next.Scope.Items[k.ID()] = "include"
+	next.Index = config.IndexPartial
 	if err := a.persist(next); err != nil {
 		return err
 	}
@@ -325,10 +396,12 @@ func (a *application) addKey(ctx context.Context, msg control.Message) error {
 
 func (a *application) refresh(ctx context.Context, i int) error {
 	next := a.copySettings()
+	previousIndex := next.Index
 	k := next.Keys[i]
 	// Disable the old identity before waiting for any provider result.
 	if len(k.Public) > 0 {
 		next.Keys[i].Public = nil
+		next.Index = config.IndexPartial
 		if err := a.persist(next); err != nil {
 			return err
 		}
@@ -346,6 +419,7 @@ func (a *application) refresh(ctx context.Context, i int) error {
 		return desktop.ErrPublic
 	}
 	next.Keys[i].Public = public
+	next.Index = previousIndex
 	return a.persist(next)
 }
 
@@ -390,6 +464,12 @@ func displayError(err error) string {
 		return "Configure your 1Password account first."
 	case errors.Is(err, desktop.ErrBusy), errors.Is(err, engine.ErrBusy):
 		return "A request is already in progress. Try again after it completes."
+	case errors.Is(err, desktop.ErrScopeTooBroad):
+		return "The scope selects more than 64 SSH keys. Narrow the selection and refresh the public index."
+	case errors.Is(err, desktop.ErrScanLimit):
+		return "Discovery can scan up to 256 vaults and 8,192 item overviews per scoped vault. The public index is empty."
+	case errors.Is(err, desktop.ErrPartial):
+		return "The public index is incomplete. Check 1Password desktop access and refresh."
 	case errors.Is(err, desktop.ErrPublic), errors.Is(err, desktop.ErrUnavailable):
 		return "The public key lookup failed. Check 1Password desktop integration and the selected item, then refresh."
 	case errors.Is(err, engine.ErrUnknownKey):

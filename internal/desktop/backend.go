@@ -97,25 +97,34 @@ func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, erro
 	})
 }
 
-type result struct {
-	bytes []byte
-	err   error
-}
-
 func (b *Backend) resolve(ctx context.Context, vault, item, field string, convert func(string) ([]byte, error)) ([]byte, error) {
-	if b.account == "" {
-		return nil, ErrUnconfigured
-	}
 	if !config.ValidID(vault) || !config.ValidID(item) {
 		return nil, ErrUnavailable
 	}
+	return execute(ctx, b, func(client resolver) ([]byte, error) {
+		value, err := client.Resolve(ctx, "op://"+vault+"/"+item+"/"+field)
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return convert(value)
+	}, func(buf []byte) { clear(buf) })
+}
+
+func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, error), discard func(T)) (T, error) {
+	var zero T
+	if b.account == "" {
+		return zero, ErrUnconfigured
+	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return zero, err
 	}
 	select {
 	case b.work <- struct{}{}:
 	default:
-		return nil, ErrBusy
+		return zero, ErrBusy
 	}
 	reading := &observation{"reading"}
 	b.state.Store(reading)
@@ -127,52 +136,57 @@ func (b *Backend) resolve(ctx context.Context, vault, item, field string, conver
 			setStatus("canceled")
 		}
 	}
+	type result struct {
+		value T
+		err   error
+	}
 	response := make(chan result)
 	go func() {
-		defer func() { <-b.work }()
-		if ctx.Err() != nil {
-			return
-		}
-		var out result
-		client := b.client
-		var err error
-		if client == nil {
-			client, err = b.init(ctx, b.account)
-			if err == nil {
+		out := func() result {
+			// Release the slot before handing the result to the caller so its
+			// next SDK request can start immediately.
+			defer func() { <-b.work }()
+			if err := ctx.Err(); err != nil {
+				return result{err: err}
+			}
+			if b.client == nil {
+				client, err := b.init(ctx, b.account)
+				if err != nil {
+					return result{err: ErrUnavailable}
+				}
+				if err := ctx.Err(); err != nil {
+					return result{err: err}
+				}
 				b.client = client
 			}
-		}
-		if err == nil && ctx.Err() == nil {
-			var value string
-			value, err = client.Resolve(ctx, "op://"+vault+"/"+item+"/"+field)
-			if err == nil && ctx.Err() == nil {
-				out.bytes, out.err = convert(value)
-			}
-		}
-		if err != nil {
-			out.err = ErrUnavailable
-		}
+			value, err := read(b.client)
+			return result{value, err}
+		}()
 		select {
 		case response <- out:
 		case <-ctx.Done():
-			clear(out.bytes)
+			if discard != nil {
+				discard(out.value)
+			}
 		}
 	}()
 	select {
 	case <-ctx.Done():
 		cancelStatus()
-		return nil, ctx.Err()
+		return zero, ctx.Err()
 	case out := <-response:
 		if err := ctx.Err(); err != nil {
-			clear(out.bytes)
+			if discard != nil {
+				discard(out.value)
+			}
 			cancelStatus()
-			return nil, err
+			return zero, err
 		}
-		if out.err != nil {
+		if out.err != nil && !errors.Is(out.err, ErrScopeTooBroad) && !errors.Is(out.err, ErrScanLimit) {
 			setStatus("unavailable")
 		} else {
 			setStatus("last-success")
 		}
-		return out.bytes, out.err
+		return out.value, out.err
 	}
 }

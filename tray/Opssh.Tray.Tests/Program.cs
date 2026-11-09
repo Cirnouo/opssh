@@ -37,9 +37,16 @@ await FramingAsync(token);
 await SupervisionAsync(token);
 await ApprovalLifetimeAsync(token);
 await ConcurrentCommandsAsync(token);
+await DiscoveryStatusAsync(token);
 await MalformedResultsAsync(token);
 await TruncatedFrameAsync(token);
-Console.WriteLine("Tray checks passed (framing, Windows launch and shutdown, approval lifetime, concurrent control replies, malformed result rejection, partial frame deadline).");
+Console.WriteLine("Tray checks passed (framing, Windows launch and shutdown, approval lifetime, concurrent control replies, discovery status, malformed result rejection, partial frame deadline).");
+
+const string discoveryFields = """
+    ,"scope":{"default":"exclude","vaults":{"aaaaaaaaaaaaaaaaaaaaaaaaaa":"include"},"items":{"aaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbb":"exclude"}},
+    "vaults":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Fixture vault","items":[{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbb","name":"Fixture key"}]}],
+    "index":"scope-too-broad"
+    """;
 
 static async Task FramingAsync(CancellationToken token)
 {
@@ -146,6 +153,33 @@ static async Task ConcurrentCommandsAsync(CancellationToken token)
     Assert((await preload) is { Ok: false, Error: "Locked" }, "provider reply retains its original correlation");
 }
 
+static async Task DiscoveryStatusAsync(CancellationToken token)
+{
+    const string state = """{"pipe":"test","locked":false,"account":"Fixture","keys":[],"keyCache":{"mode":"off","seconds":0},"approvalCache":{"mode":"off","seconds":0},"provider":"last-success","pending":0}""";
+    var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");
+    using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+    using var peer = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+    await Task.WhenAll(server.WaitForConnectionAsync(token), peer.ConnectAsync(token));
+    using var session = new CoreSession(server);
+    var handshake = session.StartAsync(token);
+    await SendAsync(peer, """{"v":1,"type":"hello","body":{"pipe":"test","version":"1"}}""");
+    await handshake;
+    var result = session.RequestAsync("status", null, token);
+    var status = await Protocol.ReadAsync(peer, token);
+    var fullState = state[..^1] + discoveryFields + "}";
+    await SendAsync(peer, $$$"""{"v":1,"type":"result","id":"{{{status.Id}}}","body":{"ok":true,"state":{{{fullState}}}}}""");
+    Assert(await result is
+    {
+        Ok: true,
+        State:
+        {
+            Scope: { Default: "exclude" },
+            Vaults: [{ Name: "Fixture vault", Items: [{ Name: "Fixture key" }] }],
+            Index: "scope-too-broad"
+        }
+    } && session.IsConnected, "scope and metadata are delivered with bounded discovery status");
+}
+
 static async Task MalformedResultsAsync(CancellationToken token)
 {
     const string valid = """{"pipe":"test","locked":false,"account":"Fixture","keys":[],"keyCache":{"mode":"fixed","seconds":300},"approvalCache":{"mode":"off","seconds":0},"provider":"unknown","pending":0}""";
@@ -157,6 +191,10 @@ static async Task MalformedResultsAsync(CancellationToken token)
         valid.Replace("\"seconds\":300", "\"seconds\":0"),
         valid.Replace("\"test\"", "\"different\""),
         valid.Replace("\"pending\":0", "\"pending\":-1"),
+        valid[..^1] + discoveryFields.Replace("\"default\":\"exclude\"", "\"default\":\"inherit\"") + "}",
+        valid[..^1] + discoveryFields.Replace("aaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbb", "invalid") + "}",
+        valid[..^1] + discoveryFields.Replace("\"items\":[{", "\"items\":[null,{") + "}",
+        valid[..^1] + discoveryFields.Replace("scope-too-broad", "unsupported") + "}",
     })
     {
         var pipeName = "opssh-tests-" + Guid.NewGuid().ToString("N");

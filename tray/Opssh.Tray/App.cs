@@ -1,8 +1,9 @@
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using Microsoft.Win32.SafeHandles;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.Win32.SafeHandles;
 
 namespace Opssh.Tray;
 
@@ -10,20 +11,24 @@ public sealed partial class App : Application
 {
     private readonly Queue<Approval> waiting = new();
     private DispatcherQueue dispatcher = null!;
-    private DispatcherQueueTimer statusTimer = null!;
-    private SettingsWindow settings = null!;
+    private DispatcherQueueTimer? statusTimer;
+    private SettingsWindow? settings;
     private TrayIcon icon = null!;
     private Mutex? instance;
     private CoreProcess? core;
     private CoreSession? session;
+    private Hello? hello;
+    private CoreState? state;
+    private bool? locked;
+    private string availability = "Starting the core…";
+    private string message = "";
     private CancellationTokenSource? operation;
     private TaskCompletionSource? operationComplete;
     private CancellationTokenSource? urgentOperation;
     private TaskCompletionSource? urgentComplete;
     private int stateRevision;
-    private bool hasCurrentState;
     private bool polling;
-    private bool waitingForPoll;
+    private CoreSession? waitingForPoll;
     private ApprovalWindow? prompt;
     private bool transitioning;
     private bool quitting;
@@ -38,20 +43,12 @@ public sealed partial class App : Application
             Exit();
             return;
         }
+        DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
-        settings = new SettingsWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync);
         icon = new TrayIcon();
         icon.OpenRequested += OpenSettings;
         icon.RestartRequested += () => _ = StartCoreAsync();
         icon.QuitRequested += () => _ = QuitAsync();
-        statusTimer = dispatcher.CreateTimer();
-        statusTimer.Interval = TimeSpan.FromSeconds(2);
-        statusTimer.Tick += (_, _) =>
-        {
-            if (settings.AppWindow.IsVisible)
-                _ = RunCommandAsync("status", null, background: true);
-        };
-        statusTimer.Start();
         _ = StartCoreAsync();
     }
 
@@ -115,19 +112,90 @@ public sealed partial class App : Application
     {
         if (quitting)
             return;
-        settings.Activate();
-        if (settings.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+        if (settings is null)
+        {
+            settings = new SettingsWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync);
+            settings.Closed += SettingsClosed;
+            settings.SetAvailability(hello is not null, icon.CanRestart, availability);
+            if (hello is not null)
+                settings.SetHello(hello);
+            // A newly opened editor stays gated until a current session
+            // response arrives, even if the tray retained an older snapshot.
+            if (locked is { } value)
+                settings.SetLockState(value);
+            settings.SetBusy(waitingForPoll is not null || (operation is not null && !polling));
+            settings.SetUrgentBusy(urgentOperation is not null);
+            settings.ShowMessage(message);
+
+            statusTimer = dispatcher.CreateTimer();
+            statusTimer.Interval = TimeSpan.FromSeconds(2);
+            statusTimer.Tick += PollSettings;
+            statusTimer.Start();
+        }
+
+        if (settings.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
             presenter.Restore();
-        _ = RunCommandAsync("status", null, background: true);
+        settings.Activate();
+        _ = RefreshSettingsAsync();
     }
 
-    private async Task StartCoreAsync()
+    private void SettingsClosed(object sender, WindowEventArgs args)
+    {
+        if (settings is not { } closed)
+            return;
+        closed.Closed -= SettingsClosed;
+        settings = null;
+        if (statusTimer is { } timer)
+        {
+            timer.Stop();
+            timer.Tick -= PollSettings;
+            statusTimer = null;
+        }
+    }
+
+    private void PollSettings(DispatcherQueueTimer sender, object args) => _ = RefreshSettingsAsync();
+
+    private bool SettingsVisible => settings?.AppWindow is { IsVisible: true } window &&
+        window.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
+    private Task RefreshSettingsAsync() => RunCommandAsync("status", null, background: true);
+
+    private void SetAvailability(bool connected, bool canRestart, string text)
+    {
+        availability = text;
+        icon.CanRestart = canRestart;
+        if (!connected)
+        {
+            hello = null;
+            state = null;
+            locked = null;
+        }
+        settings?.SetAvailability(connected, canRestart, text);
+    }
+
+    private void ShowMessage(string text)
+    {
+        message = text;
+        settings?.ShowMessage(text);
+    }
+
+    private void SetLockState(bool value)
+    {
+        locked = value;
+        if (state is not null)
+            state = state with { Locked = value };
+        settings?.SetLockState(value);
+        icon.SetTip(value ? "opssh core locked" : "opssh core connected");
+    }
+
+    private Task StartCoreAsync() => StartCoreAsync(null);
+
+    private async Task StartCoreAsync(object? connectAfterRestart)
     {
         if (transitioning || quitting || session is not null)
             return;
         transitioning = true;
-        settings.SetAvailability(false, false, "Starting the core…");
-        icon.CanRestart = false;
+        SetAvailability(false, false, "Starting the core…");
         icon.SetTip("opssh is starting");
         CoreProcess? child = null;
         CoreSession? candidate = null;
@@ -142,13 +210,14 @@ public sealed partial class App : Application
             current.ApprovalEnded += id => dispatcher.TryEnqueue(() => EndApproval(current, id));
             current.Disconnected += () => dispatcher.TryEnqueue(() => _ = CoreDisconnectedAsync(current));
             session = current;
-            var hello = await current.StartAsync(timeout.Token);
+            var greeting = await current.StartAsync(timeout.Token);
             if (quitting || session != current)
                 return;
             if (!current.IsConnected)
                 throw new IOException("The core disconnected during startup.");
-            settings.SetHello(hello);
-            settings.SetAvailability(true, false, "Core connected");
+            hello = greeting;
+            settings?.SetHello(greeting);
+            SetAvailability(true, false, "Core connected");
             icon.SetTip("opssh core connected");
         }
         catch (Exception e) when (IsControlFailure(e))
@@ -168,7 +237,8 @@ public sealed partial class App : Application
                     CoreStartupException startup => startup.Message,
                     _ => "Could not start the core."
                 };
-                settings.SetAvailability(false, true, message);
+                ShowMessage("");
+                SetAvailability(false, true, message);
                 icon.SetTip("opssh core unavailable");
             }
         }
@@ -177,30 +247,39 @@ public sealed partial class App : Application
             transitioning = false;
             icon.CanRestart = !quitting && session is null;
         }
-        if (session is not null)
-            await RunCommandAsync("status", null, background: true);
+        if (quitting || session is null)
+            return;
+        if (connectAfterRestart is not null)
+            await RunCommandAsync("connect", connectAfterRestart, background: false, afterAccountRestart: true);
+        else
+            await RefreshSettingsAsync();
     }
 
-    private async Task RunCommandAsync(string command, object? body, bool background = false)
+    private Task RunCommandAsync(string command, object? body, bool background) =>
+        RunCommandAsync(command, body, background, afterAccountRestart: false);
+
+    private async Task RunCommandAsync(string command, object? body, bool background, bool afterAccountRestart)
     {
         var current = session;
-        if (current is null || transitioning || quitting || (background && waitingForPoll) ||
-            (!hasCurrentState && command != "status") ||
+        if (current is null || transitioning || quitting ||
+            (background && (!SettingsVisible || waitingForPoll is not null || urgentOperation is not null)) ||
+            (state is null && command != "status" && !afterAccountRestart) ||
             (command == "unlock" && urgentOperation is not null))
             return;
         if (operationComplete is { } active)
         {
-            if (background || !polling || waitingForPoll)
+            if (background || !polling || waitingForPoll is not null)
                 return;
-            waitingForPoll = true;
-            settings.SetBusy(true);
+            waitingForPoll = current;
+            settings?.SetBusy(true);
             await active.Task;
-            waitingForPoll = false;
+            if (waitingForPoll == current)
+                waitingForPoll = null;
             if (current != session || transitioning || quitting)
                 return;
             if (command == "unlock" && urgentOperation is not null)
             {
-                settings.SetBusy(false);
+                settings?.SetBusy(false);
                 return;
             }
         }
@@ -210,7 +289,13 @@ public sealed partial class App : Application
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         operationComplete = completed;
         if (!background)
-            settings.SetBusy(true);
+        {
+            settings?.SetBusy(true);
+            if (command == "connect")
+                ShowMessage("Complete verification in 1Password if prompted. Then opssh will discover SSH keys.");
+            else if (command is "set-scope" or "refresh-index")
+                ShowMessage("Discovering SSH keys…");
+        }
         var revision = stateRevision;
         var restart = false;
         var refresh = false;
@@ -223,47 +308,51 @@ public sealed partial class App : Application
                 refresh = true;
             else if (result.Ok && command == "unlock" && result.State is null)
             {
-                settings.SetLockState(false);
-                icon.SetTip("opssh core connected");
+                SetLockState(false);
                 refresh = true;
             }
-            else if (result.State is { } state)
+            else if (result.State is { } latest)
             {
-                settings.ShowState(state, command == "settings" && result.Ok);
-                hasCurrentState = true;
-                icon.SetTip(state.Locked ? "opssh core locked" : "opssh core connected");
+                state = latest;
+                locked = latest.Locked;
+                settings?.ShowState(latest, result.Ok && (command is "settings" or "connect"));
+                icon.SetTip(latest.Locked ? "opssh core locked" : "opssh core connected");
             }
+            restart = result.Ok && result.RestartRequired && command == "connect" && !afterAccountRestart;
             if (!result.Ok)
-                settings.ShowMessage(result.Error ?? "The core rejected the request.");
+                ShowMessage(result.Error ?? "The core rejected the request.");
             else if (!background)
-                settings.ShowMessage(result.RestartRequired ? "Restarting with the new account…" : "Done.");
-            restart = result.Ok && result.RestartRequired;
+                ShowMessage(restart ? "Restarting with the new account…" :
+                    result.RestartRequired ? "Restart the core to use the selected account." : "Done.");
         }
         catch (Exception e) when (IsControlFailure(e))
         {
             if (current == session && !quitting)
-                settings.ShowMessage("The core request could not complete.");
+                ShowMessage("The core request could not complete.");
         }
         finally
         {
-            operation = null;
-            operationComplete = null;
-            polling = false;
-            if (!background && current == session)
-                settings.SetBusy(false);
+            if (operation == timeout)
+            {
+                operation = null;
+                operationComplete = null;
+                polling = false;
+                if (!background && current == session && !quitting)
+                    settings?.SetBusy(false);
+            }
             completed.TrySetResult();
         }
         if (restart)
         {
             transitioning = true;
-            settings.SetAvailability(false, false, "Restarting the core…");
+            SetAvailability(false, false, "Restarting the core…");
             await StopCoreAsync();
             transitioning = false;
-            await StartCoreAsync();
+            await StartCoreAsync(body);
         }
-        else if (refresh && urgentOperation is null && current == session && !quitting)
+        else if (refresh && current == session)
         {
-            await RunCommandAsync("status", null, background: true);
+            await RefreshSettingsAsync();
         }
     }
 
@@ -271,7 +360,7 @@ public sealed partial class App : Application
     {
         var current = session;
         if (current is null || transitioning || quitting || urgentOperation is not null ||
-            (!hasCurrentState && command == "revoke" && body is not null))
+            (state is null && command == "revoke" && body is not null))
             return;
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -279,36 +368,36 @@ public sealed partial class App : Application
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         urgentComplete = completed;
         stateRevision++;
-        settings.SetUrgentBusy(true);
+        settings?.SetUrgentBusy(true);
         try
         {
             var result = await current.RequestAsync(command, body, timeout.Token);
             if (current != session || quitting)
                 return;
             if (result.Ok && command == "lock")
-            {
-                settings.SetLockState(true);
-                icon.SetTip("opssh core locked");
-            }
-            settings.ShowMessage(result.Ok ? "Done." : result.Error ?? "The core rejected the request.");
+                SetLockState(true);
+            ShowMessage(result.Ok ? "Done." : result.Error ?? "The core rejected the request.");
         }
         catch (Exception e) when (IsControlFailure(e))
         {
             if (current == session && !quitting)
-                settings.ShowMessage("The core request could not complete.");
+                ShowMessage("The core request could not complete.");
         }
         finally
         {
-            stateRevision++;
-            urgentOperation = null;
-            urgentComplete = null;
-            if (current == session)
-                settings.SetUrgentBusy(false);
+            if (urgentOperation == timeout)
+            {
+                stateRevision++;
+                urgentOperation = null;
+                urgentComplete = null;
+                if (current == session && !quitting)
+                    settings?.SetUrgentBusy(false);
+            }
             completed.TrySetResult();
         }
 
-        if (current == session && !quitting)
-            await RunCommandAsync("status", null, background: true);
+        if (current == session)
+            await RefreshSettingsAsync();
     }
 
     private async Task CoreDisconnectedAsync(CoreSession current)
@@ -316,15 +405,13 @@ public sealed partial class App : Application
         if (current != session || transitioning || quitting)
             return;
         transitioning = true;
-        settings.SetAvailability(false, false, "Core stopped");
+        ShowMessage("");
+        SetAvailability(false, false, "Core stopped");
         icon.SetTip("opssh core stopped");
         await StopCoreAsync();
         transitioning = false;
         if (!quitting)
-        {
-            settings.SetAvailability(false, true, "Core stopped");
-            icon.CanRestart = true;
-        }
+            SetAvailability(false, true, "Core stopped");
     }
 
     private void QueueApproval(CoreSession current, Approval approval)
@@ -382,7 +469,8 @@ public sealed partial class App : Application
         }
         catch (Exception e) when (IsControlFailure(e))
         {
-            settings.ShowMessage("The approval request has closed.");
+            if (current == session && !quitting)
+                ShowMessage("The approval request has closed.");
         }
         ShowNextApproval(current);
     }
@@ -391,24 +479,26 @@ public sealed partial class App : Application
     {
         var current = session;
         var child = core;
+        var active = operation;
+        var urgent = urgentOperation;
+        var requests = Task.WhenAll(operationComplete?.Task ?? Task.CompletedTask, urgentComplete?.Task ?? Task.CompletedTask);
         session = null;
         core = null;
-        hasCurrentState = false;
+        waitingForPoll = null;
         prompt?.Dismiss();
         prompt = null;
         waiting.Clear();
 
         try
         {
-            operation?.Cancel();
-            urgentOperation?.Cancel();
+            active?.Cancel();
+            urgent?.Cancel();
             try
             {
-                await Task.WhenAll(operationComplete?.Task ?? Task.CompletedTask, urgentComplete?.Task ?? Task.CompletedTask)
-                    .WaitAsync(TimeSpan.FromMilliseconds(500));
+                await requests.WaitAsync(TimeSpan.FromMilliseconds(500));
             }
             catch (TimeoutException) { }
-            if (current is not null && operation is null && urgentOperation is null)
+            if (current is not null && requests.IsCompleted)
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
                 try
@@ -424,6 +514,11 @@ public sealed partial class App : Application
         catch (Exception e) when (IsControlFailure(e)) { }
         finally
         {
+            operation = null;
+            operationComplete = null;
+            polling = false;
+            urgentOperation = null;
+            urgentComplete = null;
             current?.Dispose();
             child?.Dispose();
         }
@@ -435,8 +530,7 @@ public sealed partial class App : Application
             return;
         quitting = true;
         icon.CanRestart = false;
-        settings.Hide();
-        statusTimer.Stop();
+        settings?.Close();
         // If CreateProcess is in progress, let its bounded bootstrap return so
         // Quit can close the exact handles it created.
         while (transitioning)

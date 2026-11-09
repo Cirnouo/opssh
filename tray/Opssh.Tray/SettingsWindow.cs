@@ -1,32 +1,53 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
 
 namespace Opssh.Tray;
 
-internal sealed class SettingsWindow : Window
+public sealed partial class SettingsWindow : Window
 {
     private readonly TextBlock status = Ui.Text("Starting…");
-    private readonly TextBlock details = Ui.Text("");
-    private readonly TextBlock message = Ui.Text("");
-    private readonly TextBox account = new() { Header = "1Password account", MaxLength = 256, PlaceholderText = "Account sign-in address or shorthand" };
-    private readonly TextBox vault = new() { Header = "Vault ID", MaxLength = 128 };
-    private readonly TextBox item = new() { Header = "SSH item ID", MaxLength = 128 };
-    private readonly TextBox name = new() { Header = "Display name (optional)", MaxLength = 256 };
+    private readonly TextBlock pending = Ui.Text("—");
+    private readonly TextBlock accountValue = Ui.Text("Not connected");
+    private readonly TextBlock providerStatus = Ui.Text("—");
+    private readonly TextBlock indexStatus = Ui.Text("Not indexed");
+    private readonly TextBlock indexDescription = Ui.Text("");
+    private readonly TextBlock keyCount = Ui.Text("0 usable keys");
+    private readonly TextBlock keyDetails = Ui.Text("No usable SSH keys.");
+    private readonly TextBlock version = Ui.Text("—");
+    private readonly InfoBar message = new() { IsClosable = true };
+    private readonly TextBox account = new()
+    {
+        Header = "Account name or ID",
+        MaxLength = 256,
+        PlaceholderText = "Account sidebar name or UUID",
+        HorizontalAlignment = HorizontalAlignment.Stretch
+    };
     private readonly TextBox command = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-    private readonly ComboBox keys = new() { Header = "Registered key", HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly TextBlock keyDetails = Ui.Text("No SSH key selected.");
+    private readonly ComboBox keys = new() { Header = "Indexed SSH key", HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly PolicyInputs keyPolicy = new("Private-key cache");
     private readonly PolicyInputs approvalPolicy = new("Approval cache");
-    private readonly StackPanel controls = new() { Spacing = 12 };
-    private readonly ContentControl safety;
-    private readonly ContentControl body;
+    private readonly TextBlock keyPolicyValue = Ui.Text("—");
+    private readonly TextBlock approvalPolicyValue = Ui.Text("—");
+    private readonly TextBlock approvalKey = Ui.Text("No indexed SSH key selected.");
+    private readonly ContentControl connectControls;
+    private readonly ContentControl keyControls;
+    private readonly ContentControl cacheControls;
+    private readonly SettingsScopeEditor scope;
     private readonly Button restart;
     private readonly Button toggleLock;
+    private readonly Button showCommand;
+    private readonly Button refreshIndex;
+    private readonly Button preload;
+    private readonly Button evict;
+    private readonly Button revokeAll;
     private readonly Button revokeSelected;
+    private readonly NavigationView navigation;
+    private readonly NavigationViewItem discoveryPage;
     private string? pipe;
-    private string? version;
+    private string currentAccount = "";
     private bool connected;
     private bool busy;
     private bool urgentBusy;
@@ -36,22 +57,13 @@ internal sealed class SettingsWindow : Window
 
     internal SettingsWindow(Func<string, object?, bool, Task> send, Func<string, object?, Task> sendUrgent, Func<Task> start)
     {
-        Title = "opssh";
-        AppWindow.Resize(new SizeInt32(680, 760));
-        AppWindow.Closing += (_, e) =>
-        {
-            e.Cancel = true;
-            Hide();
-        };
+        InitializeComponent();
+        Title = "opssh Settings";
+        AppWindow.Resize(new SizeInt32(1060, 800));
+        status.MaxWidth = 260;
+        accountValue.MaxWidth = 260;
 
-        var root = new StackPanel { Spacing = 12, Padding = new Thickness(24) };
-        root.Children.Add(Ui.Heading("opssh", 28));
-        root.Children.Add(status);
-        root.Children.Add(details);
-        root.Children.Add(message);
         restart = Ui.Button("Restart core", async () => await start());
-        root.Children.Add(restart);
-        root.Children.Add(Ui.Heading("Agent controls"));
         toggleLock = Ui.Button("Lock", async () =>
         {
             if (locked)
@@ -59,89 +71,237 @@ internal sealed class SettingsWindow : Window
             else
                 await sendUrgent("lock", null);
         });
+        showCommand = Ui.Button("Show command", ToggleShellCommand);
+        AutomationProperties.SetName(command, "Temporary PowerShell environment command");
+        refreshIndex = Ui.Button("Refresh index", async () => await send("refresh-index", null, false));
+        preload = Ui.Button("Preload selected", async () =>
+        {
+            if (SelectedKey is { } key)
+                await send("preload", new { keyId = key.Id }, false);
+        });
+        evict = Ui.Button("Evict loaded keys", async () => await sendUrgent("evict-keys", null));
+        revokeAll = Ui.Button("Revoke all approvals", async () => await sendUrgent("revoke", null));
         revokeSelected = Ui.Button("Revoke selected", async () =>
         {
             if (SelectedKey is { } key)
                 await sendUrgent("revoke", new { keyId = key.Id });
         });
-        var safetyActions = Ui.Row(toggleLock,
-            Ui.Button("Evict loaded keys", async () => await sendUrgent("evict-keys", null)),
-            Ui.Button("Revoke all approvals", async () => await sendUrgent("revoke", null)),
-            revokeSelected);
-        safety = new ContentControl { Content = safetyActions, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        root.Children.Add(safety);
-        body = new ContentControl { Content = controls, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        root.Children.Add(body);
-        controls.Children.Add(Ui.Button("Show PowerShell command", () =>
-        {
-            if (pipe is not null && pipe.StartsWith(@"\\.\pipe\", StringComparison.OrdinalIgnoreCase))
-            {
-                command.Text = "$env:SSH_AUTH_SOCK = '" + pipe.Replace("'", "''") + "'";
-                command.Visibility = Visibility.Visible;
-            }
-        }));
-        AutomationProperties.SetName(command, "Temporary PowerShell environment command");
-        controls.Children.Add(command);
-        controls.Children.Add(Ui.Text("Run this command in a PowerShell session to opt in for that session."));
 
-        controls.Children.Add(Ui.Heading("Account and caches"));
-        controls.Children.Add(account);
-        controls.Children.Add(Ui.Text("The account must be available to the 1Password desktop app."));
-        controls.Children.Add(Ui.Row(keyPolicy.Mode, keyPolicy.Seconds));
-        controls.Children.Add(Ui.Row(approvalPolicy.Mode, approvalPolicy.Seconds));
-        controls.Children.Add(Ui.Button("Save settings", async () =>
+        var connect = Ui.Button("Connect", async () =>
+        {
+            var requestedAccount = account.Text.Trim();
+            if (requestedAccount.Length == 0)
+            {
+                ShowMessage("Enter the name or ID of an account signed in to 1Password.");
+                account.Focus(FocusState.Programmatic);
+                return;
+            }
+
+            await send("connect", new { account = requestedAccount }, false);
+        });
+        connect.Style = (Style)SettingsRoot.Resources["SettingsConnectButtonStyle"];
+        connectControls = Container(SettingsLayout.Row(account, connect));
+        connect.VerticalAlignment = VerticalAlignment.Bottom;
+        keys.SelectionChanged += (_, _) =>
+        {
+            if (!updatingKeys)
+                UpdateKeyDetails();
+        };
+        keyControls = Container(Flow(keys, keyDetails, preload));
+        scope = new SettingsScopeEditor(rule => send("set-scope", rule, false), ShowMessage);
+
+        var saveCaches = Ui.Button("Apply cache settings", async () =>
         {
             if (!keyPolicy.TryRead(out var keyCache) || !approvalPolicy.TryRead(out var approvalCache))
             {
                 ShowMessage($"Enter a whole number of seconds from 1 to {CachePolicy.MaxSeconds} for each timed cache.");
                 return;
             }
-            await send("settings", new { account = account.Text.Trim(), keyCache, approvalCache }, false);
-        }));
+            await send("settings", new { account = currentAccount, keyCache, approvalCache }, false);
+        });
+        cacheControls = Container(Flow(
+            SettingsLayout.Row(keyPolicy.Mode, keyPolicy.Seconds),
+            SettingsLayout.Row(approvalPolicy.Mode, approvalPolicy.Seconds),
+            saveCaches));
 
-        controls.Children.Add(Ui.Heading("SSH keys"));
-        controls.Children.Add(keys);
-        controls.Children.Add(keyDetails);
-        keys.SelectionChanged += (_, _) =>
+        var overview = NavigationItem("Overview", "\uE80F", BuildOverview());
+        discoveryPage = NavigationItem("1Password & keys", "\uE8D7", BuildDiscovery());
+        var policies = NavigationItem("Approval & caches", "\uE72E", BuildPolicies());
+        var about = NavigationItem("About", "\uE946", BuildAbout());
+        var page = new ScrollViewer { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var content = new Grid();
+        content.RowDefinitions.Add(new RowDefinition());
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.Children.Add(page);
+        message.Margin = new Thickness(24, 0, 24, 16);
+        Grid.SetRow(message, 1);
+        content.Children.Add(message);
+
+        navigation = new NavigationView
         {
-            if (!updatingKeys)
-                UpdateKeyDetails();
+            PaneTitle = "opssh",
+            PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
+            OpenPaneLength = 224,
+            ExpandedModeThresholdWidth = 880,
+            CompactModeThresholdWidth = 620,
+            IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+            IsSettingsVisible = false,
+            AlwaysShowHeader = false,
+            Content = content
         };
-        var actions = Ui.Row(
-            Ui.Button("Refresh", async () => await KeyAction("refresh")),
-            Ui.Button("Preload", async () => await KeyAction("preload")),
-            Ui.Button("Remove", async () => await KeyAction("remove-key")));
-        controls.Children.Add(actions);
-        controls.Children.Add(vault);
-        controls.Children.Add(item);
-        controls.Children.Add(name);
-        controls.Children.Add(Ui.Button("Add SSH item", async () =>
+        AutomationProperties.SetName(navigation, "Settings");
+        navigation.MenuItems.Add(overview);
+        navigation.MenuItems.Add(discoveryPage);
+        navigation.MenuItems.Add(policies);
+        navigation.FooterMenuItems.Add(about);
+        navigation.SelectionChanged += (_, args) =>
         {
-            var vaultId = vault.Text.Trim();
-            var itemId = item.Text.Trim();
-            if (vaultId.Length == 0 || itemId.Length == 0)
+            if (args.SelectedItem is NavigationViewItem { Tag: StackPanel selected })
             {
-                ShowMessage("Enter a vault ID and an SSH item ID.");
-                return;
+                page.Content = selected;
+                page.ChangeView(null, 0, null, true);
             }
-            await send("add-key", new { vaultId, itemId, name = name.Text.Trim() }, false);
-        }));
-
-        Content = new ScrollViewer { Content = root };
+        };
+        SettingsRoot.Children.Add(navigation);
+        page.Content = overview.Tag;
+        navigation.SelectedItem = overview;
         SetAvailability(false, false, "Starting the core…");
-
-        async Task KeyAction(string action)
-        {
-            if (SelectedKey is not { } key)
-            {
-                ShowMessage("Select a registered SSH key.");
-                return;
-            }
-            await send(action, new { keyId = key.Id }, false);
-        }
     }
 
-    internal void Hide() => AppWindow.Hide();
+    private StackPanel BuildOverview()
+    {
+        var page = Page("Overview", "Manage the SSH agent on this PC.");
+        page.Children.Add(Section("Agent status",
+            Card("\uE968", "Core status", "The local process that handles SSH requests.", Flow(status, restart)),
+            Card("\uE7F4", "Pending approvals", "SSH requests waiting for a decision.", pending),
+            Card("\uE72E", "Agent lock", "Locking clears loaded private keys and existing approvals.", toggleLock)));
+        page.Children.Add(Section("SSH client setup",
+            Card("\uE756", "PowerShell", "Select opssh as the SSH agent for the current PowerShell session.", showCommand, command)));
+        return page;
+    }
+
+    private StackPanel BuildDiscovery()
+    {
+        var page = Page("1Password & keys", "Connect an account, choose its SSH items, and see which keys are ready to use.");
+        page.Children.Add(Section("Account",
+            Card("\uE77B", "1Password account", "Sign in to the 1Password desktop app. Under Settings → Developer, turn on Integrate with 1Password SDKs. Complete any verification in the 1Password window.",
+                accountValue, connectControls),
+            Card("\uE8D7", "Desktop access", "The result of the most recent request to 1Password.", providerStatus)));
+        page.Children.Add(Section("SSH key discovery",
+            Card("\uE721", "Public index", "Discover SSH items and refresh their public keys.", Flow(indexStatus, refreshIndex), indexDescription),
+            scope.View,
+            Card("\uE192", "Usable SSH keys", "Indexed public keys are available to SSH. Private keys load after approval or when you preload them here.",
+                keyCount, keyControls)));
+        return page;
+    }
+
+    private StackPanel BuildPolicies()
+    {
+        var page = Page("Approval & caches", "Manage SSH approvals and how long opssh keeps them and loaded private keys.");
+        page.Children.Add(Section("Local controls",
+            Card("\uE8C9", "Loaded private keys", "Clear private key material from the local cache.", evict),
+            Card("\uE73E", "Process approvals", "Clear approvals granted to SSH clients and hosts.", revokeAll),
+            Card("\uE192", "Approvals for one key", "Revoke approvals for the key selected on the 1Password & keys page.",
+                revokeSelected, SettingsLayout.Row(approvalKey, Ui.Button("Go to keys", () =>
+                {
+                    navigation.SelectedItem = discoveryPage;
+                    discoveryPage.Focus(FocusState.Programmatic);
+                })))));
+        page.Children.Add(Section("Cache policies",
+            Card("\uE8D7", "Private-key cache", "Controls how long loaded private keys are kept in memory.", keyPolicyValue),
+            Card("\uE73E", "Approval cache", "Controls how long process approvals can be reused.", approvalPolicyValue),
+            new Expander
+            {
+                Header = "Change cache policies",
+                Content = cacheControls,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch
+            }));
+        return page;
+    }
+
+    private StackPanel BuildAbout()
+    {
+        var page = Page("About", "opssh connects Windows SSH clients to SSH keys stored in 1Password.");
+        page.Children.Add(Section("Version",
+            Card("\uE946", "Core version", "Version reported by the bundled SSH agent.", version)));
+        return page;
+    }
+
+    private static NavigationViewItem NavigationItem(string label, string glyph, StackPanel page) =>
+        new() { Content = label, Icon = new FontIcon { Glyph = glyph }, Tag = page };
+
+    private StackPanel Page(string title, string description)
+    {
+        var heading = Ui.Heading(title, 30);
+        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1);
+        heading.TextWrapping = TextWrapping.Wrap;
+        return new StackPanel
+        {
+            Padding = new Thickness(24, 20, 24, 24),
+            MaxWidth = 1000,
+            Spacing = 24,
+            Children = { Flow(heading, Description(description)) }
+        };
+    }
+
+    private static StackPanel Section(string title, params UIElement[] cards)
+    {
+        var heading = Ui.Heading(title, 16);
+        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level2);
+        return Flow([heading, .. cards]);
+    }
+
+    private Border Card(string glyph, string title, string description, FrameworkElement? action = null, FrameworkElement? detail = null)
+    {
+        var name = Ui.Heading(title, 14);
+        name.TextWrapping = TextWrapping.Wrap;
+        var label = Flow(name, Description(description));
+        label.Spacing = 2;
+
+        var icon = new FontIcon { Glyph = glyph, FontSize = 18, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
+        var intro = new Grid { ColumnSpacing = 14 };
+        intro.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+        intro.ColumnDefinitions.Add(new ColumnDefinition());
+        intro.Children.Add(icon);
+        Grid.SetColumn(label, 1);
+        intro.Children.Add(label);
+
+        var contents = Flow(SettingsLayout.Row(intro, action));
+        if (detail is not null)
+            contents.Children.Add(detail);
+        return new Border { Style = (Style)SettingsRoot.Resources["SettingsCardStyle"], Child = contents };
+    }
+
+    private TextBlock Description(string description) =>
+        new() { Text = description, Style = (Style)SettingsRoot.Resources["SettingsDescriptionStyle"] };
+
+    private static StackPanel Flow(params UIElement[] children)
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        foreach (var child in children)
+            panel.Children.Add(child);
+        return panel;
+    }
+
+    private static ContentControl Container(FrameworkElement child) =>
+        new() { Content = child, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+
+    private void ToggleShellCommand()
+    {
+        if (command.Visibility == Visibility.Visible)
+        {
+            command.Visibility = Visibility.Collapsed;
+            showCommand.Content = "Show command";
+        }
+        else if (pipe is not null && pipe.StartsWith(@"\\.\pipe\", StringComparison.OrdinalIgnoreCase))
+        {
+            command.Text = "$env:SSH_AUTH_SOCK = '" + pipe.Replace("'", "''") + "'";
+            command.Visibility = Visibility.Visible;
+            showCommand.Content = "Hide command";
+        }
+    }
 
     internal void SetAvailability(bool connected, bool canRestart, string text)
     {
@@ -150,30 +310,33 @@ internal sealed class SettingsWindow : Window
         restart.Visibility = canRestart ? Visibility.Visible : Visibility.Collapsed;
         if (!connected)
         {
-            details.Text = "";
+            pending.Text = providerStatus.Text = version.Text = "—";
+            keyPolicyValue.Text = approvalPolicyValue.Text = "—";
+            accountValue.Text = "Not connected";
+            account.Text = currentAccount = "";
             command.Visibility = Visibility.Collapsed;
             command.Text = "";
+            showCommand.Content = "Show command";
             pipe = null;
-            initialized = false;
-            busy = false;
-            urgentBusy = false;
-            locked = false;
+            initialized = busy = urgentBusy = locked = false;
             toggleLock.Content = "Lock";
             keys.Items.Clear();
+            scope.Reset();
+            UpdateDiscoveryStatus(null, []);
             UpdateKeyDetails();
         }
         UpdateAvailability();
     }
 
-    internal void SetBusy(bool busy)
+    internal void SetBusy(bool value)
     {
-        this.busy = busy;
+        busy = value;
         UpdateAvailability();
     }
 
-    internal void SetUrgentBusy(bool busy)
+    internal void SetUrgentBusy(bool value)
     {
-        urgentBusy = busy;
+        urgentBusy = value;
         UpdateAvailability();
     }
 
@@ -187,41 +350,73 @@ internal sealed class SettingsWindow : Window
 
     private void UpdateAvailability()
     {
-        body.IsEnabled = connected && initialized && !busy && !urgentBusy;
-        safety.IsEnabled = connected && !urgentBusy;
-        toggleLock.IsEnabled = !locked || (initialized && !busy);
-        revokeSelected.IsEnabled = initialized && SelectedKey is not null;
+        var ready = connected && initialized && !busy && !urgentBusy;
+        var canUseAccount = ready && !locked;
+        var canUseKeys = canUseAccount && currentAccount.Length > 0;
+        connectControls.IsEnabled = canUseAccount;
+        refreshIndex.IsEnabled = canUseKeys;
+        scope.View.IsEnabled = canUseAccount;
+        keyControls.IsEnabled = connected && initialized && SelectedKey is not null;
+        preload.IsEnabled = canUseKeys && SelectedKey is { Fingerprint.Length: > 0 };
+        cacheControls.IsEnabled = ready;
+        showCommand.IsEnabled = connected && pipe is not null;
+        toggleLock.IsEnabled = connected && !urgentBusy && (!locked || (initialized && !busy));
+        evict.IsEnabled = revokeAll.IsEnabled = connected && !urgentBusy;
+        revokeSelected.IsEnabled = connected && initialized && !urgentBusy && SelectedKey is not null;
     }
 
-    internal void ShowMessage(string text) => message.Text = text;
+    internal void ShowMessage(string text)
+    {
+        message.Message = text;
+        message.IsOpen = text.Length > 0;
+    }
 
     internal void SetHello(Hello hello)
     {
         pipe = hello.Pipe;
-        version = hello.Version;
+        version.Text = hello.Version;
+        UpdateAvailability();
     }
 
     internal void ShowState(CoreState state, bool resetSettings)
     {
-        SetLockState(state.Locked);
+        locked = state.Locked;
+        toggleLock.Content = locked ? "Unlock" : "Lock";
+        status.Text = locked ? "Core locked" : "Core connected";
         pipe = state.Pipe;
-        details.Text = $"Core {version}   ·   1Password {ProviderStatus(state.Provider)}   ·   {state.Pending} pending";
-        if (!initialized || resetSettings)
+        pending.Text = state.Pending.ToString();
+        providerStatus.Text = ProviderStatus(state.Provider);
+        if (!initialized || currentAccount != state.Account)
         {
-            account.Text = state.Account;
-            keyPolicy.Set(state.KeyCache);
-            approvalPolicy.Set(state.ApprovalCache);
-            initialized = true;
+            currentAccount = state.Account;
+            account.Text = currentAccount;
+            accountValue.Text = currentAccount.Length == 0 ? "Not connected" : currentAccount;
+            scope.Reset();
         }
 
-        var list = state.Keys;
-        if (!keys.Items.OfType<ComboBoxItem>().Select(i => i.Tag as PublicKey).SequenceEqual(list))
+        if (!initialized || resetSettings)
+        {
+            keyPolicy.Set(state.KeyCache);
+            approvalPolicy.Set(state.ApprovalCache);
+        }
+        initialized = true;
+        keyPolicyValue.Text = PolicyInputs.Describe(state.KeyCache);
+        approvalPolicyValue.Text = PolicyInputs.Describe(state.ApprovalCache);
+        scope.Update(state.Scope, state.Vaults ?? []);
+        UpdateDiscoveryStatus(state.Index, state.Keys);
+
+        if (!keys.Items.OfType<ComboBoxItem>().Select(i => i.Tag as PublicKey).SequenceEqual(state.Keys))
         {
             var selectedId = SelectedKey?.Id;
             updatingKeys = true;
             keys.Items.Clear();
-            foreach (var key in list)
-                keys.Items.Add(new ComboBoxItem { Content = key.Name, Tag = key });
+            var labels = SettingsLabels.ById(state.Keys.Select(key => (key.Id, key.Name)));
+            foreach (var key in state.Keys)
+                keys.Items.Add(new ComboBoxItem
+                {
+                    Content = new TextBlock { Text = labels[key.Id], TextWrapping = TextWrapping.Wrap },
+                    Tag = key
+                });
             keys.SelectedItem = keys.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (i.Tag as PublicKey)?.Id == selectedId)
                 ?? keys.Items.FirstOrDefault();
             updatingKeys = false;
@@ -230,54 +425,68 @@ internal sealed class SettingsWindow : Window
         UpdateAvailability();
     }
 
+    private void UpdateDiscoveryStatus(string? index, PublicKey[] list)
+    {
+        (indexStatus.Text, indexDescription.Text) = index switch
+        {
+            "ready" => ("Ready", "Discovery completed for the current scope."),
+            "partial" => ("Partially indexed", "Some SSH items could not be indexed. Refresh to try again."),
+            "unavailable" => ("Unavailable", "The index could not be refreshed. Check 1Password access and try again."),
+            "scope-too-broad" => ("Scope too broad", "Narrow the scope to index up to 64 keys. Discovery can scan up to 256 vaults and 8,192 entries per eligible vault. If the account exceeds the vault limit, use an account with fewer vaults. If a vault exceeds the entry limit, exclude it and remove its item include rules, or reduce its entries."),
+            _ => ("Not indexed", currentAccount.Length == 0 ? "Connect an account to discover SSH keys." : "Refresh the index to discover SSH keys.")
+        };
+        var count = list.Count(key => key.Fingerprint.Length > 0);
+        keyCount.Text = count == 1 ? "1 usable key" : $"{count} usable keys";
+    }
+
     private PublicKey? SelectedKey => (keys.SelectedItem as ComboBoxItem)?.Tag as PublicKey;
 
     private void UpdateKeyDetails()
     {
-        revokeSelected.IsEnabled = initialized && SelectedKey is not null;
+        UpdateAvailability();
         if (SelectedKey is not { } key)
         {
-            keyDetails.Text = "No SSH key selected.";
+            approvalKey.Text = keyDetails.Text = "No indexed SSH key selected.";
             return;
         }
+        approvalKey.Text = ((keys.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? key.Name;
         var error = key.Error switch
         {
             "provider" => "1Password could not read the item.",
             "load-timeout" => "The item read timed out.",
             "invalid-key" => "The item has an unsupported or invalid SSH key.",
-            "key-mismatch" => "The private key differs from the indexed public key. Refresh the key.",
-            "public-index-missing" => "The public index entry is missing. Refresh the key.",
+            "key-mismatch" => "The private key differs from the indexed public key. Refresh the index.",
+            "public-index-missing" => "The public index entry is missing. Refresh the index.",
             null or "" => "",
             _ => "The key could not be loaded."
         };
         var loadStatus = key.Loading ? "Loading" : key.Loaded ? "Loaded" : "Unloaded";
-        keyDetails.Text = key.Fingerprint + "   ·   " + loadStatus +
+        keyDetails.Text = (key.Fingerprint.Length == 0 ? "No usable public key" : key.Fingerprint) + "   ·   " + loadStatus +
             (error.Length == 0 ? "" : Environment.NewLine + error);
     }
 
     private static string ProviderStatus(string status) => status switch
     {
-        "unconfigured" => "account setup required",
-        "unknown" => "status unknown",
-        "reading" => "reading an item",
-        "last-success" => "last read succeeded",
-        "denied" => "access denied",
-        "unavailable" => "unavailable",
-        "timed-out" => "read timed out",
-        "canceled" => "read canceled",
-        "offline-fixture" => "offline test fixture",
-        _ => "status unknown"
+        "unconfigured" => "Account setup required",
+        "reading" => "Waiting for 1Password",
+        "last-success" => "Last request succeeded",
+        "denied" => "Access denied",
+        "unavailable" => "Unavailable",
+        "timed-out" => "Request timed out",
+        "canceled" => "Request canceled",
+        "offline-fixture" => "Offline test fixture",
+        _ => "Access has not been verified"
     };
 
     private sealed class PolicyInputs
     {
         internal readonly ComboBox Mode;
-        internal readonly NumberBox Seconds = new() { Header = "Seconds", Width = 130, Minimum = 1, Maximum = CachePolicy.MaxSeconds };
+        internal readonly NumberBox Seconds = new() { Header = "Seconds", Width = 114, Minimum = 1, Maximum = CachePolicy.MaxSeconds };
         private static readonly string[] modes = ["off", "fixed", "idle", "until-lock"];
 
         internal PolicyInputs(string label)
         {
-            Mode = new ComboBox { Header = label, Width = 220 };
+            Mode = new ComboBox { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch };
             foreach (var option in new[] { "Off", "Fixed duration", "Idle timeout", "Until lock" })
                 Mode.Items.Add(option);
             Mode.SelectionChanged += (_, _) => Seconds.IsEnabled = Mode.SelectedIndex is 1 or 2;
@@ -303,6 +512,41 @@ internal sealed class SettingsWindow : Window
             policy = policy with { Seconds = (int)seconds };
             return true;
         }
+
+        internal static string Describe(CachePolicy policy) => policy.Mode switch
+        {
+            "fixed" => $"{policy.Seconds} s fixed",
+            "idle" => $"{policy.Seconds} s idle",
+            "until-lock" => "Until lock",
+            _ => "Off"
+        };
+    }
+}
+internal static class SettingsLayout
+{
+    internal static Grid Row(FrameworkElement label, FrameworkElement? action)
+    {
+        var row = new Grid { ColumnSpacing = 12, RowSpacing = 8 };
+        row.Children.Add(label);
+        if (action is null)
+            return row;
+
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        label.VerticalAlignment = action.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(action, 1);
+        row.Children.Add(action);
+        row.SizeChanged += (_, args) =>
+        {
+            var stack = args.NewSize.Width < 420;
+            Grid.SetColumnSpan(label, stack ? 2 : 1);
+            Grid.SetRow(action, stack ? 1 : 0);
+            Grid.SetColumn(action, stack ? 0 : 1);
+            Grid.SetColumnSpan(action, stack ? 2 : 1);
+        };
+        return row;
     }
 }
 

@@ -29,6 +29,24 @@ internal sealed record PublicKey(
     [property: JsonRequired] bool Loading,
     string? Error);
 
+internal sealed record DiscoveryScope(
+    [property: JsonRequired] string Default,
+    [property: JsonRequired] Dictionary<string, string> Vaults,
+    [property: JsonRequired] Dictionary<string, string> Items)
+{
+    internal const int MaxVaults = 64;
+    internal const int MaxItems = 128;
+}
+
+internal sealed record DiscoveredVault(
+    [property: JsonRequired] string Id,
+    [property: JsonRequired] string Name,
+    [property: JsonRequired] DiscoveredItem[] Items);
+
+internal sealed record DiscoveredItem(
+    [property: JsonRequired] string Id,
+    [property: JsonRequired] string Name);
+
 internal sealed record CoreState(
     [property: JsonRequired] string Pipe,
     [property: JsonRequired] bool Locked,
@@ -37,7 +55,10 @@ internal sealed record CoreState(
     [property: JsonRequired] CachePolicy KeyCache,
     [property: JsonRequired] CachePolicy ApprovalCache,
     [property: JsonRequired] string Provider,
-    [property: JsonRequired] int Pending);
+    [property: JsonRequired] int Pending,
+    DiscoveryScope? Scope = null,
+    DiscoveredVault[]? Vaults = null,
+    string? Index = null);
 
 internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired);
 internal sealed record ProcessIdentity(uint Pid, ulong Created, string Path);
@@ -283,8 +304,55 @@ internal sealed class CoreSession : IDisposable
                 (key.Error is not null && !ValidText(key.Error, 64)))
                 throw new IOException("Invalid control key state.");
         }
+
+        ValidateDiscovery(state, message.Body!.Value.GetProperty("state"));
         return result;
     }
+
+    private static void ValidateDiscovery(CoreState state, JsonElement body)
+    {
+        if ((state.Scope is null && body.TryGetProperty("scope", out _)) ||
+            (state.Vaults is null && body.TryGetProperty("vaults", out _)) ||
+            (state.Index is null && body.TryGetProperty("index", out _)))
+            throw new IOException("Invalid discovery state.");
+
+        if (state.Index is not (null or "not-indexed" or "ready" or "partial" or "unavailable" or "scope-too-broad"))
+            throw new IOException("Invalid discovery index state.");
+
+        if (state.Scope is { } scope &&
+            (!ValidRule(scope.Default) ||
+             scope.Vaults is not { Count: <= DiscoveryScope.MaxVaults } ||
+             scope.Items is not { Count: <= DiscoveryScope.MaxItems } ||
+             scope.Vaults.Any(rule => !ValidItemId(rule.Key) || !ValidRule(rule.Value)) ||
+             scope.Items.Any(rule => rule.Key.Length != 53 || rule.Key[26] != '/' ||
+                 !ValidItemId(rule.Key[..26]) || !ValidItemId(rule.Key[27..]) || !ValidRule(rule.Value))))
+            throw new IOException("Invalid discovery scope.");
+
+        if (state.Vaults is not { } vaults)
+            return;
+        if (vaults.Length > DiscoveryScope.MaxVaults)
+            throw new IOException("Too many discovered vaults.");
+
+        var vaultIds = new HashSet<string>(StringComparer.Ordinal);
+        var itemCount = 0;
+        foreach (var vault in vaults)
+        {
+            if (vault is null || !ValidItemId(vault.Id) || !vaultIds.Add(vault.Id) ||
+                !ValidText(vault.Name, 256) || vault.Items is null ||
+                vault.Items.Length > DiscoveryScope.MaxItems - itemCount)
+                throw new IOException("Invalid discovered vault.");
+
+            itemCount += vault.Items.Length;
+            var itemIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in vault.Items)
+            {
+                if (item is null || !ValidItemId(item.Id) || !itemIds.Add(item.Id) || !ValidText(item.Name, 256))
+                    throw new IOException("Invalid discovered SSH item.");
+            }
+        }
+    }
+
+    private static bool ValidRule(string? value) => value is "include" or "exclude";
 
     private static bool ValidText(string? value, int maxLength) =>
         value is not null && value.Length <= maxLength && !value.Any(char.IsControl);
