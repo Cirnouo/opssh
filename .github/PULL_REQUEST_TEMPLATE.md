@@ -8,10 +8,10 @@ Explain the final behavior and relevant compatibility, resource or security impl
 
 ## Verification
 
-List commands, results, the file or commit state tested, and any platform or live-provider limits. Report the staged-tree check and CI separately. Verify the current distributable when applicable.
+List the actual commands and results, file or revision state, platform paths exercised, and skipped or unavailable checks. Report the exact staged-tree gate and CI separately. Record the PR head and the tested merge SHA for PR CI. Identify the current Windows Release folder checked and any live-provider limits. See the [verification policy](https://github.com/Cirnouo/opssh/blob/main/docs/policies/verification.md).
 
 ## Documentation
 
-Link updated specifications, decision records and user guidance when applicable.
+Link updated specifications, decisions and user guidance when applicable. See the [documentation policy](https://github.com/Cirnouo/opssh/blob/main/docs/policies/documentation.md).
 
-<!-- Use closing keywords for resolved issues. Keep the PR's own number out of its title. The squash commit retains the PR reference. -->
+<!-- Use closing keywords for resolved issues. Keep the PR number suffix out of the title. The final squash subject retains the PR reference. See https://github.com/Cirnouo/opssh/blob/main/docs/policies/repository-governance.md. -->
