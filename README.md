@@ -38,3 +38,5 @@ In **Appearance**, choose English (`en`), Simplified Chinese (`zh-Hans`), or **F
 In **About**, select **Check for updates** to look for a newer stable GitHub release. **Automatically check for updates** is enabled by default. It checks once per tray launch and shows a Windows notification if a newer version is available. Open the release page from **About** to view it.
 
 [Behavior and security boundaries](docs/specs/windows-agent.md) · [Development and verification](CONTRIBUTING.md) · [Offline performance measurements](docs/references/windows-offline-performance.md)
+
+[Support](SUPPORT.md) · [Security reporting](SECURITY.md)

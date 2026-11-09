@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a focused improvement to opssh
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the task you are trying to complete with safe example data.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Desired behavior
+      description: Explain the result you would expect, including any affected Windows or OpenSSH setup.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Share any workflow constraints or related issues. Remove credentials, personal paths, vault identifiers and private SSH destinations.

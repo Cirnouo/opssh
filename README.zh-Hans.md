@@ -38,3 +38,5 @@ opssh 是面向 Windows x64 系统 OpenSSH 的 SSH agent。Go 核心按需通过
 在 **关于** 页点击 **检查更新**，可以在 GitHub 上查找更新的正式发行版。**自动检查更新** 默认开启，每次启动托盘时检查一次，发现新版会显示 Windows 通知。可从 **关于** 打开发行页查看。
 
 [行为与安全边界](docs/specs/windows-agent.md) · [开发和验证](CONTRIBUTING.md) · [离线性能实测](docs/references/windows-offline-performance.md)
+
+[使用支持](SUPPORT.md) · [安全报告](SECURITY.md)
