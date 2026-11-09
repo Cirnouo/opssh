@@ -16,7 +16,7 @@ internal sealed record CachePolicy(
 
     internal bool IsValid => Mode switch
     {
-        "off" or "until-lock" or "until-exit" => Seconds == 0,
+        "off" or "until-exit" => Seconds == 0,
         "fixed" or "idle" => Seconds is > 0 and <= MaxSeconds,
         _ => false
     };

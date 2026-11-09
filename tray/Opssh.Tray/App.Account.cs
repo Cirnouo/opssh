@@ -43,7 +43,7 @@ public sealed partial class App
                     using var restore = new CancellationTokenSource(TimeSpan.FromSeconds(4));
                     try
                     {
-                        var resumed = await previous.RequestAsync("resume-ssh", null, restore.Token);
+                        var resumed = await RequestNormalAsync(previous, "resume-ssh", null, restore.Token, duringTransition: true);
                         restart = !resumed.Ok;
                     }
                     catch (Exception ex) when (IsControlFailure(ex)) { restart = true; }
@@ -67,7 +67,7 @@ public sealed partial class App
             using var check = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             try
             {
-                var result = await recovered.RequestAsync("status", null, check.Token);
+                var result = await RequestNormalAsync(recovered, "status", null, check.Token);
                 if (recovered == session && result.State?.Account == account)
                     return null;
             }
@@ -99,7 +99,7 @@ public sealed partial class App
             // A canceled reply does not prove the command did not run. Mark
             // the old endpoint for recovery before sending the pause.
             mayBePaused = true;
-            var pause = await previous.RequestAsync("pause-ssh", null, attempt.Token);
+            var pause = await RequestNormalAsync(previous, "pause-ssh", null, attempt.Token, duringTransition: true);
             if (!pause.Ok)
                 return CoreFeedback.ResultKey(pause.ErrorCode, pause.Error);
 

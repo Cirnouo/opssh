@@ -17,6 +17,12 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(OpsshDashboardFixture)' == 'true'">
+    <DefineConstants>$(DefineConstants);OPSSH_DASHBOARD_FIXTURE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(OpsshDashboardFixture)' != 'true'">
+    <Compile Remove="App.DashboardFixture.cs" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
     <EmbeddedResource Include="Localization/*.json" WithCulture="false" LogicalName="Opssh.Tray.Localization.%(Filename)%(Extension)" />

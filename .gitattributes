@@ -6,3 +6,4 @@ go.sum text eol=lf
 /LICENSE -text
 /licenses/** -text -whitespace
 docs/evidences/** -text whitespace=trailing-space,space-before-tab,cr-at-eol
+docs/references/opssh-agent-dashboard.html -text
