@@ -8,7 +8,7 @@ public sealed partial class App
     {
         var previous = session;
         var previousChild = core;
-        if (previous is null || previousChild is null || state is null || transitioning || quitting)
+        if (previous is null || previousChild is null || state is null || transitioning || quitting || changingDefaultAgent)
             return "Error.Busy";
         if (string.Equals(account, state.Account, StringComparison.Ordinal))
             return null;
@@ -16,6 +16,7 @@ public sealed partial class App
         using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         attempt.CancelAfter(TimeSpan.FromSeconds(40));
         accountTransition = attempt;
+        CancelStartupWait();
         transitioning = true;
         CoreProcess? child = null;
         CoreSession? candidate = null;
@@ -56,6 +57,8 @@ public sealed partial class App
             transitioning = false;
             if (restart && !quitting)
                 await StartCoreAsync();
+            else
+                ConfigureStartupWait();
         }
         // A lost reply can follow a successful durable commit. The old
         // session refused to resume, so reconcile against the restarted core.
@@ -102,7 +105,9 @@ public sealed partial class App
 
             attempt.Token.ThrowIfCancellationRequested();
             using var commit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var activated = await candidate.RequestAsync("activate-account", null, commit.Token);
+            var defaultAgent = pause.Data is { } paused && paused.TryGetProperty("defaultAgent", out var value) &&
+                value.ValueKind == System.Text.Json.JsonValueKind.True;
+            var activated = await candidate.RequestAsync("activate-account", new { defaultAgent }, commit.Token);
             if (!activated.Ok || activated.State is not { } current ||
                 !string.Equals(current.Account, account, StringComparison.Ordinal) || !candidate.IsConnected)
                 return CoreFeedback.ResultKey(activated.ErrorCode, activated.Error);
@@ -112,6 +117,7 @@ public sealed partial class App
             hello = ready;
             state = current;
             locked = current.Locked;
+            defaultAgentActive = current.DefaultAgent;
             waiting.Clear();
             prompt?.Dismiss();
             prompt = null;

@@ -55,6 +55,7 @@ public sealed partial class App : Application
         DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
         preferences = UiPreferences.Load();
+        requestedStartupAuthorization = FromStartupNotification();
         Strings.Use(preferences.ResolveLanguage());
         icon = new TrayIcon();
         icon.OpenRequested += OpenSettings;
@@ -352,6 +353,8 @@ public sealed partial class App : Application
             settings?.SetHello(greeting);
             SetAvailability(true, false, "App.Connected");
             icon.SetTip("Tray.Connected");
+            await RestoreDefaultAgentAsync(current);
+            ConfigureStartupWait();
         }
         catch (Exception e) when (IsControlFailure(e))
         {
@@ -394,7 +397,7 @@ public sealed partial class App : Application
     private async Task RunCommandAsync(string command, object? body, bool background, bool afterAccountRestart)
     {
         var current = session;
-        if (current is null || transitioning || quitting ||
+        if (current is null || transitioning || quitting || (!background && changingDefaultAgent) ||
             (background && (!SettingsVisible || waitingForPoll is not null || urgentOperation is not null)) ||
             (state is null && command != "status" && !afterAccountRestart) ||
             (command == "unlock" && urgentOperation is not null))
@@ -448,6 +451,7 @@ public sealed partial class App : Application
             {
                 state = latest;
                 locked = latest.Locked;
+                defaultAgentActive = latest.DefaultAgent;
                 settings?.ShowState(latest, result.Ok && (command is "settings" or "connect"));
                 icon.SetTip(latest.Locked ? "Tray.Locked" : "Tray.Connected");
             }
@@ -610,6 +614,8 @@ public sealed partial class App : Application
 
     private async Task StopCoreAsync()
     {
+        CancelStartupWait();
+        defaultAgentActive = false;
         var current = session;
         var child = core;
         var active = operation;
@@ -664,6 +670,8 @@ public sealed partial class App : Application
         quitting = true;
         updateCancellation?.Cancel();
         accountTransition?.Cancel();
+        CancelStartupWait();
+        startupNotification?.Dispose();
         releaseClient?.Dispose();
         icon.CanRestart = false;
         settings?.Close();

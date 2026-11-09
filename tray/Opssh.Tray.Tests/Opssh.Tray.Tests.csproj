@@ -14,6 +14,13 @@
     <Compile Include="../Opssh.Tray/ReleaseCheck.cs" Link="ReleaseCheck.cs" />
     <Compile Include="../Opssh.Tray/Strings.cs" Link="Strings.cs" />
     <Compile Include="../Opssh.Tray/UiPreferences.cs" Link="UiPreferences.cs" />
+    <Compile Include="../Opssh.Tray/DefaultAgent.cs" Link="DefaultAgent.cs" />
+    <Compile Include="../Opssh.Tray/OpenSshService.cs" Link="OpenSshService.cs" />
+    <Compile Include="../Opssh.Tray/LoginStartup.cs" Link="LoginStartup.cs" />
+    <Compile Include="../Opssh.Tray/OnePasswordAccounts.cs" Link="OnePasswordAccounts.cs" />
+    <Compile Include="../Opssh.Tray/OnePasswordReadiness.cs" Link="OnePasswordReadiness.cs" />
+    <Compile Include="../Opssh.Tray/OnePasswordSignature.cs" Link="OnePasswordSignature.cs" />
+    <Compile Include="../Opssh.Tray/StartupNotificationAction.cs" Link="StartupNotificationAction.cs" />
     <EmbeddedResource Include="../Opssh.Tray/Localization/*.json" WithCulture="false" LogicalName="Opssh.Tray.Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

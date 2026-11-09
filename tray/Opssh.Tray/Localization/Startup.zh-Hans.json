@@ -1,0 +1,11 @@
+{
+  "Startup.ChooseMessage": "1Password 已就绪。请选择要授权的账户。",
+  "Startup.AuthorizeMessage": "1Password 已就绪。现在为所选账户请求桌面授权？",
+  "Startup.Choose": "选择账户",
+  "Startup.Authorize": "授权",
+  "Startup.Later": "稍后",
+  "Startup.ToastUnavailable": "Windows 无法显示 1Password 授权通知。",
+  "Startup.DefaultRecovery": "OpenSSH 服务变更已中断。请先恢复 OpenSSH 服务状态，再重试。",
+  "Startup.DefaultChangeFailed": "Windows 无法切换默认 SSH 代理，已恢复原配置。",
+  "Startup.OpenSshStopped": "Windows OpenSSH 代理设为自动启动，但当前已停止。请启动服务后再切换默认 SSH 代理。"
+}
