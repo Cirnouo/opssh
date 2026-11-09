@@ -89,6 +89,25 @@ internal static class GoInterop
         Console.WriteLine("Go interop passed (tray-led discovery, vault and item scope, local SSH list/sign approval, shutdown).");
     }
 
+    internal static async Task CheckProductionAsync(string version)
+    {
+        var localData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+        if (localData is null || !Path.IsPathFullyQualified(localData) || !Directory.Exists(localData) ||
+            Directory.EnumerateFileSystemEntries(localData).Any())
+            throw new InvalidOperationException("The production handshake requires an isolated empty LOCALAPPDATA directory.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var token = timeout.Token;
+        using var core = await CoreProcess.StartAsync(token);
+        using var session = new CoreSession(core.Pipe);
+        var hello = await session.StartAsync(token);
+        Require(hello.Version == version, "production core version matches the package");
+        Require((await session.RequestAsync("status", null, token)) is
+            { Ok: true, State: { Account: "", Keys: [] } }, "production core starts unconfigured");
+        Require((await session.RequestAsync("shutdown", null, token)).Ok, "production shutdown acknowledgement");
+        Require(await core.WaitAsync(TimeSpan.FromSeconds(4)), "graceful production core exit");
+        Console.WriteLine("Production core handshake and shutdown passed.");
+    }
+
     private static async Task SendPacketAsync(Stream stream, byte[] payload, CancellationToken token)
     {
         using var packet = new MemoryStream();
