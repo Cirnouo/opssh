@@ -3,6 +3,7 @@ package winipc
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 	"unsafe"
@@ -27,19 +28,20 @@ type Control struct {
 // AdoptControl consumes both inherited handles, including on failure.
 func AdoptControl(pipeValue, trayValue uintptr) (*Control, error) {
 	pipe, tray := windows.Handle(pipeValue), windows.Handle(trayValue)
+	pipeInRange, trayInRange := validInheritedHandle(pipeValue), validInheritedHandle(trayValue)
 	adopted := false
 	defer func() {
 		if !adopted {
-			if int(pipe) > 0 {
+			if pipeInRange {
 				_ = windows.CloseHandle(pipe)
 			}
-			if int(tray) > 0 && tray != pipe {
+			if trayInRange && tray != pipe {
 				_ = windows.CloseHandle(tray)
 			}
 		}
 	}()
 	errHandle := errors.New("invalid inherited tray or control handle")
-	if int(pipe) <= 0 || int(tray) <= 0 || pipe == tray {
+	if !pipeInRange || !trayInRange || pipe == tray {
 		return nil, errHandle
 	}
 	if err := windows.SetHandleInformation(pipe, windows.HANDLE_FLAG_INHERIT, 0); err != nil {
@@ -65,6 +67,10 @@ func AdoptControl(pipeValue, trayValue uintptr) (*Control, error) {
 	adopted = true
 	go control.watchTray()
 	return control, nil
+}
+
+func validInheritedHandle(value uintptr) bool {
+	return value != 0 && value <= math.MaxInt
 }
 
 func validateControl(pipe, tray windows.Handle) error {
