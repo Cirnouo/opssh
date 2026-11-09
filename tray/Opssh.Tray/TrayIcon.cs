@@ -12,6 +12,8 @@ internal sealed class TrayIcon : IDisposable
     private const uint Add = 0;
     private const uint Modify = 1;
     private const uint Delete = 2;
+    private const uint NotificationInfo = 0x10;
+    private const uint InfoIcon = 0x01;
 
     private readonly WindowProc callback;
     private readonly uint taskbarCreated;
@@ -75,6 +77,16 @@ internal sealed class TrayIcon : IDisposable
         icon.Tip = value.Length <= 127 ? value : value[..127];
         if (!Shell_NotifyIconW(Modify, ref icon))
             Shell_NotifyIconW(Add, ref icon);
+    }
+
+    internal void ShowUpdateAvailable(Version version)
+    {
+        var notification = icon;
+        notification.Flags = NotificationInfo;
+        notification.InfoFlags = InfoIcon;
+        notification.InfoTitle = Strings.Get("Update.NotificationTitle");
+        notification.Info = Strings.Get("Update.NotificationBody", version.ToString(3));
+        Shell_NotifyIconW(Modify, ref notification);
     }
 
     private nint ProcessMessage(nint hwnd, uint message, nuint wParam, nint lParam)

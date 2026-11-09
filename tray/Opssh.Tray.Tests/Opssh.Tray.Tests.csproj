@@ -11,6 +11,7 @@
     <Compile Include="../Opssh.Tray/Protocol.cs" Link="Protocol.cs" />
     <Compile Include="../Opssh.Tray/CoreProcess.cs" Link="CoreProcess.cs" />
     <Compile Include="../Opssh.Tray/CoreSession.cs" Link="CoreSession.cs" />
+    <Compile Include="../Opssh.Tray/ReleaseCheck.cs" Link="ReleaseCheck.cs" />
     <Compile Include="../Opssh.Tray/Strings.cs" Link="Strings.cs" />
     <Compile Include="../Opssh.Tray/UiPreferences.cs" Link="UiPreferences.cs" />
     <EmbeddedResource Include="../Opssh.Tray/Localization/*.json" WithCulture="false" LogicalName="Opssh.Tray.Localization.%(Filename)%(Extension)" />

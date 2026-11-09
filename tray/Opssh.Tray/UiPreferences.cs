@@ -3,20 +3,20 @@ using System.Text.Json;
 
 namespace Opssh.Tray;
 
-internal sealed record UiPreferences(string Language, string Theme)
+internal sealed record UiPreferences(string Language, string Theme, bool AutoCheckUpdates = true)
 {
     private const int MaxSize = 4096;
 
-    internal bool IsValid => (Language is "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
+    internal bool IsValid => (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
 
     private static string SettingsPath =>
         Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? "", "opssh", "tray-settings.json");
 
-    internal static UiPreferences Load() => Load(SettingsPath, CultureInfo.CurrentUICulture);
+    internal static UiPreferences Load() => Load(SettingsPath);
 
-    internal static UiPreferences Load(string path, CultureInfo culture)
+    internal static UiPreferences Load(string path)
     {
-        var fallback = new UiPreferences(PreferredLanguage(culture), "system");
+        var fallback = new UiPreferences("system", "system");
         if (!Path.IsPathFullyQualified(path))
             return fallback;
         try
@@ -38,8 +38,12 @@ internal sealed record UiPreferences(string Language, string Theme)
         }
     }
 
-    internal static string PreferredLanguage(CultureInfo culture)
+    internal string ResolveLanguage() => ResolveLanguage(CultureInfo.CurrentUICulture);
+
+    internal string ResolveLanguage(CultureInfo culture)
     {
+        if (Language != "system")
+            return Language;
         for (var current = culture; !string.IsNullOrEmpty(current.Name); current = current.Parent)
         {
             if (current.Name is "zh-Hans" or "zh-CN" or "zh-SG")

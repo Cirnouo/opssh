@@ -19,6 +19,13 @@ public sealed partial class SettingsWindow : Window
     private readonly TextBlock keyCount = Ui.Text(Strings.Get("Settings.KeyCountMany", 0));
     private readonly TextBlock keyDetails = Ui.Text(Strings.Get("Settings.NoKeys"));
     private readonly TextBlock version = Ui.Text("—");
+    private readonly TextBlock updateStatus = Ui.Text("");
+    private readonly HyperlinkButton releaseLink = new()
+    {
+        Content = Strings.Get("Update.ViewRelease"),
+        NavigateUri = ReleaseCheck.ReleasesPage,
+        Visibility = Visibility.Collapsed
+    };
     private readonly InfoBar message = new() { IsClosable = true };
     private readonly TextBox account = new()
     {
@@ -46,6 +53,7 @@ public sealed partial class SettingsWindow : Window
     private readonly Button evict;
     private readonly Button revokeAll;
     private readonly Button revokeSelected;
+    private readonly Button checkForUpdates;
     private readonly NavigationView navigation;
     private readonly NavigationViewItem discoveryPage;
     private readonly NavigationViewItem appearancePage;
@@ -60,7 +68,8 @@ public sealed partial class SettingsWindow : Window
     private CoreState? displayedState;
 
     internal SettingsWindow(Func<string, object?, bool, Task> send, Func<string, object?, Task> sendUrgent,
-        Func<Task> start, UiPreferences preferences, Func<UiPreferences, bool> applyAppearance)
+        Func<Task> start, UiPreferences preferences, Func<string, string, bool> applyAppearance,
+        Func<Task> checkUpdates, Func<bool, bool> setAutoCheckUpdates)
     {
         InitializeComponent();
         Title = Strings.Get("Settings.Title");
@@ -96,6 +105,7 @@ public sealed partial class SettingsWindow : Window
                 await send("preload", new { keyId = key.Id }, false);
         });
         evict = Ui.Button(Strings.Get("Settings.EvictKeys"), async () => await sendUrgent("evict-keys", null));
+        checkForUpdates = Ui.Button(Strings.Get("Update.Check"), async () => await checkUpdates());
         revokeAll = Ui.Button(Strings.Get("Settings.RevokeAll"), async () => await sendUrgent("revoke", null));
         revokeSelected = Ui.Button(Strings.Get("Settings.RevokeSelected"), async () =>
         {
@@ -147,7 +157,8 @@ public sealed partial class SettingsWindow : Window
         discoveryPage = NavigationItem(Strings.Get("Settings.Discovery"), "\uE8D7", BuildDiscovery());
         var policies = NavigationItem(Strings.Get("Settings.Policies"), "\uE72E", BuildPolicies());
         appearancePage = NavigationItem(Strings.Get("Settings.Appearance"), "\uE790", BuildAppearance(preferences, applyAppearance));
-        var about = NavigationItem(Strings.Get("Settings.About"), "\uE946", BuildAbout());
+        var about = NavigationItem(Strings.Get("Settings.About"), "\uE946",
+            BuildAbout(preferences.AutoCheckUpdates, setAutoCheckUpdates));
         var page = new ScrollViewer { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition());
@@ -242,10 +253,11 @@ public sealed partial class SettingsWindow : Window
         return page;
     }
 
-    private StackPanel BuildAppearance(UiPreferences preferences, Func<UiPreferences, bool> applyAppearance)
+    private StackPanel BuildAppearance(UiPreferences preferences, Func<string, string, bool> applyAppearance)
     {
         var page = Page(Strings.Get("Settings.Appearance"), Strings.Get("Settings.AppearanceDescription"));
         var language = AppearanceChoice(Strings.Get("Settings.Language"), preferences.Language,
+            ("system", Strings.Get("Settings.LanguageSystem")),
             ("en", Strings.Get("Settings.LanguageEnglish")), ("zh-Hans", Strings.Get("Settings.LanguageChinese")));
         var theme = AppearanceChoice(Strings.Get("Settings.Theme"), preferences.Theme,
             ("system", Strings.Get("Settings.ThemeSystem")), ("light", Strings.Get("Settings.ThemeLight")), ("dark", Strings.Get("Settings.ThemeDark")));
@@ -257,8 +269,7 @@ public sealed partial class SettingsWindow : Window
                 theme.SelectedItem is not ComboBoxItem { Tag: string themeId })
                 return;
 
-            var requested = new UiPreferences(languageId, themeId);
-            if (applyAppearance(requested))
+            if (applyAppearance(languageId, themeId))
                 return;
 
             restoring = true;
@@ -305,12 +316,51 @@ public sealed partial class SettingsWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint hwnd);
 
-    private StackPanel BuildAbout()
+    private StackPanel BuildAbout(bool autoCheck, Func<bool, bool> setAutoCheckUpdates)
     {
         var page = Page(Strings.Get("Settings.About"), Strings.Get("Settings.AboutDescription"));
+        var auto = new ToggleSwitch
+        {
+            IsOn = autoCheck,
+            OnContent = Strings.Get("Update.On"),
+            OffContent = Strings.Get("Update.Off"),
+            MinWidth = 0
+        };
+        AutomationProperties.SetName(auto, Strings.Get("Update.AutoCheck"));
+        var restoring = false;
+        auto.Toggled += (_, _) =>
+        {
+            if (restoring || setAutoCheckUpdates(auto.IsOn))
+                return;
+            restoring = true;
+            auto.IsOn = !auto.IsOn;
+            restoring = false;
+            ShowMessage(Strings.Get("Update.SaveFailed"));
+        };
         page.Children.Add(Section(Strings.Get("Settings.Version"),
+            Card("\uE946", Strings.Get("Update.TrayVersion"), Strings.Get("Update.TrayVersionDescription"),
+                Ui.Text(App.InstalledVersion.ToString(3))),
             Card("\uE946", Strings.Get("Settings.CoreVersion"), Strings.Get("Settings.CoreVersionDescription"), version)));
+        page.Children.Add(Section(Strings.Get("Update.Section"),
+            Card("\uE895", Strings.Get("Update.Check"), Strings.Get("Update.CheckDescription"), checkForUpdates,
+                Flow(updateStatus, releaseLink)),
+            Card("\uE713", Strings.Get("Update.AutoCheck"), Strings.Get("Update.AutoDescription"), auto)));
         return page;
+    }
+
+    internal void ShowReleaseCheck(ReleaseCheckResult result)
+    {
+        checkForUpdates.IsEnabled = result.Status != ReleaseCheckStatus.Checking;
+        releaseLink.Visibility = result.Status == ReleaseCheckStatus.Available ? Visibility.Visible : Visibility.Collapsed;
+        updateStatus.Text = result.Status switch
+        {
+            ReleaseCheckStatus.Checking => Strings.Get("Update.Checking"),
+            ReleaseCheckStatus.Current => Strings.Get("Update.Current"),
+            ReleaseCheckStatus.Available => Strings.Get("Update.Available", result.Latest!.ToString(3)),
+            ReleaseCheckStatus.NoRelease => Strings.Get("Update.NoRelease"),
+            ReleaseCheckStatus.Unavailable => Strings.Get("Update.Unavailable"),
+            _ => Strings.Get("Update.Idle")
+        };
     }
 
     private static NavigationViewItem NavigationItem(string label, string glyph, StackPanel page) =>
