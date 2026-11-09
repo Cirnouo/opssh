@@ -84,6 +84,38 @@ internal static class GoInterop
         Require(Encoding.ASCII.GetString(ReadString(signature)) == "ssh-ed25519" && ReadString(signature).Length == 64 &&
             signature.Position == signature.Length && signatures.Position == signatures.Length, "valid signature framing");
         ssh.Dispose();
+        for (;;)
+        {
+            var history = await session.RequestAsync("activity", null, token);
+            Require(history.Ok && history.Data is not null, "the core exposes local activity metadata");
+            if (history.Data!.Value.GetProperty("entries").EnumerateArray().Any(row =>
+                    row.GetProperty("result").GetString() == "published" &&
+                    row.GetProperty("key").GetString() == "Generated offline key" &&
+                    row.GetProperty("pid").GetUInt32() == Environment.ProcessId))
+                break;
+            await Task.Delay(40, token);
+        }
+        Require((await session.RequestAsync("clear-activity", null, token)).Ok, "clear activity");
+        using var replacement = await CoreProcess.StartAsync(token, candidate: true);
+        using var candidate = new CoreSession(replacement.Pipe);
+        Require(await candidate.StartAsync(token) == hello, "candidate proposes the same endpoint");
+        const string selectedAccount = "cccccccccccccccccccccccccc";
+        Require((await candidate.RequestAsync("prepare-account", new { account = selectedAccount, name = "Another offline account" }, token)).Ok,
+            "candidate obtains vault metadata without an SSH listener");
+        Require((await candidate.RequestAsync("activate-account", null, token)).ErrorCode == "pipe-unavailable",
+            "candidate cannot replace the active listener prematurely");
+        Require((await session.RequestAsync("status", null, token)).State?.Account == "Offline fixture",
+            "old account serves while candidate authorization is prepared");
+        Require((await session.RequestAsync("pause-ssh", null, token)).Ok, "pause the old endpoint");
+        Require((await session.RequestAsync("resume-ssh", null, token)).Ok, "resume the old endpoint before commit");
+        Require((await session.RequestAsync("pause-ssh", null, token)).Ok, "release the old endpoint for handover");
+        Require((await candidate.RequestAsync("activate-account", null, token)) is
+            { Ok: true, State: { Account: selectedAccount, Keys: [], Vaults: [{ Id: vault }], Scope.Default: "exclude" } },
+            "successful handover saves the new account and its empty public index");
+        Require((await session.RequestAsync("resume-ssh", null, token)).ErrorCode == "account-changed",
+            "an old process cannot resume after the durable commit");
+        Require((await candidate.RequestAsync("shutdown", null, token)).Ok, "candidate shutdown acknowledgement");
+        Require(await replacement.WaitAsync(TimeSpan.FromSeconds(4)), "graceful replacement exit");
         Require((await session.RequestAsync("shutdown", null, token)).Ok, "shutdown acknowledgement");
         Require(await core.WaitAsync(TimeSpan.FromSeconds(4)), "graceful Go core exit");
         Console.WriteLine("Go interop passed (tray-led discovery, vault and item scope, local SSH list/sign approval, shutdown).");

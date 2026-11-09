@@ -656,12 +656,12 @@ public sealed partial class SettingsWindow : Window
     {
         internal readonly ComboBox Mode;
         internal readonly NumberBox Seconds = new() { Header = Strings.Get("Settings.Seconds"), Width = 114, Minimum = 1, Maximum = CachePolicy.MaxSeconds };
-        private static readonly string[] modes = ["off", "fixed", "idle", "until-lock"];
+        private static readonly string[] modes = ["off", "fixed", "idle", "until-lock", "until-exit"];
 
         internal PolicyInputs(string label)
         {
             Mode = new ComboBox { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch };
-            foreach (var option in new[] { Strings.Get("Settings.CacheOff"), Strings.Get("Settings.CacheFixed"), Strings.Get("Settings.CacheIdle"), Strings.Get("Settings.CacheUntilLock") })
+            foreach (var option in new[] { Strings.Get("Settings.CacheOff"), Strings.Get("Settings.CacheFixed"), Strings.Get("Settings.CacheIdle"), Strings.Get("Settings.CacheUntilLock"), Strings.Get("Settings.CacheUntilExit") })
                 Mode.Items.Add(option);
             Mode.SelectionChanged += (_, _) => Seconds.IsEnabled = Mode.SelectedIndex is 1 or 2;
             Set(new CachePolicy("off", 0));
@@ -692,6 +692,7 @@ public sealed partial class SettingsWindow : Window
             "fixed" => Strings.Get("Settings.CacheFixedValue", policy.Seconds),
             "idle" => Strings.Get("Settings.CacheIdleValue", policy.Seconds),
             "until-lock" => Strings.Get("Settings.CacheUntilLock"),
+            "until-exit" => Strings.Get("Settings.CacheUntilExit"),
             _ => Strings.Get("Settings.CacheOff")
         };
     }

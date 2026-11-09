@@ -57,6 +57,39 @@ func (c desktopClient) Items(ctx context.Context, vault string) ([]onepassword.I
 	return items, err
 }
 
+// ListVaults requests only overview metadata, allowing account authorization
+// and vault selection without reading items or private material.
+func (b *Backend) ListVaults(ctx context.Context) ([]Vault, error) {
+	return execute(ctx, b, func(client resolver) ([]Vault, error) {
+		lister, ok := client.(metadataLister)
+		if !ok {
+			return nil, ErrUnavailable
+		}
+		listed, err := lister.Vaults(ctx)
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+		if len(listed) > maxScannedVaults {
+			return nil, ErrScanLimit
+		}
+		counts := make(map[string]int, len(listed))
+		for _, vault := range listed {
+			counts[vault.ID]++
+		}
+		rows := make([]Vault, 0, min(len(listed), config.MaxVaults))
+		for _, vault := range listed {
+			if !config.ValidID(vault.ID) || counts[vault.ID] != 1 {
+				continue
+			}
+			if len(rows) == config.MaxVaults {
+				break
+			}
+			rows = append(rows, Vault{ID: vault.ID, Name: safeName(vault.Title, "Vault "+vault.ID[:8]), Items: []Item{}})
+		}
+		return rows, ctx.Err()
+	}, nil)
+}
+
 func (b *Backend) Discover(ctx context.Context, scope config.Scope) ([]Vault, error) {
 	return execute(ctx, b, func(client resolver) ([]Vault, error) {
 		lister, ok := client.(metadataLister)

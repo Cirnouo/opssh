@@ -18,6 +18,10 @@ type excludedVaultBrowser interface {
 }
 
 func (a *application) refreshIndex(ctx context.Context, next config.Settings) error {
+	return a.scanIndex(ctx, next, false)
+}
+
+func (a *application) scanIndex(ctx context.Context, next config.Settings, preserve bool) error {
 	if next.Account == "" {
 		return desktop.ErrUnconfigured
 	}
@@ -29,7 +33,23 @@ func (a *application) refreshIndex(ctx context.Context, next config.Settings) er
 	// cannot restore keys the user just excluded.
 	next.Keys = []config.Key{}
 	next.Index = config.IndexUnavailable
-	if err := a.persist(next); err != nil {
+	published := false
+	if preserve {
+		a.engine.SuspendIndex()
+		defer a.engine.ResumeIndex()
+		if err := config.Save(a.path, next); err != nil {
+			return errSettingsWrite
+		}
+		withdrawn := next
+		defer func() {
+			if !published {
+				// The durable index was already withdrawn. Do not republish
+				// a previous identity after cancellation or a provider error.
+				_ = a.engine.ReplaceKeys(nil)
+				a.settings = withdrawn
+			}
+		}()
+	} else if err := a.persist(next); err != nil {
 		return err
 	}
 	provider, ok := a.vault.get().(discoverableVault)
@@ -46,6 +66,9 @@ func (a *application) refreshIndex(ctx context.Context, next config.Settings) er
 		return discoverErr
 	}
 	a.setVaults(vaults)
+	if preserve {
+		next.Vaults = publicVaults(a.vaults)
+	}
 	if !overflow {
 		next.Keys, overflow = scopedKeys(next.Scope, vaults)
 	}
@@ -54,6 +77,7 @@ func (a *application) refreshIndex(ctx context.Context, next config.Settings) er
 		if err := a.persist(next); err != nil {
 			return err
 		}
+		published = true
 		if errors.Is(discoverErr, desktop.ErrScanLimit) {
 			return desktop.ErrScanLimit
 		}
@@ -69,14 +93,20 @@ func (a *application) refreshIndex(ctx context.Context, next config.Settings) er
 	next.Index = config.IndexReady
 	if partial {
 		next.Index = config.IndexPartial
+		if preserve {
+			_ = a.engine.ReplaceKeys(nil)
+		}
 	}
 	if err := a.persist(next); err != nil {
 		return err
 	}
-	// An excluded vault's metadata is for editing scope. Its availability
+	published = true
+	// An excluded vault's metadata is for the legacy item scope editor. Its availability
 	// cannot block or change the result of publishing the effective keys.
-	if browser, ok := provider.(excludedVaultBrowser); ok {
-		a.browseExcluded(ctx, browser, next.Scope, vaults)
+	if !preserve {
+		if browser, ok := provider.(excludedVaultBrowser); ok {
+			a.browseExcluded(ctx, browser, next.Scope, vaults)
+		}
 	}
 	if partial {
 		return desktop.ErrPartial

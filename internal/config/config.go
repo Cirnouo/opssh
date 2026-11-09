@@ -16,6 +16,8 @@ import (
 
 const maxFile = 256 * 1024
 
+const CurrentVersion = 1
+
 const (
 	MaxKeys   = 64
 	MaxVaults = 64
@@ -95,17 +97,26 @@ func (s Scope) Valid() bool {
 	return true
 }
 
+type Vault struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type Settings struct {
-	Account       string `json:"account"`
-	KeyCache      Policy `json:"keyCache"`
-	ApprovalCache Policy `json:"approvalCache"`
-	Keys          []Key  `json:"keys"`
-	Scope         Scope  `json:"scope"`
-	Index         string `json:"index"`
+	Version       int     `json:"version"`
+	AccountName   string  `json:"accountName,omitempty"`
+	Vaults        []Vault `json:"vaults,omitempty"`
+	Account       string  `json:"account"`
+	KeyCache      Policy  `json:"keyCache"`
+	ApprovalCache Policy  `json:"approvalCache"`
+	Keys          []Key   `json:"keys"`
+	Scope         Scope   `json:"scope"`
+	Index         string  `json:"index"`
 }
 
 func Default() Settings {
 	return Settings{
+		Version:       CurrentVersion,
 		KeyCache:      Policy{Mode: "fixed", Seconds: 300},
 		ApprovalCache: Policy{Mode: "fixed", Seconds: 600},
 		Keys:          []Key{},
@@ -140,7 +151,7 @@ func ValidLabel(value string) bool {
 
 func (p Policy) Valid() bool {
 	switch p.Mode {
-	case "off", "until-lock":
+	case "off", "until-lock", "until-exit":
 		return p.Seconds == 0
 	case "fixed", "idle":
 		return p.Seconds > 0 && p.Seconds <= 30*24*60*60
@@ -150,7 +161,9 @@ func (p Policy) Valid() bool {
 }
 
 func (s Settings) Validate() error {
-	if !ValidLabel(s.Account) || !s.KeyCache.Valid() || !s.ApprovalCache.Valid() ||
+	if s.Version != CurrentVersion || !ValidLabel(s.AccountName) || len(s.Vaults) > MaxVaults ||
+		(s.Account == "" && (s.AccountName != "" || len(s.Vaults) != 0)) ||
+		!ValidLabel(s.Account) || !s.KeyCache.Valid() || !s.ApprovalCache.Valid() ||
 		len(s.Keys) > MaxKeys || (s.Account == "" && len(s.Keys) > 0) || !s.Scope.Valid() {
 		return ErrInvalid
 	}
@@ -158,6 +171,13 @@ func (s Settings) Validate() error {
 	case IndexNotIndexed, IndexReady, IndexPartial, IndexUnavailable, IndexScopeTooBroad:
 	default:
 		return ErrInvalid
+	}
+	vaultIDs := make(map[string]bool, len(s.Vaults))
+	for _, v := range s.Vaults {
+		if !ValidID(v.ID) || !ValidLabel(v.Name) || v.Name == "" || vaultIDs[v.ID] {
+			return ErrInvalid
+		}
+		vaultIDs[v.ID] = true
 	}
 	ids := make(map[string]bool, len(s.Keys))
 	blobs := make(map[string]bool, len(s.Keys))
@@ -194,6 +214,7 @@ func Read(path string) (Settings, error) {
 		return Settings{}, ErrInvalid
 	}
 	s := Default()
+	s.Version = 0
 	s.Index = ""
 	wire := struct {
 		*Settings
@@ -204,14 +225,7 @@ func Read(path string) (Settings, error) {
 	if err := d.Decode(&wire); err != nil {
 		return Settings{}, ErrInvalid
 	}
-	if len(wire.Scope) == 0 {
-		if s.Account != "" {
-			s.Scope.Default = "exclude"
-			for _, k := range s.Keys {
-				s.Scope.Items[k.ID()] = "include"
-			}
-		}
-	} else {
+	if len(wire.Scope) > 0 {
 		s.Scope = Scope{}
 		d := json.NewDecoder(bytes.NewReader(wire.Scope))
 		d.DisallowUnknownFields()
@@ -219,6 +233,22 @@ func Read(path string) (Settings, error) {
 			return Settings{}, ErrInvalid
 		}
 		s.Scope = s.Scope.Normalized()
+	}
+	if s.Version == 0 {
+		migrateUnversioned(&s, len(wire.Scope) != 0)
+	}
+	if s.Keys == nil {
+		s.Keys = []Key{}
+	}
+	return s, s.Validate()
+}
+
+func migrateUnversioned(s *Settings, hasScope bool) {
+	if !hasScope && s.Account != "" {
+		s.Scope.Default = "exclude"
+		for _, k := range s.Keys {
+			s.Scope.Items[k.ID()] = "include"
+		}
 	}
 	if s.Index == "" {
 		s.Index = IndexNotIndexed
@@ -232,10 +262,7 @@ func Read(path string) (Settings, error) {
 			}
 		}
 	}
-	if s.Keys == nil {
-		s.Keys = []Key{}
-	}
-	return s, s.Validate()
+	s.Version = 1
 }
 
 func Save(path string, s Settings) error {
@@ -246,6 +273,9 @@ func Save(path string, s Settings) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
+	}
+	if len(data) >= maxFile {
+		return ErrInvalid
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {

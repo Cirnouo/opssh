@@ -15,6 +15,7 @@ var (
 	ErrLocked           = errors.New("engine is locked")
 	ErrClosed           = errors.New("engine is closed")
 	ErrUnknownKey       = errors.New("unknown key")
+	ErrUnknownGrant     = errors.New("unknown grant")
 	ErrInvalidKey       = errors.New("invalid key")
 	ErrInvalidPolicy    = errors.New("invalid cache policy")
 	ErrInvalidRequest   = errors.New("invalid request")
@@ -65,6 +66,9 @@ type Peer struct {
 	Chain     []Process
 	Alive     func(Instance) bool
 	Connected func() bool
+	// Retain transfers an independent liveness check and its cleanup to a
+	// cached grant. Both functions must be bounded and synchronous.
+	Retain func(Instance) (alive func() bool, release func(), ok bool)
 }
 
 type Provider interface {
@@ -117,6 +121,7 @@ type State struct {
 	Loaded  map[string]bool
 	Loading map[string]bool
 	Errors  map[string]string
+	Grants  map[string]int
 }
 
 type indexedKey struct {
@@ -151,6 +156,7 @@ type Engine struct {
 	keyPolicy      Policy
 	approvalPolicy Policy
 	locked         bool
+	suspended      bool
 	closed         bool
 	flights        map[*loadFlight]struct{}
 	stop           chan struct{}
@@ -275,6 +281,9 @@ func (entry *keyEntry) renewSignVersion() {
 func (e *Engine) List() []Key {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.suspended {
+		return []Key{}
+	}
 	keys := make([]Key, 0, len(e.keys.entries))
 	for _, entry := range e.keys.entries {
 		keys = append(keys, cloneKey(entry.key))
@@ -289,10 +298,12 @@ func (e *Engine) Status() State {
 	state := State{
 		Locked: e.locked, Loaded: make(map[string]bool, len(e.state)),
 		Loading: make(map[string]bool, len(e.state)), Errors: make(map[string]string),
+		Grants: make(map[string]int, len(e.state)),
 	}
 	for _, entry := range e.state {
 		state.Loaded[entry.key.ID] = entry.material != nil
 		state.Loading[entry.key.ID] = entry.flight != nil && entry.flight.ctx.Err() == nil
+		state.Grants[entry.key.ID] = len(entry.grants)
 		if entry.loadError != "" {
 			state.Errors[entry.key.ID] = entry.loadError
 		}
@@ -311,12 +322,10 @@ func (e *Engine) ReplaceKeys(keys []Key) error {
 		return ErrClosed
 	}
 	state := make(map[string]*keyEntry, len(next.entries))
-	for i, key := range next.entries {
+	for _, key := range next.entries {
 		previous := e.state[key.key.ID]
 		if previous != nil && sameKey(previous.key, key.key) {
-			next.entries[i] = previous.indexedKey
-			next.byID[key.key.ID] = previous.indexedKey
-			next.byPublic[string(key.key.Public)] = previous.indexedKey
+			previous.indexedKey = key
 			state[key.key.ID] = previous
 		} else {
 			state[key.key.ID] = newKeyEntry(key)
@@ -326,7 +335,7 @@ func (e *Engine) ReplaceKeys(keys []Key) error {
 		if state[entry.key.ID] != entry {
 			entry.cancelSign()
 			e.clearMaterialLocked(entry)
-			entry.grants = nil
+			entry.clearGrantsLocked()
 		}
 	}
 	e.keys, e.state = next, state
@@ -334,12 +343,38 @@ func (e *Engine) ReplaceKeys(keys []Key) error {
 }
 
 func sameKey(a, b Key) bool {
-	return a.ID == b.ID && a.VaultID == b.VaultID && a.ItemID == b.ItemID && a.Name == b.Name && bytes.Equal(a.Public, b.Public)
+	return a.ID == b.ID && a.VaultID == b.VaultID && a.ItemID == b.ItemID && bytes.Equal(a.Public, b.Public)
+}
+
+// SuspendIndex withdraws the catalog and retires outstanding work while keeping
+// cached state available for identities that survive ReplaceKeys.
+func (e *Engine) SuspendIndex() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || e.suspended {
+		return
+	}
+	e.suspended = true
+	for _, entry := range e.state {
+		entry.renewSignVersion()
+		entry.materialRevision++
+	}
+	for flight := range e.flights {
+		e.discardFlightLocked(flight)
+	}
+}
+
+func (e *Engine) ResumeIndex() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.closed {
+		e.suspended = false
+	}
 }
 
 func validPolicy(policy Policy) bool {
 	switch policy.Mode {
-	case "off", "until-lock":
+	case "off", "until-lock", "until-exit":
 		return policy.TTL == 0
 	case "fixed", "idle":
 		return policy.TTL > 0
@@ -374,7 +409,7 @@ func (e *Engine) SetPolicies(keyCache, approvalCache Policy) error {
 			e.clearMaterialLocked(entry)
 		}
 		if e.approvalPolicy != approvalCache {
-			entry.grants = nil
+			entry.clearGrantsLocked()
 		}
 	}
 	e.keyPolicy, e.approvalPolicy = keyCache, approvalCache
@@ -391,7 +426,7 @@ func (e *Engine) Lock() {
 	for _, entry := range e.state {
 		entry.renewSignVersion()
 		e.clearMaterialLocked(entry)
-		entry.grants = nil
+		entry.clearGrantsLocked()
 	}
 }
 
@@ -415,6 +450,18 @@ func (e *Engine) EvictKeys() {
 	}
 }
 
+func (e *Engine) EvictKey(keyID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	entry, err := e.stateEntryLocked(keyID)
+	if err != nil {
+		return err
+	}
+	entry.renewSignVersion()
+	e.clearMaterialLocked(entry)
+	return nil
+}
+
 func (e *Engine) Revoke(keyID string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -424,7 +471,7 @@ func (e *Engine) Revoke(keyID string) {
 	for _, entry := range e.state {
 		if keyID == "" || keyID == entry.key.ID {
 			entry.renewSignVersion()
-			entry.grants = nil
+			entry.clearGrantsLocked()
 		}
 	}
 }
@@ -437,7 +484,7 @@ func (e *Engine) Close() {
 		for _, entry := range e.state {
 			entry.cancelSign()
 			e.clearMaterialLocked(entry)
-			entry.grants = nil
+			entry.clearGrantsLocked()
 		}
 		close(e.stop)
 	}
@@ -472,11 +519,7 @@ func (entry *keyEntry) pruneLocked(now time.Time) {
 		entry.material.dispose()
 		entry.material = nil
 	}
-	for id, grant := range entry.grants {
-		if expired(grant.expiry, now) {
-			delete(entry.grants, id)
-		}
-	}
+	entry.pruneGrantsLocked(now)
 }
 
 func reserve(slots chan struct{}) bool {
@@ -489,11 +532,10 @@ func reserve(slots chan struct{}) bool {
 }
 
 func (e *Engine) keyErrorLocked(entry *keyEntry) error {
+	if err := e.indexErrorLocked(); err != nil {
+		return err
+	}
 	switch {
-	case e.closed:
-		return ErrClosed
-	case e.locked:
-		return ErrLocked
 	case entry == nil:
 		return ErrUnknownKey
 	case e.state[entry.key.ID] != entry:
@@ -501,4 +543,28 @@ func (e *Engine) keyErrorLocked(entry *keyEntry) error {
 	default:
 		return nil
 	}
+}
+
+func (e *Engine) indexErrorLocked() error {
+	switch {
+	case e.closed:
+		return ErrClosed
+	case e.locked:
+		return ErrLocked
+	case e.suspended:
+		return ErrStale
+	default:
+		return nil
+	}
+}
+
+func (e *Engine) stateEntryLocked(keyID string) (*keyEntry, error) {
+	if e.closed {
+		return nil, ErrClosed
+	}
+	entry := e.state[keyID]
+	if entry == nil {
+		return nil, ErrUnknownKey
+	}
+	return entry, nil
 }

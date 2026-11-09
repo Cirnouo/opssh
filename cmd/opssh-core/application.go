@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"opssh/internal/activity"
 	"opssh/internal/config"
 	"opssh/internal/control"
 	"opssh/internal/desktop"
@@ -60,10 +61,15 @@ type application struct {
 	newVault        func(string) vault
 	restartMu       sync.Mutex
 	restartRequired bool // written only by the worker, read by unlock under restartMu
+	activity        *activity.Log
+	candidate       bool
+	attempted       bool
+	prepared        *config.Settings
+	paused          bool
 }
 
 func newApplication(path, endpoint string, cfg config.Settings, ch *control.Channel, factory func(string) vault) (*application, error) {
-	a := &application{path: path, endpoint: endpoint, settings: cfg, vaults: []desktop.Vault{}, channel: ch, newVault: factory}
+	a := &application{path: path, endpoint: endpoint, settings: cfg, vaults: savedVaults(cfg.Vaults), channel: ch, newVault: factory, activity: activity.New()}
 	a.vault.set(factory(cfg.Account))
 	opts := engine.DefaultOptions()
 	opts.Keys = engineKeys(cfg)
@@ -140,6 +146,14 @@ func (a *application) approve(ctx context.Context, prompt engine.Prompt) (engine
 	return engine.Approval{Scope: decision.Scope, Candidate: decision.Candidate}, err
 }
 
+type grantDisplay struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	PID       uint32    `json:"pid"`
+	Scope     string    `json:"scope"`
+	ExpiresAt time.Time `json:"expiresAt,omitzero"`
+}
+
 type keyDisplay struct {
 	ID          string `json:"id"`
 	VaultID     string `json:"vaultId"`
@@ -150,6 +164,7 @@ type keyDisplay struct {
 	Loaded      bool   `json:"loaded"`
 	Loading     bool   `json:"loading"`
 	Error       string `json:"error,omitempty"`
+	Grants      int    `json:"grants,omitempty"`
 }
 type appState struct {
 	Pipe          string          `json:"pipe"`
@@ -163,15 +178,27 @@ type appState struct {
 	Scope         config.Scope    `json:"scope"`
 	Vaults        []desktop.Vault `json:"vaults"`
 	Index         string          `json:"index"`
+	AccountName   string          `json:"accountName,omitempty"`
+	LastProvider  string          `json:"lastProvider,omitempty"`
+	ProviderAt    *time.Time      `json:"providerAt,omitempty"`
 }
 
 func (a *application) status() appState {
 	s := a.engine.Status()
 	state := appState{
-		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account,
+		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account, AccountName: a.settings.AccountName,
 		Keys:     make([]keyDisplay, 0, len(a.settings.Keys)),
 		KeyCache: a.settings.KeyCache, ApprovalCache: a.settings.ApprovalCache,
 		Provider: a.vault.get().Status(), Scope: a.settings.Scope, Vaults: a.vaults, Index: a.settings.Index,
+	}
+	if observer, ok := a.vault.get().(interface {
+		Observation() (string, string, time.Time)
+	}); ok && !a.candidate {
+		current, last, at := observer.Observation()
+		state.Provider, state.LastProvider = current, last
+		if !at.IsZero() {
+			state.ProviderAt = &at
+		}
 	}
 	if a.restartRequired {
 		state.Provider = "unknown"
@@ -184,7 +211,7 @@ func (a *application) status() appState {
 	}
 	for _, k := range a.settings.Keys {
 		row := keyDisplay{ID: k.ID(), VaultID: k.VaultID, ItemID: k.ItemID, Name: k.Name, Unnamed: k.Name == "",
-			Fingerprint: fingerprint(k.Public), Loaded: s.Loaded[k.ID()], Loading: s.Loading[k.ID()], Error: s.Errors[k.ID()]}
+			Fingerprint: fingerprint(k.Public), Loaded: s.Loaded[k.ID()], Loading: s.Loading[k.ID()], Error: s.Errors[k.ID()], Grants: s.Grants[k.ID()]}
 		if row.Unnamed {
 			row.Name = "SSH key " + k.ItemID[:8]
 		}
@@ -218,13 +245,26 @@ func (a *application) priority(msg control.Message) (control.Result, bool) {
 		}
 		a.engine.Unlock()
 	case "evict-keys":
-		a.engine.EvictKeys()
-	case "revoke":
 		var body struct {
 			KeyID string `json:"keyId"`
 		}
 		if len(msg.Body) > 0 && control.DecodeBody(msg, &body) != nil {
 			return commandResult(errCommand), true
+		}
+		if body.KeyID != "" {
+			return commandResult(a.engine.EvictKey(body.KeyID)), true
+		}
+		a.engine.EvictKeys()
+	case "revoke":
+		var body struct {
+			KeyID   string `json:"keyId"`
+			GrantID string `json:"grantId"`
+		}
+		if len(msg.Body) > 0 && control.DecodeBody(msg, &body) != nil {
+			return commandResult(errCommand), true
+		}
+		if body.GrantID != "" {
+			return commandResult(a.engine.RevokeGrant(body.KeyID, body.GrantID)), true
 		}
 		a.engine.Revoke(body.KeyID)
 	default:
@@ -234,6 +274,15 @@ func (a *application) priority(msg control.Message) (control.Result, bool) {
 }
 
 func (a *application) command(ctx context.Context, msg control.Message) control.Result {
+	if a.candidate && msg.Type != "status" {
+		if msg.Type != "prepare-account" {
+			return commandResult(errCommand)
+		}
+		return commandResult(a.prepareAccount(ctx, msg))
+	}
+	if a.paused && msg.Type != "status" {
+		return commandResult(engine.ErrBusy)
+	}
 	var err error
 	if a.restartRequired && msg.Type != "status" {
 		result := restartResult()
@@ -244,8 +293,77 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	case "status":
 	case "settings":
 		err = a.updateSettings(msg)
+	case "reload-vaults":
+		if len(msg.Body) != 0 {
+			err = errCommand
+		} else {
+			err = a.reloadVaults(ctx)
+		}
+	case "set-vault":
+		err = a.setVault(msg)
+	case "logout":
+		if len(msg.Body) != 0 {
+			err = errCommand
+		} else {
+			next := a.copySettings()
+			next.Account = ""
+			err = a.applySettings(next)
+		}
+	case "preload-all":
+		if len(msg.Body) != 0 {
+			err = errCommand
+		} else {
+			ctx, cancel := context.WithTimeout(ctx, indexTimeout)
+			defer cancel()
+			err = a.engine.PreloadAll(ctx)
+		}
+	case "grants":
+		var body struct {
+			KeyID string `json:"keyId"`
+		}
+		if control.DecodeBody(msg, &body) != nil {
+			return commandResult(errCommand)
+		}
+		grants, err := a.engine.Grants(body.KeyID)
+		result := commandResult(err)
+		if result.OK {
+			rows := make([]grantDisplay, 0, len(grants))
+			for _, grant := range grants {
+				rows = append(rows, grantDisplay{grant.ID, grant.Name, grant.PID, grant.Scope, grant.ExpiresAt})
+			}
+			result.Data = map[string]any{"grants": rows}
+		}
+		return result
+	case "activity":
+		var body struct {
+			Before string `json:"before"`
+		}
+		if len(msg.Body) != 0 && control.DecodeBody(msg, &body) != nil {
+			return commandResult(errCommand)
+		}
+		return control.Result{OK: true, Data: a.activity.Page(body.Before)}
+	case "activity-command":
+		var body struct {
+			ID string `json:"id"`
+		}
+		if control.DecodeBody(msg, &body) != nil || len(body.ID) > 64 {
+			return commandResult(errCommand)
+		}
+		return control.Result{OK: true, Data: map[string]string{"command": a.activity.Command(body.ID)}}
+	case "clear-activity":
+		if len(msg.Body) != 0 {
+			return commandResult(errCommand)
+		}
+		a.activity.Clear()
+		return control.Result{OK: true}
 	case "connect":
 		err = a.connect(ctx, msg)
+	case "discover":
+		if len(msg.Body) != 0 {
+			err = errCommand
+		} else {
+			err = a.scanIndex(ctx, a.copySettings(), true)
+		}
 	case "refresh-index":
 		if len(msg.Body) != 0 {
 			err = errCommand
@@ -361,6 +479,7 @@ func (a *application) connect(ctx context.Context, msg control.Message) error {
 func (a *application) applySettings(next config.Settings) error {
 	oldAccount := a.settings.Account
 	if next.Account != oldAccount {
+		next.AccountName, next.Vaults = "", nil
 		next.Keys = []config.Key{}
 		next.Index = config.IndexNotIndexed
 		if oldAccount != "" {
@@ -372,6 +491,7 @@ func (a *application) applySettings(next config.Settings) error {
 	}
 	if next.Account != oldAccount {
 		a.vaults = []desktop.Vault{}
+		a.activity.Clear()
 		if oldAccount != "" {
 			a.restartMu.Lock()
 			a.engine.Lock()
@@ -462,6 +582,8 @@ var (
 	errCommand         = errors.New("invalid tray command")
 	errSettingsWrite   = errors.New("could not save settings")
 	errAlreadySelected = errors.New("item already selected")
+	errAccountChanged  = errors.New("active account changed during handover")
+	errPipeUnavailable = errors.New("SSH agent pipe unavailable")
 )
 
 func commandResult(err error) control.Result {
@@ -477,6 +599,12 @@ func displayError(err error) (code, message string) {
 	switch {
 	case errors.Is(err, errCommand):
 		return "invalid-command", "Invalid command or settings."
+	case errors.Is(err, errPipeUnavailable):
+		return "pipe-unavailable", "The SSH agent pipe is unavailable or already in use."
+	case errors.Is(err, errAccountChanged):
+		return "account-changed", "The active account changed during the request."
+	case errors.Is(err, engine.ErrUnknownGrant):
+		return "unknown-grant", "The process approval is no longer active."
 	case errors.Is(err, errSettingsWrite):
 		return "configuration-write", "Could not save the public configuration."
 	case errors.Is(err, errAlreadySelected):

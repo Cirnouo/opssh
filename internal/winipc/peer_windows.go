@@ -33,8 +33,23 @@ type pinnedProcess struct {
 }
 
 func (p pinnedProcess) alive() bool {
-	status, err := windows.WaitForSingleObject(p.handle, 0)
+	return processHandleAlive(p.handle)
+}
+
+func processHandleAlive(handle windows.Handle) bool {
+	status, err := windows.WaitForSingleObject(handle, 0)
 	return err == nil && status == uint32(windows.WAIT_TIMEOUT)
+}
+
+func (p pinnedProcess) duplicate() (pinnedProcess, bool) {
+	if !p.alive() {
+		return pinnedProcess{}, false
+	}
+	self := windows.CurrentProcess()
+	if err := windows.DuplicateHandle(self, p.handle, self, &p.handle, 0, false, windows.DUPLICATE_SAME_ACCESS); err != nil {
+		return pinnedProcess{}, false
+	}
+	return p, true
 }
 
 // Peer owns process handles for the verified requester and any verified live
@@ -61,6 +76,27 @@ func (p Peer) Alive(pid uint32, created uint64) bool {
 		}
 	}
 	return false
+}
+
+// Retain keeps a liveness check for the exact verified instance after the
+// request's Peer is closed. The caller owns the returned cleanup.
+func (p Peer) Retain(pid uint32, created uint64) (func() bool, func(), bool) {
+	if p.state == nil {
+		return nil, nil, false
+	}
+	p.state.mu.Lock()
+	defer p.state.mu.Unlock()
+	for _, process := range p.state.processes {
+		if process.PID == pid && process.Created == created {
+			retained, ok := process.duplicate()
+			if !ok {
+				return nil, nil, false
+			}
+			handle := retained.handle
+			return func() bool { return processHandleAlive(handle) }, func() { _ = windows.CloseHandle(handle) }, true
+		}
+	}
+	return nil, nil, false
 }
 
 func (p Peer) Close() error {

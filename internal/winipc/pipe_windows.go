@@ -43,14 +43,27 @@ type Listener struct {
 	closeErr  error
 }
 
+// Endpoint returns the opt-in endpoint name for the current Windows logon.
+func Endpoint() (string, error) {
+	id, err := currentLogon()
+	if err != nil {
+		return "", err
+	}
+	return endpoint(id), nil
+}
+
+func endpoint(id logonIdentity) string {
+	sum := sha256.Sum256([]byte(id.sid.String()))
+	return fmt.Sprintf("%sopssh-agent-%x", localPrefix, sum[:8])
+}
+
 // Listen opens the opt-in public endpoint for this Windows logon.
 func Listen() (*Listener, error) {
 	id, err := currentLogon()
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256([]byte(id.sid.String()))
-	return listenNamed(fmt.Sprintf("%sopssh-agent-%x", localPrefix, sum[:8]), id)
+	return listenNamed(endpoint(id), id)
 }
 
 // ListenNamed opens a byte-mode endpoint in the local pipe namespace.

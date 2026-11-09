@@ -169,14 +169,37 @@ func TestPeerTracksRequesterAndLiveParent(t *testing.T) {
 	if !peer.Alive(child.PID, child.Created) || peer.Alive(child.PID, child.Created-1) || !conn.Connected() {
 		t.Fatal("incorrect identity or connection liveness")
 	}
+	if _, release, ok := peer.Retain(child.PID, child.Created-1); ok {
+		release()
+		t.Fatal("retained the wrong process instance")
+	}
+	childAlive, releaseChild, ok := peer.Retain(child.PID, child.Created)
+	if !ok {
+		t.Fatal("could not retain the requester")
+	}
+	defer releaseChild()
+	parentAlive, releaseParent, ok := peer.Retain(parent.PID, parent.Created)
+	if !ok {
+		t.Fatal("could not retain the parent")
+	}
+	defer releaseParent()
+	if !childAlive() || !parentAlive() {
+		t.Fatal("retained live process appeared exited")
+	}
 	if _, err := conn.Write([]byte{1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	if peer.Alive(child.PID, child.Created) || conn.Connected() || !peer.Alive(parent.PID, parent.Created) {
+	if peer.Alive(child.PID, child.Created) || childAlive() || conn.Connected() || !peer.Alive(parent.PID, parent.Created) {
 		t.Fatal("client exit was not observed")
+	}
+	if err := peer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if peer.Alive(parent.PID, parent.Created) || !parentAlive() {
+		t.Fatal("retained parent did not outlive the request peer")
 	}
 }
 
