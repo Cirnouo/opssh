@@ -17,9 +17,9 @@ func TestRingOptInAndGeneration(t *testing.T) {
 	}
 	ring.Finish(old, "published")
 	ring.Finish(ring.Begin(), "arbitrary input")
-	ring.Finish(ring.Begin(), "denied")
+	ring.Finish(ring.Begin(), "unavailable")
 	batch, ok := ring.Sync(true, 2, 0)
-	if !ok || batch.Epoch != 2 || len(batch.Events) != 1 || batch.Events[0].Result != "denied" {
+	if !ok || batch.Epoch != 2 || len(batch.Events) != 1 || batch.Events[0].Result != "unavailable" {
 		t.Fatalf("only the current allowlisted event should survive: %+v", batch)
 	}
 	if _, ok := ring.Sync(true, 1, 0); ok {

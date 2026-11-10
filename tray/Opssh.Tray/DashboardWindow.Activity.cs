@@ -254,7 +254,7 @@ public sealed partial class DashboardWindow
 
     private static bool IsActivityRow(ActivityRow? row) =>
         row is { Pid: > 0, App.Length: > 0 and <= 512, Key.Length: <= 512 } &&
-        IsActivityId(row.Id) && row.Result is "published" or "denied" or "canceled" or "timeout" or "failed";
+        IsActivityId(row.Id) && row.Result is "published" or "denied" or "canceled" or "timeout" or "failed" or "unavailable";
 
     private static bool IsActivityId(string? id) => id is { Length: 26 } && id.All(char.IsAsciiLetterOrDigit);
 
@@ -332,6 +332,7 @@ public sealed partial class DashboardWindow
         "denied" => "Activity.Denied",
         "canceled" => "Activity.Canceled",
         "timeout" => "Activity.Timeout",
+        "unavailable" => "Activity.Unavailable",
         _ => "Activity.Failed"
     });
 

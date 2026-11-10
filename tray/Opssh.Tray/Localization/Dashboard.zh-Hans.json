@@ -120,7 +120,7 @@
   "Dashboard.CacheFixedHint": "从缓存建立时开始计时。",
   "Dashboard.CacheIdleHint": "在指定时长内未使用时清除。",
   "Dashboard.KeyCacheExitHint": "退出时清除，也可手动清除。",
-  "Dashboard.ApprovalCacheExitHint": "进程有效期间保留，可提前撤销，退出时清除。",
+  "Dashboard.ApprovalCacheExitHint": "保留至 opssh 退出。单个应用的授权也会在该应用退出时结束。",
   "Dashboard.Preferences": "偏好",
   "Dashboard.AboutDescription": "使用存储在 1Password 中的密钥，为 Windows SSH 客户端提供签名。",
   "Dashboard.AutoCheckUpdates": "启动时自动检查更新",

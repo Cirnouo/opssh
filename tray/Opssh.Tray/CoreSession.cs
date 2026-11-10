@@ -74,7 +74,7 @@ internal sealed record Result([property: JsonRequired] bool Ok, string? Error, C
     JsonElement? Data = null);
 internal sealed record ProcessIdentity(uint Pid, ulong Created, string Path);
 internal sealed record Approval(string Id, string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline,
-    bool CacheAllowed, string? NameHint = null);
+    bool CacheAllowed, string? NameHint = null, int AppCandidate = 0);
 
 internal static class CoreFeedback
 {
@@ -128,6 +128,7 @@ internal static class CoreFeedback
 
 internal sealed class CoreSession : IDisposable
 {
+    internal const int MaxPendingApprovals = 64;
     private readonly Stream pipe;
     private readonly TimeProvider clock;
     private readonly CancellationToken stopped;
@@ -189,13 +190,14 @@ internal sealed class CoreSession : IDisposable
         }
     }
 
-    internal bool IsCurrentApproval(string id)
+    internal bool IsCurrentApproval(Approval approval)
     {
         lock (sync)
-            return approvals.TryGetValue(id, out var approval) && approval.Deadline > clock.GetUtcNow();
+            return approvals.TryGetValue(approval.Id, out var current) && ReferenceEquals(current, approval) &&
+                approval.Deadline > clock.GetUtcNow();
     }
 
-    internal async Task<bool> DecideAsync(string id, string scope, int candidate, CancellationToken token)
+    internal async Task<bool> DecideAsync(Approval approval, string scope, int candidate, CancellationToken token)
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token, stopped);
         if (stopped.IsCancellationRequested)
@@ -205,24 +207,24 @@ internal sealed class CoreSession : IDisposable
         {
             lock (sync)
             {
-                if (!approvals.TryGetValue(id, out var approval))
+                if (!approvals.TryGetValue(approval.Id, out var current) || !ReferenceEquals(current, approval))
                     return false;
                 if (approval.Deadline <= clock.GetUtcNow())
                 {
-                    approvals.Remove(id);
+                    approvals.Remove(approval.Id);
                     return false;
                 }
-                if (scope is not ("deny" or "once" or "client" or "host") ||
-                    ((scope is "client" or "host") && !approval.CacheAllowed) ||
-                    (scope == "host" && (candidate <= 0 || candidate >= approval.Chain.Length)))
+                if (scope is not ("deny" or "once" or "app" or "all" or "unavailable") ||
+                    ((scope is "app" or "all") && !approval.CacheAllowed) ||
+                    (scope == "app" && candidate != approval.AppCandidate))
                     return false;
-                approvals.Remove(id);
+                approvals.Remove(approval.Id);
             }
 
-            await WriteFrameAsync(new Envelope(1, "decision", id, JsonSerializer.SerializeToElement(new
+            await WriteFrameAsync(new Envelope(1, "decision", approval.Id, JsonSerializer.SerializeToElement(new
             {
                 scope,
-                candidate = scope == "host" ? candidate : 0
+                candidate = scope == "app" ? candidate : 0
             }, Protocol.Json)), stop.Token).ConfigureAwait(false);
             return true;
         }
@@ -302,20 +304,27 @@ internal sealed class CoreSession : IDisposable
                     case "approval":
                         var body = ReadBody<ApprovalBody>(message);
                         if (body.Chain is not { Length: > 0 and <= 64 } chain ||
-                            chain.Any(p => p is null || p.Pid == 0 || p.Created == 0 || string.IsNullOrWhiteSpace(p.Path)) ||
-                            string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.Fingerprint) ||
+                            body.AppCandidate < 0 || body.AppCandidate >= chain.Length ||
+                            chain.Any(p => p is null || p.Pid == 0 || p.Created == 0 || !ValidText(p.Path, 32768) ||
+                                string.IsNullOrWhiteSpace(Path.GetFileName(p.Path))) ||
+                            !ValidText(body.Name, 256) || string.IsNullOrWhiteSpace(body.Name) ||
+                            !ValidText(body.Fingerprint, 128) || string.IsNullOrWhiteSpace(body.Fingerprint) ||
                             (body.NameHint is not null && (body.NameHint.Length != 8 || !body.NameHint.All(IsIdCharacter))))
                             throw new IOException("Invalid approval request.");
-                        if (body.Deadline <= clock.GetUtcNow())
+                        var now = clock.GetUtcNow();
+                        if (body.Deadline <= now)
                             break;
-                        var approval = new Approval(id, body.Name, body.Fingerprint, chain, body.Deadline, body.CacheAllowed, body.NameHint);
+                        if (body.Deadline - now > TimeSpan.FromMinutes(5))
+                            throw new IOException("Invalid approval deadline.");
+                        var approval = new Approval(id, body.Name, body.Fingerprint, chain, body.Deadline, body.CacheAllowed,
+                            body.NameHint, body.AppCandidate);
                         lock (sync)
                         {
                             if (closed)
                                 return;
                             foreach (var expired in approvals.Values.Where(a => a.Deadline <= clock.GetUtcNow()).ToArray())
                                 approvals.Remove(expired.Id);
-                            if (approvals.Count >= 64 || !approvals.TryAdd(id, approval))
+                            if (approvals.Count >= MaxPendingApprovals || !approvals.TryAdd(id, approval))
                                 throw new IOException("Control approval queue overflow or duplicate.");
                         }
                         ApprovalRequested?.Invoke(approval);
@@ -470,5 +479,5 @@ internal sealed class CoreSession : IDisposable
 
     private sealed record StartupFailure(string? ErrorCode, string? Error);
     private sealed record ApprovalBody(string Name, string Fingerprint, ProcessIdentity[] Chain, DateTimeOffset Deadline, bool CacheAllowed,
-        string? NameHint);
+        string? NameHint, int AppCandidate);
 }

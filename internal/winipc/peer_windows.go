@@ -1,6 +1,7 @@
 package winipc
 
 import (
+	"crypto/sha256"
 	"errors"
 	"net"
 	"os"
@@ -56,6 +57,7 @@ func (p pinnedProcess) duplicate() (pinnedProcess, bool) {
 // ancestors. The caller closes it when the request is retired.
 type Peer struct {
 	Chain []Process
+	Logon [32]byte
 	state *peerState
 }
 
@@ -116,6 +118,7 @@ func (p Peer) Close() error {
 type logonIdentity struct {
 	sid     *windows.SID
 	session uint32
+	digest  [32]byte
 }
 
 func currentLogon() (logonIdentity, error) {
@@ -127,7 +130,7 @@ func currentLogon() (logonIdentity, error) {
 	if err := windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &session); err != nil {
 		return logonIdentity{}, err
 	}
-	return logonIdentity{sid: sid, session: session}, nil
+	return logonIdentity{sid: sid, session: session, digest: sha256.Sum256([]byte(sid.String()))}, nil
 }
 
 func logonSID(token windows.Token) (*windows.SID, error) {
@@ -222,7 +225,8 @@ func (c *Conn) Peer() (Peer, error) {
 	if err != nil {
 		return Peer{}, err
 	}
-	peer := Peer{Chain: []Process{requester.Process}, state: &peerState{processes: []pinnedProcess{requester}}}
+	peer := Peer{Chain: []Process{requester.Process}, Logon: c.identity.digest,
+		state: &peerState{processes: []pinnedProcess{requester}}}
 	parents := processParents()
 	child := requester
 	for len(peer.Chain) < maxChain {

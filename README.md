@@ -2,9 +2,9 @@
 
 **English** · [简体中文](README.zh-Hans.md)
 
-opssh is an SSH agent for the built-in Windows x64 OpenSSH client. It uses SSH keys from 1Password Desktop to sign in memory. The tray shows the requesting process, its ancestry and the key fingerprint so you can decide whether to approve each request.
+opssh is an SSH agent for the built-in Windows x64 OpenSSH client. It uses SSH keys from 1Password Desktop to sign in memory. A Windows notification shows the application, PID and key fingerprint so you can decide whether to approve a signature.
 
-- Approve one signature, the requesting process, or a selected ancestor process and its descendants.
+- Approve one signature, reuse a key for the displayed application, or reuse that key for all verified applications in your Windows logon.
 - Choose which 1Password vaults and SSH Key items opssh makes available to SSH.
 - Select opssh in the PowerShell sessions where you want it. The Windows system agent can run alongside it.
 

@@ -22,6 +22,7 @@ var (
 	ErrUnsupportedFlags = errors.New("unsupported signature flags")
 	ErrPeerGone         = errors.New("requesting process or connection ended")
 	ErrDenied           = errors.New("approval denied")
+	ErrUnavailable      = errors.New("approval notification unavailable")
 	ErrApprovalTimeout  = errors.New("approval timed out")
 	ErrLoadTimeout      = errors.New("key load timed out")
 	ErrProvider         = errors.New("key provider failed")
@@ -69,8 +70,12 @@ type Process struct {
 // Its callbacks make bounded, synchronous checks against the retained handles.
 type Peer struct {
 	Chain     []Process
+	Logon     [32]byte // opaque identity supplied by the verified transport
 	Alive     func(Instance) bool
 	Connected func() bool
+	// ApprovalApp returns the index of a verified window owner in Chain, or
+	// false when the prompt should fall back to the requester.
+	ApprovalApp func(context.Context) (index int, ownsWindow bool)
 	// Retain transfers an independent liveness check and its cleanup to a
 	// cached grant. Both functions must be bounded and synchronous.
 	Retain func(Instance) (alive func() bool, release func(), ok bool)
@@ -88,10 +93,12 @@ type Approval struct {
 }
 
 type Prompt struct {
-	Key          Key
-	Chain        []Process
-	Deadline     time.Time
-	CacheAllowed bool
+	Key           Key
+	Chain         []Process
+	AppCandidate  int
+	Deadline      time.Time
+	CacheAllowed  bool
+	appOwnsWindow bool
 }
 
 type Approver func(context.Context, Prompt) (Approval, error)

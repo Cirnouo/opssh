@@ -413,15 +413,20 @@ public sealed partial class DashboardWindow
         var buttons = new List<Button>();
         foreach (var grant in rows)
         {
-            if (grant is null || grant.Id.Length != 26 || grant.Pid == 0)
+            if (grant is null || grant.Id is not { Length: 26 } || !grant.Id.All(char.IsAsciiLetterOrDigit) ||
+                grant is not ({ Scope: "all", Pid: 0 } or { Scope: "app", Pid: > 0, Name.Length: > 0 and <= 512 }))
                 continue;
+            var name = grant.Scope == "all" ? Strings.Get("Keys.AllApps") : grant.Name;
+            var pid = grant.Pid == 0 ? "—" : grant.Pid.ToString(CultureInfo.InvariantCulture);
+            var expiry = grant.ExpiresAt is { } expires ? LocalTimestamp(expires) :
+                Strings.Get(grant.Scope == "all" ? "Keys.UntilExit" : "Keys.UntilAppExit");
             table.Content.Children.Add(Divider());
             var button = KeysButton("Keys.RevokeGrant",
                 async () => await sendUrgent("revoke", new { keyId, grantId = grant.Id }), compact: true);
             button.IsEnabled = connected && !urgentBusy;
             buttons.Add(button);
-            table.Content.Children.Add(KeysRow(widths, columns, 0, QuietMono(grant.Name), QuietMono(grant.Pid.ToString(CultureInfo.InvariantCulture)),
-                QuietMono(grant.ExpiresAt is { } expires ? LocalTimestamp(expires) : Strings.Get("Keys.UntilExit")), button));
+            table.Content.Children.Add(KeysRow(widths, columns, 0, QuietMono(name), QuietMono(pid),
+                QuietMono(expiry), button));
         }
         grantTables[keyId] = table;
         grantActions[keyId] = buttons;

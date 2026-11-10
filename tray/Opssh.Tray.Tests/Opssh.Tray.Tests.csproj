@@ -8,6 +8,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Opssh.Tray/ApplicationIcon.cs" Link="ApplicationIcon.cs" />
     <Compile Include="../Opssh.Tray/ActivityWheel.cs" Link="ActivityWheel.cs" />
     <Compile Include="../Opssh.Tray/DiagnosticEvent.cs" Link="DiagnosticEvent.cs" />
     <Compile Include="../Opssh.Tray/DiagnosticLogStore.cs" Link="DiagnosticLogStore.cs" />
@@ -23,6 +24,8 @@
     <Compile Include="../Opssh.Tray/OnePasswordAccounts.cs" Link="OnePasswordAccounts.cs" />
     <Compile Include="../Opssh.Tray/OnePasswordReadiness.cs" Link="OnePasswordReadiness.cs" />
     <Compile Include="../Opssh.Tray/OnePasswordSignature.cs" Link="OnePasswordSignature.cs" />
+    <Compile Include="../Opssh.Tray/SigningApprovalQueue.cs" Link="SigningApprovalQueue.cs" />
+    <Compile Include="../Opssh.Tray/SigningPrompt.cs" Link="SigningPrompt.cs" />
     <Compile Include="../Opssh.Tray/StartupNotificationAction.cs" Link="StartupNotificationAction.cs" />
     <EmbeddedResource Include="../Opssh.Tray/Localization/*.json" WithCulture="false" LogicalName="Opssh.Tray.Localization.%(Filename)%(Extension)" />
   </ItemGroup>

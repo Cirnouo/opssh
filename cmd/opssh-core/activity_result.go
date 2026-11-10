@@ -13,6 +13,8 @@ func activityResult(err error) string {
 		return "published"
 	case errors.Is(err, engine.ErrDenied):
 		return "denied"
+	case errors.Is(err, engine.ErrUnavailable):
+		return "unavailable"
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, engine.ErrApprovalTimeout),
 		errors.Is(err, engine.ErrLoadTimeout):
 		return "timeout"

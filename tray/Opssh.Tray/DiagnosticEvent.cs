@@ -9,7 +9,7 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
     public string Level => Phase is "preload" or "preload-all" ? PreloadLevel(Result) ?? "ERROR" : Result switch
     {
         "failed" => "ERROR",
-        "timeout" or "disconnected" => "WARN",
+        "timeout" or "disconnected" or "unavailable" => "WARN",
         "canceled" => "DEBUG",
         _ => "INFO"
     };
@@ -17,7 +17,7 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
     internal bool IsValid => Time != default && ElapsedMs is >= 0 and <= 86_400_000 &&
         ((Source, Phase, Result) switch
         {
-            ("core", "sign", "published" or "denied" or "timeout" or "canceled" or "failed") => Counts is null,
+            ("core", "sign", "published" or "denied" or "timeout" or "canceled" or "failed" or "unavailable") => Counts is null,
             ("tray", "core-start", "completed" or "timeout" or "failed") => Counts is null,
             ("tray", "core-session", "disconnected") => Counts is null,
             ("tray", "discover" or "provider-access", "completed" or "timeout" or "canceled" or "failed") => Counts is null,
@@ -75,7 +75,7 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
                 !row.TryGetProperty("time", out var time) || time.ValueKind != JsonValueKind.String ||
                 !time.TryGetDateTimeOffset(out var date) ||
                 !row.TryGetProperty("result", out var outcome) || outcome.ValueKind != JsonValueKind.String ||
-                outcome.GetString() is not { Length: <= 9 } label ||
+                outcome.GetString() is not { Length: <= 11 } label ||
                 !row.TryGetProperty("elapsedMs", out var elapsed) || elapsed.ValueKind != JsonValueKind.Number ||
                 !elapsed.TryGetInt64(out var duration))
                 return false;

@@ -17,3 +17,7 @@ Publish the tray on Windows x64 with `-p:OpsshDashboardFixture=true` to include 
 To capture the default-agent dialog, launch `opssh-tray.exe --dashboard-fixture default-agent-success settings dark zh-Hans` and confirm the switch in **SSH integration**. Use `default-agent-service-absent`, `default-agent-pipe-failure` or `default-agent-service-pending` for the other outcomes. The fixture paces the simulated stages for capture.
 
 Use a 1040 × 642 DIP window for the standard comparison. For the key layout use the fixture scenario `key-approval` and compare 930, 700, 576 and 540 DIP widths in addition to the standard size. The `key-preload-failure` and `key-preload-partial` scenarios allow the failed rows to be retried. A fixture executable launched with `--dashboard-reference <absolute HTML path>` opens the rendered reference in a separate WebView2 window behind the current desktop windows. Capture the browser and native windows using the same scaling and language. Crop browser chrome outside the prototype window. Native system caption controls and text rasterization follow Windows.
+
+## Signing notification fixture
+
+Use `--dashboard-fixture signing-toast keys dark zh-Hans` to show the four actions, or `signing-toast-once` with the approval cache off. Both use a synthetic key and the fixture process identity. Run native notification checks on an isolated Windows desktop because Windows owns the banner and notification center. Use the archived KeyApproval renderer for the reference toast.

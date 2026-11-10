@@ -86,7 +86,7 @@ internal static class GoInterop
         Require(approval.Name == "Generated offline key" && approval.Fingerprint == fingerprint && approval.CacheAllowed &&
             approval.Chain[0].Pid == Environment.ProcessId && approval.Chain[0].Created != 0,
             "approval carries the selected key and real requester identity");
-        Require(await session.DecideAsync(approval.Id, "once", 0, token), "once decision sent");
+        Require(await session.DecideAsync(approval, "once", 0, token), "once decision sent");
         var signed = await ReadPacketAsync(ssh, token);
         Require(signed is [14, ..], "SSH signature response");
         using var signatures = new MemoryStream(signed, 1, signed.Length - 1);

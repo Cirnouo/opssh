@@ -60,6 +60,13 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 		defer stopGrant()
 	}
 	if prompt != nil {
+		if peer.ApprovalApp != nil {
+			i, ownsWindow := peer.ApprovalApp(ctx)
+			if ownsWindow && i >= 0 && i < len(peer.Chain) && peer.Alive(peer.Chain[i].Instance) {
+				prompt.AppCandidate = i
+				prompt.appOwnsWindow = true
+			}
+		}
 		approval, err := e.ask(ctx, *prompt)
 		if currentErr := e.checkSign(ctx, request); currentErr != nil {
 			return currentErr
@@ -67,7 +74,7 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 		if err != nil {
 			return err
 		}
-		request.grantID, err = approvedGrant(approval, peer, prompt.CacheAllowed)
+		request.grantID, err = approvedGrant(approval, peer, *prompt)
 		if err != nil {
 			return err
 		}
@@ -138,13 +145,20 @@ func (e *Engine) beginSign(ctx context.Context, peer Peer, public []byte, flags 
 			continue
 		}
 		if i == 0 {
-			id := grantID{scope: "client", instance: process.Instance}
+			id := grantID{scope: "app", instance: process.Instance}
 			if cached := entry.grants[id]; cached != nil {
 				request.grantID, request.grant = id, cached
 				return request, nil, nil
 			}
 		}
-		id := grantID{scope: "host", instance: process.Instance}
+		id := grantID{scope: "app", instance: process.Instance, descendants: true}
+		if cached := entry.grants[id]; cached != nil {
+			request.grantID, request.grant = id, cached
+			return request, nil, nil
+		}
+	}
+	if peer.Logon != ([32]byte{}) {
+		id := grantID{scope: "all", logon: peer.Logon}
 		if cached := entry.grants[id]; cached != nil {
 			request.grantID, request.grant = id, cached
 			return request, nil, nil
@@ -156,8 +170,11 @@ func (e *Engine) beginSign(ctx context.Context, peer Peer, public []byte, flags 
 }
 
 func (e *Engine) ask(ctx context.Context, prompt Prompt) (Approval, error) {
+	if err := ctx.Err(); err != nil {
+		return Approval{}, err
+	}
 	if e.approve == nil {
-		return Approval{}, ErrDenied
+		return Approval{}, ErrUnavailable
 	}
 	if !reserve(e.approvals) {
 		return Approval{}, ErrBusy
@@ -180,8 +197,11 @@ func (e *Engine) ask(ctx context.Context, prompt Prompt) (Approval, error) {
 	select {
 	case decision := <-results:
 		if ctx.Err() == nil {
-			if decision.err != nil {
+			if errors.Is(decision.err, ErrDenied) {
 				return Approval{}, ErrDenied
+			}
+			if decision.err != nil {
+				return Approval{}, ErrUnavailable
 			}
 			return decision.approval, nil
 		}
@@ -193,18 +213,23 @@ func (e *Engine) ask(ctx context.Context, prompt Prompt) (Approval, error) {
 	return Approval{}, ctx.Err()
 }
 
-func approvedGrant(approval Approval, peer Peer, cacheAllowed bool) (grantID, error) {
+func approvedGrant(approval Approval, peer Peer, prompt Prompt) (grantID, error) {
+	if approval.Scope != "app" && approval.Candidate != 0 {
+		return grantID{}, ErrDenied
+	}
 	switch approval.Scope {
 	case "once":
 		return grantID{}, nil
-	case "client":
-		if cacheAllowed {
-			return grantID{scope: "client", instance: peer.Chain[0].Instance}, nil
+	case "app":
+		if prompt.CacheAllowed && approval.Candidate == prompt.AppCandidate {
+			return grantID{scope: "app", instance: peer.Chain[prompt.AppCandidate].Instance, descendants: prompt.appOwnsWindow}, nil
 		}
-	case "host":
-		if cacheAllowed && approval.Candidate > 0 && approval.Candidate < len(peer.Chain) {
-			return grantID{scope: "host", instance: peer.Chain[approval.Candidate].Instance}, nil
+	case "all":
+		if prompt.CacheAllowed && peer.Logon != ([32]byte{}) {
+			return grantID{scope: "all", logon: peer.Logon}, nil
 		}
+	case "unavailable":
+		return grantID{}, ErrUnavailable
 	}
 	return grantID{}, ErrDenied
 }
@@ -226,7 +251,7 @@ func (e *Engine) checkSignLocked(ctx context.Context, request signRequest) error
 		return err
 	}
 	if !request.peer.Connected() || !request.peer.Alive(request.peer.Chain[0].Instance) ||
-		(request.grantID.scope == "host" && !request.peer.Alive(request.grantID.instance)) {
+		(request.grantID.descendants && !request.peer.Alive(request.grantID.instance)) {
 		return ErrPeerGone
 	}
 	now := e.now()

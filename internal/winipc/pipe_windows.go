@@ -3,7 +3,6 @@
 package winipc
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -53,8 +52,7 @@ func Endpoint() (string, error) {
 }
 
 func endpoint(id logonIdentity) string {
-	sum := sha256.Sum256([]byte(id.sid.String()))
-	return fmt.Sprintf("%sopssh-agent-%x", localPrefix, sum[:8])
+	return fmt.Sprintf("%sopssh-agent-%x", localPrefix, id.digest[:8])
 }
 
 // Listen opens the opt-in public endpoint for this Windows logon.
