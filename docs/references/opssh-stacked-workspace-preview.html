@@ -1,0 +1,2242 @@
+<div id="opssh-stacked-workspace-preview" aria-label="opssh Stacked cards review">
+  <div class="ops-review-controls" role="group" aria-label="Review settings">
+    <label>Window size <select data-review="width"><option value="normal">Normal</option><option value="min">Minimum</option></select></label>
+    <label>Theme <select data-review="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <label>Language <select data-review="language"><option value="en">English</option><option value="zh-Hans">简体中文</option></select></label>
+    <label>Scenario <select data-review="scenario">
+      <option value="ready">Connected</option><option value="activity">Activity</option><option value="first-run">First run · signed out</option><option value="picker">Account picker</option>
+      <option value="cli-missing">CLI missing</option><option value="no-accounts">No accounts</option><option value="new-account">No allowed vaults</option>
+      <option value="no-access">No access request</option><option value="provider-failed">Provider denied</option><option value="vault-save">Vault save failure</option>
+      <option value="discover">Key discovery</option><option value="key-preload-failure">Key preload failure</option><option value="key-preload-partial">Partial bulk preload</option>
+      <option value="cache">Cache settings</option><option value="logs">Logging</option><option value="startup">1Password startup notification</option>
+      <option value="signing-toast">Signing notification</option><option value="signing-toast-once">Signing notification · cache off</option>
+      <option value="updates-available">Update available</option><option value="updates-unavailable">Update check failed</option><option value="updates-no-release">No stable release</option>
+    </select></label>
+    <label>Process <select data-review="elevation"><option value="standard">Standard</option><option value="elevated">Elevated</option></select></label>
+    <label>Agent switch <select data-review="defaultOutcome"><option value="success">Success</option><option value="service-absent">Service absent</option><option value="pipe-failure">Pipe unavailable</option><option value="service-pending">Service pending</option></select></label>
+    <output class="ops-review-status" aria-live="polite"></output>
+  </div>
+  <section class="ops-preview" data-variant="Stacked cards" aria-label="Stacked cards workspace">
+    <p class="ops-size"></p>
+    <div class="ops-stage"><div class="ops-frame"><div class="ops-app"></div></div></div>
+  </section>
+</div>
+
+<style>
+  #opssh-stacked-workspace-preview {
+    --mica: light-dark(#e7e7e7, #202020);
+    --pane: light-dark(#f3f3f3, #2c2c2c);
+    --card: light-dark(#fff, #2d2d2d);
+    --field: light-dark(#fff, #333);
+    --subtle: light-dark(#f4f4f4, #242424);
+    --ink: light-dark(#1a1a1a, #fff);
+    --quiet: light-dark(#555, #c7c7c7);
+    --line: light-dark(#e2e2e2, #3c3c3c);
+    --edge: light-dark(#d6d6d6, #494949);
+    --hover: light-dark(#ededed, #363636);
+    --selected: light-dark(#e8e8e8, #373737);
+    --accent: light-dark(#005fb8, #60cdff);
+    --on-accent: light-dark(#fff, #082a3b);
+    --good: light-dark(#16732c, #83d694);
+    --warn: light-dark(#865600, #ffd479);
+    --danger: light-dark(#ad2929, #ff9d9d);
+    --warn-bg: light-dark(#fff4ce, #3e341d);
+    --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    --mono: "Cascadia Mono", Consolas, monospace;
+    color-scheme: light dark;
+    color: var(--ink);
+    font: 14px/1.45 var(--font);
+  }
+  #opssh-stacked-workspace-preview .ops-app[data-theme="light"] { color-scheme: light; }
+  #opssh-stacked-workspace-preview .ops-app[data-theme="dark"] { color-scheme: dark; }
+  #opssh-stacked-workspace-preview * { box-sizing: border-box; }
+  #opssh-stacked-workspace-preview :is(h1,h2,h3,p,ul,dl,dd) { margin: 0; font-family: var(--font); }
+  #opssh-stacked-workspace-preview h1 { font-size: 20px; line-height: 1.2; font-weight: 600; }
+  #opssh-stacked-workspace-preview h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+  #opssh-stacked-workspace-preview h3 { font-size: 14px; font-weight: 600; }
+  #opssh-stacked-workspace-preview strong { font-weight: 600; }
+  #opssh-stacked-workspace-preview small { font-size: 12px; }
+  #opssh-stacked-workspace-preview :is(button,select,input) { font: inherit; color: inherit; }
+  #opssh-stacked-workspace-preview :is(button,select,input,a):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #opssh-stacked-workspace-preview :is(button,select,input):disabled { opacity: .46; }
+  #opssh-stacked-workspace-preview :is([data-lucide],.lucide) { width: 16px; height: 16px; flex: none; }
+  #opssh-stacked-workspace-preview .ops-review-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-block: 4px 10px; }
+  #opssh-stacked-workspace-preview .ops-review-controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--quiet); font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-review-controls select { min-height: 28px; }
+  #opssh-stacked-workspace-preview .ops-review-status { font-size: 12px; color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-size { margin: 0 0 6px; color: var(--quiet); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+  #opssh-stacked-workspace-preview .ops-stage { display: grid; justify-items: center; align-items: start; height: var(--stage-height); }
+  #opssh-stacked-workspace-preview .ops-frame { position: relative; width: var(--scaled-width); height: var(--scaled-height); }
+  #opssh-stacked-workspace-preview .ops-app { position: absolute; inset: 0 auto auto 0; transform: scale(var(--scale)); transform-origin: top left; }
+  #opssh-stacked-workspace-preview .ops-window {
+    display: grid; grid-template-rows: 48px minmax(0, 1fr); position: relative;
+    width: var(--window-width); height: var(--window-height); overflow: hidden; isolation: isolate;
+    border: 1px solid var(--edge); border-radius: 8px; background: var(--mica);
+  }
+  #opssh-stacked-workspace-preview .ops-titlebar, #opssh-stacked-workspace-preview .ops-title, #opssh-stacked-workspace-preview .ops-caption {
+    display: flex; align-items: center;
+  }
+  #opssh-stacked-workspace-preview .ops-titlebar { padding-inline-start: 16px; font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-titlebar .ops-title { gap: 16px; }
+  #opssh-stacked-workspace-preview .ops-titlebar .ops-app-icon { width: 16px; height: 16px; }
+  #opssh-stacked-workspace-preview .ops-window[data-narrow] .ops-titlebar { padding-inline-start: 0; }
+  #opssh-stacked-workspace-preview .ops-window[data-narrow] .ops-titlebar .ops-title { gap: 12px; }
+  #opssh-stacked-workspace-preview .ops-titlebar .ops-pane-toggle { width: 48px; min-height: 36px; }
+  #opssh-stacked-workspace-preview .ops-caption { margin-inline-start: auto; align-self: flex-start; color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-app-icon {
+    display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px;
+    border-radius: 4px; color: var(--on-accent); background: var(--accent);
+  }
+  #opssh-stacked-workspace-preview .ops-app-icon :is([data-lucide],.lucide) { width: 12px; height: 12px; }
+  #opssh-stacked-workspace-preview .ops-caption span { display: grid; place-items: center; position: relative; width: 46px; height: 32px; }
+  #opssh-stacked-workspace-preview .ops-caption span::before { content: ""; }
+  #opssh-stacked-workspace-preview .ops-caption .ops-min::before { width: 10px; height: 1px; background: currentColor; }
+  #opssh-stacked-workspace-preview .ops-caption .ops-max::before { width: 10px; height: 10px; border: 1px solid; }
+  #opssh-stacked-workspace-preview .ops-caption .ops-close::before, #opssh-stacked-workspace-preview .ops-caption .ops-close::after {
+    content: ""; position: absolute; width: 12px; height: 1px; background: currentColor; transform: rotate(45deg);
+  }
+  #opssh-stacked-workspace-preview .ops-caption .ops-close::after { transform: rotate(-45deg); }
+  #opssh-stacked-workspace-preview .ops-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); position: relative; min-width: 0; min-height: 0; }
+  #opssh-stacked-workspace-preview .ops-sidebar {
+    display: flex; flex-direction: column; gap: 4px; padding: 6px 4px; min-width: 0; min-height: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-sidebar ul { display: grid; gap: 4px; padding: 0; list-style: none; }
+  #opssh-stacked-workspace-preview .ops-sidebar ul:last-child { margin-top: auto; }
+  #opssh-stacked-workspace-preview :is(.ops-nav,.ops-icon-button) {
+    display: flex; position: relative; align-items: center; gap: 16px; min-height: 36px;
+    padding: 6px 12px; background: transparent; border: 0; border-radius: 4px; text-align: start;
+  }
+  #opssh-stacked-workspace-preview .ops-nav { width: 100%; }
+  #opssh-stacked-workspace-preview .ops-icon-button { justify-content: center; width: 36px; }
+  #opssh-stacked-workspace-preview :is(.ops-nav,.ops-icon-button):enabled:hover { background: var(--hover); }
+  #opssh-stacked-workspace-preview .ops-nav[aria-current="page"] { background: var(--selected); }
+  #opssh-stacked-workspace-preview .ops-nav[aria-current="page"]::before {
+    content: ""; position: absolute; inset: 50% auto auto 0; transform: translateY(-50%);
+    width: 3px; height: 16px; border-radius: 2px; background: var(--accent);
+  }
+  #opssh-stacked-workspace-preview .ops-window[data-narrow] .ops-layout { grid-template-columns: minmax(0, 1fr); }
+  #opssh-stacked-workspace-preview .ops-window[data-narrow] .ops-sidebar {
+    position: absolute; z-index: 3; inset: 0 auto 0 0; width: 224px; background: var(--pane);
+    border-start-end-radius: 8px; border-end-end-radius: 8px; box-shadow: 4px 4px 12px #0003;
+  }
+  #opssh-stacked-workspace-preview .ops-sidebar[hidden] { display: none; }
+  #opssh-stacked-workspace-preview .ops-pane-dismiss { position: absolute; z-index: 2; inset: 0 0 0 224px; }
+  #opssh-stacked-workspace-preview .ops-surface {
+    container: ops-content / inline-size;
+    display: grid; position: relative; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-main {
+    min-width: 0; min-height: 0; padding: 26px 26px 8px;
+    overflow: auto; overscroll-behavior: contain;
+  }
+  #opssh-stacked-workspace-preview .ops-window[data-narrow] .ops-main { padding: 15px 14px 8px; }
+  #opssh-stacked-workspace-preview .ops-main[data-enter] > :first-child { animation: ops-route-enter 180ms cubic-bezier(.16,.75,.26,1) both; }
+  @keyframes ops-route-enter { from { transform: translateY(12px); } to { transform: translateY(0); } }
+  #opssh-stacked-workspace-preview .ops-signedout .ops-main { display: grid; place-items: center; }
+  #opssh-stacked-workspace-preview .ops-stack { display: grid; align-content: start; gap: 16px; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-actions {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-heading, #opssh-stacked-workspace-preview .ops-section-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-width: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-heading > div:first-child { display: grid; gap: 4px; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-quiet { color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  #opssh-stacked-workspace-preview :is(.ops-button,select,input:not([type="checkbox"])) {
+    min-height: 32px; padding: 4px 10px; max-width: 100%;
+    border: 1px solid var(--edge); border-bottom-color: color-mix(in srgb, var(--edge) 75%, var(--quiet));
+    border-radius: 4px; background: var(--field);
+  }
+  #opssh-stacked-workspace-preview .ops-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    text-align: center; overflow-wrap: anywhere;
+  }
+  #opssh-stacked-workspace-preview .ops-button:enabled:hover { background: var(--hover); }
+  #opssh-stacked-workspace-preview .ops-button.ops-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  #opssh-stacked-workspace-preview .ops-button.ops-primary:enabled:hover { filter: brightness(.94); }
+  #opssh-stacked-workspace-preview :is(.ops-text-button,.ops-link) {
+    padding: 4px 1px; border: 0; background: transparent; color: var(--accent); text-decoration: none;
+  }
+  #opssh-stacked-workspace-preview :is(.ops-text-button,.ops-link):hover { text-decoration: underline; }
+  #opssh-stacked-workspace-preview .ops-status { display: inline-flex; align-items: baseline; gap: 7px; overflow-wrap: anywhere; }
+  #opssh-stacked-workspace-preview .ops-status::before {
+    content: ""; inline-size: 6px; block-size: 6px; border-radius: 50%; flex: none; align-self: center; background: var(--quiet);
+  }
+  #opssh-stacked-workspace-preview .ops-status[data-tone="success"]::before { background: var(--good); }
+  #opssh-stacked-workspace-preview .ops-status[data-tone="warning"]::before { background: var(--warn); }
+  #opssh-stacked-workspace-preview .ops-status[data-tone="danger"]::before { background: var(--danger); }
+  #opssh-stacked-workspace-preview .ops-rows, #opssh-stacked-workspace-preview .ops-table-wrap, #opssh-stacked-workspace-preview .ops-empty {
+    border: 1px solid var(--line); border-radius: 6px; background: var(--card); min-width: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-setting-group { display: grid; gap: 8px; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-key-counts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-key-counts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #opssh-stacked-workspace-preview .ops-setting-row {
+    display: grid; align-items: center; grid-template-columns: 18px minmax(0,1fr) auto;
+    padding: 11px 13px; gap: 10px; min-height: 52px;
+  }
+  #opssh-stacked-workspace-preview .ops-setting-row + .ops-setting-row { border-top: 1px solid var(--line); }
+  #opssh-stacked-workspace-preview .ops-setting-row p { font-size: 12px; color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-setting-row > div { min-width: 0; overflow-wrap: anywhere; }
+  @supports (appearance: base-select) {
+    #opssh-stacked-workspace-preview select:is([data-action^="cache:"],[data-action="log-level"],[data-action="choose-account"]),
+    #opssh-stacked-workspace-preview select:is([data-action^="cache:"],[data-action="log-level"],[data-action="choose-account"])::picker(select) {
+      appearance: base-select;
+    }
+    #opssh-stacked-workspace-preview select:is([data-action^="cache:"],[data-action="log-level"],[data-action="choose-account"])::picker(select) {
+      background: var(--card); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
+      padding: 4px; box-shadow: 0 8px 24px #0004; margin-top: 4px;
+    }
+    #opssh-stacked-workspace-preview select:is([data-action^="cache:"],[data-action="log-level"],[data-action="choose-account"]) option {
+      padding: 6px 10px; gap: 8px; border-radius: 3px; min-block-size: 30px;
+    }
+    #opssh-stacked-workspace-preview select:is([data-action^="cache:"],[data-action="log-level"],[data-action="choose-account"]) option:is(:hover,:focus-visible,:checked) {
+      background: var(--hover);
+    }
+  }
+  #opssh-stacked-workspace-preview .ops-setting-detail { grid-column: 2 / -1; }
+  #opssh-stacked-workspace-preview .ops-request-status { display: grid; gap: 3px; }
+  #opssh-stacked-workspace-preview .ops-request-status time { font-size: 12px; color: var(--quiet); }
+  #opssh-stacked-workspace-preview .ops-github-mark {
+    width: 16px; height: 16px; background: light-dark(#000, #fff);
+    mask: url("https://cdn.jsdelivr.net/gh/primer/octicons@v19.21.2/icons/mark-github-16.svg") center / contain no-repeat;
+  }
+  #opssh-stacked-workspace-preview .ops-switch { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #opssh-stacked-workspace-preview .ops-switch input {
+    appearance: none; position: relative; width: 40px; height: 20px; margin: 0;
+    border: 1px solid var(--quiet); border-radius: 12px; background: var(--field);
+  }
+  #opssh-stacked-workspace-preview .ops-switch input::before {
+    content: ""; position: absolute; top: 4px; left: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--quiet);
+  }
+  #opssh-stacked-workspace-preview .ops-switch input:checked { border-color: var(--accent); background: var(--accent); }
+  #opssh-stacked-workspace-preview .ops-switch input:checked::before { left: 24px; background: var(--on-accent); }
+  #opssh-stacked-workspace-preview .ops-field { display: grid; gap: 4px; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-preferences .ops-setting-group > .ops-rows {
+    display: grid; gap: 4px; background: transparent; border: 0;
+  }
+  #opssh-stacked-workspace-preview .ops-preferences .ops-setting-group > .ops-rows > .ops-setting-row {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+  }
+  #opssh-stacked-workspace-preview .ops-cache-list { display: grid; gap: 4px; }
+  #opssh-stacked-workspace-preview .ops-cache-card { padding: 0 13px; }
+  #opssh-stacked-workspace-preview .ops-cache-card[open] { padding-block-end: 13px; }
+  #opssh-stacked-workspace-preview .ops-cache-card > summary { min-height: 52px; padding-block: 11px; align-items: center; list-style: none; }
+  #opssh-stacked-workspace-preview .ops-cache-card > summary::-webkit-details-marker { display: none; }
+  #opssh-stacked-workspace-preview .ops-cache-card > summary:focus-visible { outline: 2px solid var(--ink); }
+  #opssh-stacked-workspace-preview .ops-cache-head .ops-cache-chevron { margin-inline-start: auto; }
+  #opssh-stacked-workspace-preview .ops-cache-card[open] .ops-cache-chevron { transform: rotate(180deg); }
+  #opssh-stacked-workspace-preview .ops-cache-head { display: flex; align-items: start; gap: 10px; }
+  #opssh-stacked-workspace-preview .ops-cache-head > :first-child { margin-top: 2px; }
+  #opssh-stacked-workspace-preview .ops-cache-grid {
+    display: flex; flex-wrap: wrap; align-items: start; gap: 8px 12px;
+    border-top: 1px solid var(--line); margin: 10px 0 0 26px; padding-top: 10px;
+  }
+  #opssh-stacked-workspace-preview .ops-cache-mode { flex: 0 1 200px; }
+  #opssh-stacked-workspace-preview .ops-cache-duration { flex: 0 1 110px; }
+  #opssh-stacked-workspace-preview .ops-cache-grid input, #opssh-stacked-workspace-preview .ops-cache-grid select { width: 100%; }
+  #opssh-stacked-workspace-preview .ops-cache-hint { margin: 6px 0 0 26px; font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-cache-error { font-size: 12px; color: var(--danger); }
+  #opssh-stacked-workspace-preview .ops-cache-grid input[aria-invalid="true"] { border-color: var(--danger); }
+  #opssh-stacked-workspace-preview .ops-code {
+    display: block; margin: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--subtle); font: 12px/1.45 var(--mono); overflow-wrap: anywhere; white-space: pre-wrap;
+  }
+  #opssh-stacked-workspace-preview .ops-about-brand { display: flex; align-items: center; gap: 15px; padding-block: 8px; }
+  #opssh-stacked-workspace-preview .ops-about-brand .ops-app-icon { width: 48px; height: 48px; border-radius: 8px; }
+  #opssh-stacked-workspace-preview .ops-about-brand .ops-app-icon :is([data-lucide],.lucide) { width: 25px; height: 25px; }
+  #opssh-stacked-workspace-preview .ops-infobar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 11px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--card);
+  }
+  #opssh-stacked-workspace-preview .ops-infobar > p { flex: 1; overflow-wrap: anywhere; }
+  #opssh-stacked-workspace-preview .ops-infobar > :first-child { color: var(--accent); }
+  #opssh-stacked-workspace-preview .ops-infobar[data-kind="warning"] { background: var(--warn-bg); }
+  #opssh-stacked-workspace-preview .ops-infobar[data-kind="warning"] > :first-child { color: var(--warn); }
+  #opssh-stacked-workspace-preview .ops-feedback {
+    position: absolute; z-index: 5; inset: 9px 14px auto; max-width: 480px; margin-inline: auto;
+    border-radius: 4px; box-shadow: 0 6px 20px #0003;
+  }
+  #opssh-stacked-workspace-preview .ops-feedback .ops-icon-button { flex: none; }
+  #opssh-stacked-workspace-preview .ops-table { width: 100%; border-collapse: collapse; text-align: start; }
+  #opssh-stacked-workspace-preview .ops-table :is(th,td) {
+    padding: 9px 11px; text-align: start; vertical-align: middle; overflow-wrap: anywhere;
+  }
+  #opssh-stacked-workspace-preview .ops-table thead th { color: var(--quiet); font-size: 12px; font-weight: 600; background: var(--subtle); }
+  #opssh-stacked-workspace-preview .ops-table tbody > tr { border-top: 1px solid var(--line); }
+  #opssh-stacked-workspace-preview .ops-table tbody th { font-weight: 400; }
+  #opssh-stacked-workspace-preview .ops-table th:first-child { border-start-start-radius: 6px; }
+  #opssh-stacked-workspace-preview .ops-table th:last-child { border-start-end-radius: 6px; }
+  #opssh-stacked-workspace-preview .ops-key-id { display: grid; min-width: 0; gap: 2px; }
+  #opssh-stacked-workspace-preview .ops-key-id .ops-mono { font-size: 11px; }
+  #opssh-stacked-workspace-preview .ops-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  #opssh-stacked-workspace-preview .ops-row-actions .ops-button, #opssh-stacked-workspace-preview .ops-grant-table .ops-button { min-height: 29px; font-size: 12px; padding-inline: 8px; }
+  #opssh-stacked-workspace-preview .ops-expanded > td { background: var(--subtle); }
+  #opssh-stacked-workspace-preview .ops-grant-pane { display: grid; gap: 8px; padding: 4px 2px 5px 10px; border-inline-start: 2px solid var(--edge); }
+  #opssh-stacked-workspace-preview .ops-grant-table { background: var(--card); }
+  #opssh-stacked-workspace-preview .ops-grant-table :is(th,td) { font-size: 12px; padding-block: 7px; }
+  #opssh-stacked-workspace-preview .ops-activity-page { display: flex; flex-direction: column; min-height: 100%; height: 100%; }
+  #opssh-stacked-workspace-preview .ops-activity-page > :not(.ops-activity-scroll) { flex-shrink: 0; }
+  #opssh-stacked-workspace-preview .ops-activity-scroll {
+    flex: 1 1 auto; min-height: 88px; max-width: 100%; overflow: scroll;
+    overscroll-behavior: contain; scrollbar-gutter: stable;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-scroll thead th { position: sticky; top: 0; z-index: 1; }
+  #opssh-stacked-workspace-preview .ops-activity-table { min-width: 960px; table-layout: fixed; }
+  #opssh-stacked-workspace-preview .ops-activity-table .ops-col-process { width: 56%; }
+  #opssh-stacked-workspace-preview .ops-activity-table .ops-col-key { width: 14%; }
+  #opssh-stacked-workspace-preview .ops-activity-table .ops-col-result { width: 11%; }
+  #opssh-stacked-workspace-preview .ops-activity-table .ops-col-time { width: 19%; }
+  #opssh-stacked-workspace-preview .ops-activity-app { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  #opssh-stacked-workspace-preview .ops-activity-command {
+    display: block; max-width: 100%; margin-top: 4px; padding: 4px 7px; border-radius: 4px;
+    background: var(--subtle); font-size: 12px; white-space: pre;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: transparent transparent;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-command:is(:hover,[data-wheel-scrolling]) {
+    scrollbar-color: var(--quiet) transparent;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  #opssh-stacked-workspace-preview .ops-activity-filter { position: relative; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-button[aria-expanded="true"],
+  #opssh-stacked-workspace-preview .ops-activity-filter-button[data-filtered="true"] {
+    background: var(--selected);
+  }
+  #opssh-stacked-workspace-preview .ops-activity-filter-menu {
+    position: absolute; z-index: 3; inset: calc(100% + 4px) auto auto 0; width: max-content;
+    min-width: 145px; max-width: 240px; max-height: 225px; overflow: auto;
+    display: grid; gap: 2px; padding: 5px;
+    border: 1px solid var(--edge); border-radius: 6px; background: var(--card); box-shadow: 0 5px 15px #0003;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-filter-option {
+    display: flex; align-items: center; gap: 9px; padding: 5px 8px; min-height: 32px;
+    border-radius: 4px; overflow-wrap: anywhere;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-filter-option:hover { background: var(--hover); }
+  #opssh-stacked-workspace-preview .ops-activity-filter-option input { flex: none; accent-color: var(--accent); }
+  #opssh-stacked-workspace-preview .ops-activity-filter-menu[data-application-filter] { width: 232px; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-search { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px; padding: 2px; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-search input { width: 100%; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-search input::-webkit-search-cancel-button { appearance: none; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-search .ops-icon-button { min-height: 32px; width: 32px; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-options { max-height: 164px; overflow-y: auto; }
+  #opssh-stacked-workspace-preview .ops-activity-filter-empty { padding: 7px 8px; font-size: 12px; }
+  #opssh-stacked-workspace-preview :is(.ops-activity-filter-option,.ops-activity-filter-search button,.ops-activity-filter-empty)[hidden] { display: none; }
+  #opssh-stacked-workspace-preview .ops-activity-sort {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px; margin-inline-start: -4px;
+    background: transparent; border: 0; border-radius: 4px; white-space: nowrap;
+  }
+  #opssh-stacked-workspace-preview .ops-activity-sort:hover { background: var(--hover); }
+  #opssh-stacked-workspace-preview .ops-activity-sort :is([data-lucide],.lucide) { width: 12px; height: 12px; }
+  #opssh-stacked-workspace-preview .ops-activity-count { color: var(--quiet); font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-empty { display: grid; justify-items: center; align-content: center; gap: 9px; padding: 24px 12px; text-align: center; }
+  #opssh-stacked-workspace-preview .ops-login {
+    display: grid; justify-items: center; gap: 12px; max-width: 320px; padding: 12px; text-align: center;
+  }
+  #opssh-stacked-workspace-preview .ops-login h1 { font-size: 28px; }
+  #opssh-stacked-workspace-preview .ops-login .ops-app-icon { width: 40px; height: 40px; }
+  #opssh-stacked-workspace-preview .ops-login .ops-app-icon :is([data-lucide],.lucide) { width: 22px; height: 22px; }
+  #opssh-stacked-workspace-preview .ops-dialog {
+    position: absolute; z-index: 7; inset: 0; margin: auto;
+    width: min(420px, calc(100% - 24px)); height: max-content; max-height: calc(100% - 22px);
+    padding: 22px; border: 1px solid var(--edge); border-radius: 8px;
+    background: var(--card); color: var(--ink); font: inherit; box-shadow: 0 8px 24px #0004;
+  }
+  #opssh-stacked-workspace-preview .ops-dialog-backdrop { position: absolute; z-index: 6; inset: 0; background: #0006; }
+  #opssh-stacked-workspace-preview .ops-dialog .ops-actions { justify-content: end; }
+  #opssh-stacked-workspace-preview .ops-agent-progress { display: grid; gap: 12px; }
+  #opssh-stacked-workspace-preview .ops-agent-progress[hidden] { display: none; }
+  #opssh-stacked-workspace-preview [data-agent-actions]:empty { display: none; }
+  #opssh-stacked-workspace-preview .ops-agent-steps { list-style: none; margin: 0; padding: 0; }
+  #opssh-stacked-workspace-preview .ops-agent-steps li {
+    display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 8px; align-items: start;
+    padding: 8px 0;
+  }
+  #opssh-stacked-workspace-preview .ops-agent-steps li > :first-child { margin-top: 2px; }
+  #opssh-stacked-workspace-preview .ops-agent-steps li[data-phase="done"] > :first-child { color: var(--good); }
+  #opssh-stacked-workspace-preview .ops-agent-steps li[data-phase="failed"] > :first-child { color: var(--danger); }
+  #opssh-stacked-workspace-preview .ops-agent-steps li[data-phase="pending"] > :first-child { color: var(--warn); }
+  #opssh-stacked-workspace-preview .ops-agent-spin {
+    width: 14px; height: 14px; border: 2px solid var(--edge); border-top-color: var(--accent);
+    border-radius: 50%; animation: ops-agent-spin .85s linear infinite;
+  }
+  @keyframes ops-agent-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #opssh-stacked-workspace-preview :is(.ops-agent-spin,.ops-main[data-enter] > :first-child) { animation: none; }
+  }
+  #opssh-stacked-workspace-preview .ops-toast {
+    position: absolute; inset: auto 12px 12px auto; z-index: 3; width: min(315px, calc(100% - 24px));
+    padding: 13px; border: 1px solid var(--edge); border-radius: 8px; background: var(--card); box-shadow: 0 5px 18px #0004;
+  }
+  #opssh-stacked-workspace-preview .ops-signing-toast { width: min(410px, calc(100% - 24px)); padding: 0; gap: 0; }
+  #opssh-stacked-workspace-preview .ops-signing-toast .ops-section-head { padding: 4px 9px 2px 11px; font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-signing-body { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; padding: 7px 12px 11px; }
+  #opssh-stacked-workspace-preview .ops-process-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 7px; color: white; background: #1753c9; }
+  #opssh-stacked-workspace-preview .ops-signing-body code { display: block; font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-signing-toast .ops-actions { padding: 7px 9px 9px; border-top: 1px solid var(--line); }
+  #opssh-stacked-workspace-preview .ops-signing-toast .ops-actions button { flex: 1 1 auto; font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #opssh-stacked-workspace-preview .ops-provider { display: grid; gap: 8px; min-width: 0; }
+  #opssh-stacked-workspace-preview .ops-provider > h2, #opssh-stacked-workspace-preview .ops-provider > .ops-account-notice { grid-column: 1 / -1; }
+  #opssh-stacked-workspace-preview .ops-account-stack { display: grid; gap: 4px; }
+  #opssh-stacked-workspace-preview .ops-vault-list { border-top: 1px solid var(--line); }
+  #opssh-stacked-workspace-preview .ops-sync-time { font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-vault-hint { padding: 8px 13px; border-top: 1px solid var(--line); font-size: 12px; }
+  #opssh-stacked-workspace-preview .ops-language-hint { gap: 8px; }
+  #opssh-stacked-workspace-preview .ops-setting-detail .ops-request-status { margin-top: 0; }
+  #opssh-stacked-workspace-preview .ops-key-scroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+  #opssh-stacked-workspace-preview .ops-key-table { min-width: 920px; }
+  #opssh-stacked-workspace-preview .ops-key-table .ops-key-id { min-width: 220px; }
+  #opssh-stacked-workspace-preview .ops-key-table .ops-button { white-space: nowrap; }
+  #opssh-stacked-workspace-preview .ops-key-table .ops-row-actions { flex-wrap: nowrap; }
+  #opssh-stacked-workspace-preview .ops-activity-command { user-select: text; }
+  #opssh-stacked-workspace-preview .ops-copy-field { width: 100%; padding: 8px; background: var(--field); color: var(--ink); border: 1px solid var(--line); }
+  @container ops-content (max-width: 475px) {
+    #opssh-stacked-workspace-preview .ops-activity-filters { position: relative; }
+    #opssh-stacked-workspace-preview .ops-activity-filter { position: static; }
+    #opssh-stacked-workspace-preview .ops-activity-filter-menu { max-width: min(240px, 100%); }
+    #opssh-stacked-workspace-preview .ops-setting-row { grid-template-columns: 16px minmax(0,1fr); padding: 9px; }
+    #opssh-stacked-workspace-preview .ops-setting-row > :nth-child(3) { grid-column: 2; justify-self: start; }
+    #opssh-stacked-workspace-preview .ops-grant-table colgroup { display: none; }
+    #opssh-stacked-workspace-preview .ops-grant-table > thead { display: none; }
+    #opssh-stacked-workspace-preview .ops-grant-table, #opssh-stacked-workspace-preview .ops-grant-table > tbody { display: block; }
+    #opssh-stacked-workspace-preview .ops-grant-table > tbody > tr { display: flex; flex-wrap: wrap; align-items: center; }
+    #opssh-stacked-workspace-preview .ops-grant-table > tbody > tr > :is(td,th) { display: block; max-width: 100%; }
+    #opssh-stacked-workspace-preview .ops-grant-table > tbody > tr > :first-child { flex: 1 1 100%; }
+    #opssh-stacked-workspace-preview .ops-grant-table td[data-label]::before {
+      content: attr(data-label); display: block; color: var(--quiet); font-family: var(--font); font-size: 11px;
+    }
+  }
+  @media (pointer: coarse) {
+    #opssh-stacked-workspace-preview :is(button,select,input:not([type="checkbox"])) { min-height: 44px; }
+    #opssh-stacked-workspace-preview :is(input,select) { font-size: 16px; }
+    #opssh-stacked-workspace-preview .ops-activity-filter-option { min-height: 44px; }
+  }
+  #opssh-stacked-workspace-preview .ops-inline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  #opssh-stacked-workspace-preview .ops-row-note { display: grid; justify-items: start; gap: 5px; margin-top: 6px; }
+  #opssh-stacked-workspace-preview .ops-row-error { color: var(--danger); }
+  #opssh-stacked-workspace-preview .ops-scan { display: grid; gap: 8px; padding: 12px 14px; }
+  #opssh-stacked-workspace-preview .ops-scan progress { inline-size: 100%; block-size: 8px; accent-color: var(--accent); }
+  #opssh-stacked-workspace-preview .ops-picker-account { min-width: 0; overflow-wrap: anywhere; }
+  #opssh-stacked-workspace-preview .ops-login .ops-account-notice { text-align: start; }
+  #opssh-stacked-workspace-preview .ops-login .ops-account-notice .ops-actions { justify-content: center; }
+  #opssh-stacked-workspace-preview .ops-setting-row > div { min-width: 0; overflow-wrap: anywhere; }
+</style>
+
+<script>
+(() => {
+  const review = document.getElementById("opssh-stacked-workspace-preview");
+  const minimumSize = { width: 1000, height: 560 };
+  const normalSize = { width: 1240, height: 700 };
+  const dimensions = () => preview.width === "min" ? minimumSize : normalSize;
+  const systemLanguage = /^zh(?:$|-(?:hans|cn|sg)(?:-|$))/i.test(navigator.language) ? "zh-Hans" : "en";
+  const resolveLanguage = language => language === "system" ? systemLanguage : language;
+  const preview = {
+    width: review.dataset.previewWidth || "normal", theme: review.dataset.previewTheme || "system",
+    language: review.dataset.previewLanguage || "en", scenario: review.dataset.previewScenario || "ready",
+    elevation: review.dataset.previewElevation || "standard", defaultOutcome: review.dataset.previewOutcome || "success"
+  };
+  if (preview.scenario === "unbound") preview.scenario = "first-run";
+  if (preview.scenario === "elevated") Object.assign(preview, { scenario: "ready", elevation: "elevated" });
+  const controls = [...review.querySelectorAll("[data-review]")];
+  const reviewStatus = review.querySelector(".ops-review-status");
+  for (const control of controls) {
+    const key = control.dataset.review;
+    if ([...control.options].some(option => option.value === preview[key])) control.value = preview[key];
+    else preview[key] = control.value;
+  }
+
+  // English wording follows the tray catalogs for the shared screens. Proposal-only copy is kept here with it.
+  const english = new Map(Object.entries({
+    "清除活动": "Clear activity",
+    "重置筛选": "Reset filters",
+    "应用名称": "Application",
+    "密钥名称": "Key name",
+    "结果": "Result",
+    "SSH 活动列表": "SSH activity list",
+    "暂无 SSH 活动。": "No SSH activity yet.",
+    "没有符合当前筛选条件的活动。": "No activity matches the current filters.",
+    "应用": "Application",
+    "时间": "Time",
+    "SSH 请求命令": "SSH request command",
+    "已签名": "Signed",
+    "已拒绝": "Denied",
+    "已取消": "Canceled",
+    "失败": "Failed",
+    "清除活动？": "Clear activity?",
+    "取消": "Cancel",
+    "活动已清除。": "Activity cleared.",
+    "opssh 导航": "opssh navigation",
+    "切换导航窗格": "Toggle navigation pane",
+    "SSH 密钥": "SSH Keys",
+    "活动": "Activity",
+    "1Password 账户": "1Password account",
+    "已选账户": "Selected account",
+    "连接 1Password": "Connect 1Password",
+    "连接 1Password 账户": "Connect a 1Password account",
+    "切换账户": "Switch account",
+    "切换 1Password 账户": "Switch 1Password account",
+    "选择要授权的 1Password 账户": "Choose a 1Password account to authorize",
+    "选择 1Password 账户": "Choose a 1Password account",
+    "在 1Password 中继续": "Continue in 1Password",
+    "重试": "Try again",
+    "移除账户": "Remove account",
+    "移除当前账户": "Remove the current account",
+    "移除 opssh 中的账户？": "Remove the account from opssh?",
+    "1Password 访问记录": "1Password access history",
+    "上次访问未获授权": "Last access was not authorized",
+    "上次访问成功": "Last access succeeded",
+    "Windows 尚未确认服务操作的结果。": "Windows has not confirmed the result of the service operation.",
+    "opssh 已切回专用管道。": "opssh switched to its dedicated pipe.",
+    "上次访问失败": "Last access failed",
+    "尚未请求": "No request yet",
+    "上次请求时间": "Last request time",
+    "允许发现的保险库": "Vaults allowed for discovery",
+    "正在保存…": "Saving…",
+    "启动": "Startup",
+    "登录 Windows 时启动": "Start at Windows sign-in",
+    "等待 1Password 启动": "Wait for 1Password to start",
+    "SSH 集成": "SSH integration",
+    "设为系统默认 SSH 代理": "Set the default SSH agent",
+    "设为系统默认 SSH 代理？": "Use opssh as the system default SSH agent?",
+    "设为默认": "Set as default",
+    "恢复 Windows OpenSSH 代理？": "Restore the Windows OpenSSH agent?",
+    "恢复 OpenSSH": "Restore OpenSSH",
+    "恢复 Windows OpenSSH 代理": "Restore the Windows OpenSSH agent",
+    "检查 OpenSSH 服务和默认 SSH 管道": "Check OpenSSH and the default SSH pipe",
+    "检查 Windows OpenSSH 代理服务": "Check the Windows OpenSSH agent service",
+    "停止 Windows OpenSSH 代理服务": "Stop the Windows OpenSSH agent service",
+    "禁用 Windows OpenSSH 代理服务": "Disable the Windows OpenSSH agent service",
+    "为 opssh 取得默认 SSH 管道": "Reserve the default SSH pipe for opssh",
+    "释放默认 SSH 管道": "Release the default SSH pipe",
+    "启动 Windows OpenSSH 代理服务": "Start the Windows OpenSSH agent service",
+    "保存并验证代理设置": "Save and verify the SSH agent selection",
+    "恢复切换前的状态": "Restore the previous SSH agent state",
+    "系统未安装 Windows OpenSSH 代理服务。": "The Windows OpenSSH agent service is absent.",
+    "进行中": "In progress",
+    "完成": "Done",
+    "跳过": "Skipped",
+    "待确认": "Pending",
+    "设置完成。opssh 现为系统默认 SSH 代理。": "Setup complete. opssh is now the default SSH agent.",
+    "关闭": "Close",
+    "当前 PowerShell 会话": "Current PowerShell session",
+    "复制命令": "Copy command",
+    "已复制 PowerShell 命令。": "PowerShell command copied.",
+    "时长（秒）": "Duration (seconds)",
+    "保留方式": "Retention mode",
+    "直到 opssh 退出": "Until opssh exits",
+    "私钥仅用于当前请求，完成后释放。": "Release the private key when the current request finishes.",
+    "每次请求单独批准。": "Approve each request separately.",
+    "从缓存建立时开始计时。": "Time starts when the cache entry is created.",
+    "在指定时长内未使用时清除。": "Clear after the specified time without use.",
+    "退出时清除，也可手动清除。": "Clear when opssh exits. You can also clear it manually.",
+    "偏好": "Preferences",
+    "启动时自动检查更新": "Automatically check for updates at startup",
+    "版本和更新": "Version and updates",
+    "当前版本": "Current version",
+    "检查中…": "Checking…",
+    "项目信息": "Project information",
+    "开发者": "Developer",
+    "许可证": "License",
+    "发现 SSH 密钥": "Discover SSH keys",
+    "取消同步": "Cancel sync",
+    "正在扫描保险库": "Scanning vaults",
+    "正在读取 SSH 公钥": "Reading SSH public keys",
+    "预加载全部私钥": "Preload all private keys",
+    "清除已加载私钥": "Clear loaded private keys",
+    "撤销全部授权": "Revoke all approvals",
+    "私钥缓存设为「不缓存」。签名时会临时读取私钥。": "Private key caching is off. The agent reads a private key temporarily when signing.",
+    "密钥": "SSH key",
+    "私钥加载状态": "Private key status",
+    "授权": "Approvals",
+    "操作": "Actions",
+    "展开": "Expand",
+    "预加载私钥": "Preload private key",
+    "清除私钥缓存": "Clear private key",
+    "撤销该密钥授权": "Revoke key approvals",
+    "已加载": "Loaded",
+    "未加载": "Unloaded",
+    "到期时间": "Expires",
+    "撤销此授权": "Revoke approval",
+    "日志": "Logs",
+    "日志目录": "Log directory",
+    "打开目录": "Open directory",
+    "启用日志": "Enable logs",
+    "日志级别": "Log level",
+    "启用日志后可更改。": "Turn on logs to change the level.",
+    "日志占用空间": "Log disk usage",
+    "清理日志": "Clear logs",
+    "清理诊断日志？": "Clear diagnostic logs?",
+    "日志已清理。": "Logs cleared.",
+    "私钥缓存": "Private-key cache",
+    "批准缓存": "Approval cache",
+    "清除已加载的私钥": "Evict loaded keys",
+    "连接": "Connect",
+    "关于": "About",
+    "设置": "Settings",
+    "账户": "Account",
+    "公钥索引": "Public key index",
+    "已加载的私钥": "Loaded private keys",
+    "缓存策略": "Cache policies",
+    "版本": "Version",
+    "已就绪": "Ready",
+    "不可用": "Unavailable",
+    "秒": "Seconds",
+    "不缓存": "Do not cache",
+    "固定时长": "Fixed duration",
+    "空闲超时": "Idle timeout",
+    "外观": "Appearance",
+    "语言": "Language",
+    "跟随系统": "Use system setting",
+    "简体中文": "简体中文",
+    "主题": "Theme",
+    "浅色": "Light",
+    "深色": "Dark",
+    "更新": "Updates",
+    "检查更新": "Check for updates",
+    "自动检查更新": "Automatically check for updates",
+    "开": "On",
+    "关": "Off",
+    "移除": "Remove",
+    "排除": "Exclude",
+    "拒绝": "Deny",
+    "选择账户": "Choose account",
+    "稍后": "Later",
+    "关闭提示": "Dismiss message",
+    "进程有效期间保留，可提前撤销，退出时清除。": "Keep until opssh exits or the approved app exits. You can also revoke approvals earlier.",
+    "重新打开": "Reopen",
+    "同步 SSH 密钥": "Sync SSH keys",
+    "批量操作": "Bulk actions",
+    "请先允许至少一个保险库，再同步 SSH 密钥。": "Allow at least one vault, then sync SSH keys.",
+    "已扫描保险库": "Vaults scanned",
+    "SSH 密钥统计": "SSH key count",
+    "把公钥": "public keys",
+    "项进程授权": "signing approvals",
+    "进程授权": "Signing approvals",
+    "复制公钥": "Copy public key",
+    "此密钥暂无进程授权。": "This key has no signing approvals.",
+    "进程名称": "Application",
+    "活动筛选": "Activity filters",
+    "SSH 活动": "SSH activity",
+    "上次成功同步 ·": "Last successful sync ·",
+    "上次成功同步 · 从未": "Last successful sync · Never",
+    "从未": "Never",
+    "同步保险库": "Sync vaults",
+    "更改未保存，已恢复上次设置。": "Change not saved. The previous setting was restored.",
+    "正在查找此设备上的 1Password 账户…": "Looking for 1Password accounts on this device…",
+    "未找到 1Password CLI。安装并在 1Password 中启用 CLI 集成后，点击重试。": "Install the official 1Password CLI 2, enable CLI integration in the desktop app, then try again.",
+    "没有其他可切换的账户。请先在 1Password 桌面应用中登录另一个账户。": "Sign in to another account in the 1Password desktop app to switch to it here.",
+    "1Password 桌面应用中没有已登录的账户。登录后重试。": "Sign in to an account in the 1Password desktop app, then try again.",
+    "Windows 通知演示": "Windows notification preview",
+    "关闭通知": "Dismiss notification",
+    "1Password 已就绪": "1Password is ready",
+    "1Password 授权": "1Password authorization",
+    "为": "Request authorization for",
+    "请求授权。": ".",
+    "新账户授权后会清除旧账户的保险库范围、密钥、授权和活动。": "Connecting a different account clears the previous account’s vault scope, keys, approvals, and activity.",
+    "模拟批准": "Simulate approval",
+    "将清除": "Clear",
+    "在 opssh 中的保险库范围、公钥索引、私钥缓存、进程授权和活动。": "vault scope, public index, loaded private keys, approvals, and activity in opssh.",
+    "请选择并复制 OpenSSH 公钥。": "Select and copy the OpenSSH public key.",
+    "OpenSSH 公钥": "OpenSSH public key",
+    "需要管理员批准": "Administrator approval required",
+    "切换进度": "Switch progress",
+    "切换步骤": "Switch steps",
+    "未找到 OpenSSH 代理服务。": "The Windows OpenSSH agent service is absent.",
+    "服务正在运行，启动类型为自动。已检查默认管道。": "The service is running and starts automatically. The default pipe was checked.",
+    "服务已停止，启动类型为禁用。": "The service is stopped and disabled.",
+    "opssh 已开始监听默认管道。": "opssh is listening on the default SSH pipe.",
+    "已保存选择，已确认监听状态。": "Saved the selection and confirmed the listener state.",
+    "将 Windows OpenSSH 代理设为自动启动": "Set the OpenSSH agent service to automatic",
+    "设置完成。opssh 已切回专用管道，Windows OpenSSH 代理服务不存在。": "opssh now uses its dedicated pipe. The Windows OpenSSH agent service is absent.",
+    "设置完成。已恢复 Windows OpenSSH 代理。": "The Windows OpenSSH agent was restored. opssh now uses its dedicated pipe.",
+    "已保留恢复记录。请先检查 Windows OpenSSH 代理服务状态。": "Recovery state was saved. Check the Windows OpenSSH agent service before retrying.",
+    "默认 SSH 管道已被占用。": "The default SSH pipe is in use.",
+    "无法释放默认 SSH 管道。": "Could not release the default SSH pipe.",
+    "已确认原服务和管道状态。": "Restored the previous service and pipe state.",
+    "切换失败，已恢复原设置。": "Could not switch the default agent. The previous setting was restored.",
+    "已排除此保险库及其密钥和授权。": "Removed the vault, its keys, and its approvals from the scope.",
+    "已选中命令，按 Ctrl+C 复制。": "Command selected. Press Ctrl+C to copy.",
+    "剪贴板不可用，请手动选择并复制命令。": "Clipboard unavailable. Select and copy the command.",
+    "已复制 OpenSSH 公钥。": "OpenSSH public key copied.",
+    "正在检查更新…": "Checking for updates…",
+    "演示结果：当前已是最新版本。": "Preview result: you have the latest stable version.",
+    "演示结果：检查失败，可重试。": "Preview result: the update check failed. Try again.",
+    "保险库列表已更新。": "Vault list synced.",
+    "已取消同步，保留上次结果。": "Sync canceled. The previous result was kept.",
+    "预览操作：在文件资源管理器中打开日志目录。": "Preview action: open the log directory in File Explorer.",
+    "已预加载这把密钥的私钥。": "Private key preloaded.",
+    "已清除这把密钥的私钥缓存。": "Private key cache cleared.",
+    "已预加载全部私钥。": "All private keys preloaded.",
+    "已撤销这把密钥的全部进程授权。": "All signing approvals for this key revoked.",
+    "已撤销该进程的授权。": "Signing approval revoked.",
+    "已撤销全部进程授权。": "All signing approvals revoked.",
+    "1Password 就绪后通知你选择账户。": "Get a notification to choose an account when 1Password is ready.",
+    "请先启用登录时启动。": "Turn on startup at sign-in first.",
+    "仅影响当前会话。": "Applies to the current session.",
+    "使用 1Password 中的 SSH 密钥签名。": "Sign with SSH keys stored in 1Password.",
+    "发现新版本时通知你。": "Notify me when an update is available.",
+    "尚未同步公钥。": "No public keys synced yet.",
+    "所选保险库中没有 SSH 密钥。": "No SSH keys in the selected vaults.",
+    "请在下次访问时授权。": "Authorize the next request in 1Password.",
+    "取消允许会立即移除对应密钥和授权。新增公钥会在下次同步密钥时出现。": "Disallowing a vault removes its keys and approvals immediately. New public keys appear after the next key sync.",
+    "请先登录 1Password 桌面应用。": "Sign in to the 1Password desktop app first.",
+    "可能需要在 1Password 中授权。": "1Password may ask you to authorize access.",
+    "删除现有日志，释放 1.4 MB。日志开启时会继续记录。": "Delete the current logs and free 1.4 MB. Logging continues while enabled.",
+    "opssh 将接管默认 SSH 管道。若 OpenSSH 代理服务设为自动且正在运行，将停止并禁用该服务。": "opssh will take over the default SSH pipe. If the OpenSSH agent service starts automatically and is running, it will be stopped and disabled.",
+    "opssh 将切回专用管道。若已安装 OpenSSH，将代理服务设为自动并启动。": "opssh will return to its dedicated pipe. If OpenSSH is installed, its agent service will be set to automatic and started.",
+    "删除所有 SSH 活动记录。": "Delete all SSH activity records.",
+    "已允许保险库。": "Vault allowed.",
+    "账户已连接。": "Account connected."
+  }));
+  english.set("搜索应用", "Search applications");
+  english.set("清除搜索", "Clear search");
+  english.set("没有匹配的应用。", "No matching applications.");
+  english.set("授权此应用", "Allow this app");
+  english.set("仅授权请求", "Allow once");
+  english.set("Windows 通知 · SSH 签名请求", "Windows notification · SSH signing request");
+  english.set("正在从 GitHub 检查更新…", "Checking GitHub…");
+  english.set("已是最新的正式版本。", "You have the latest stable version.");
+  english.set("有新版本 0.2.0 可用。", "Version 0.2.0 is available.");
+  english.set("无法检查更新，请稍后重试。", "Could not check for updates. Try again later.");
+  english.set("GitHub 上还没有正式发行版。", "No stable release has been published on GitHub.");
+  english.set("打开 GitHub 发行页", "Open GitHub Releases");
+  english.set("正在加载", "Loading");
+  english.set("加载失败", "Load failed");
+  english.set("重试预加载", "Retry preload");
+  english.set("1Password 未返回私钥。请检查所选的 SSH 密钥项目。", "1Password did not return a private key. Check the selected SSH key item.");
+  english.set("部分私钥未能加载。请检查失败的密钥。", "Some private keys could not load. Check each failed key.");
+  english.set("请输入 1 到 2,592,000 之间的整数。", "Enter a whole number from 1 to 2,592,000.");
+  english.set("设为系统默认 SSH 代理", "Use as the system default SSH agent");
+  english.set("清除私钥缓存", "Clear private key");
+  english.set("不缓存", "Do not cache");
+  english.set("简体中文", "简体中文");
+  const formats = [
+    [/^SSH 密钥：(.+)$/, "SSH key: $1"],
+    [/^已允许 (\d+) \/ (\d+) 个$/, "$1 of $2 allowed"],
+    [/^共 (\d+) 条 · 显示 (\d+) 条$/, "$1 total · $2 shown"],
+    [/^(\d+) 条记录$/, "$1 entries"],
+    [/^(\d+) 项$/, "$1 approvals"],
+    [/^(收起|展开) (.+) 的进程授权（(\d+) 项）$/, (_, action, name, count) =>
+      (action === "收起" ? "Collapse" : "Expand") + " signing approvals for " + name + " (" + count + ")"],
+    [/^(.+) 的进程授权$/, "Signing approvals for $1"],
+    [/^允许 (.+) 保险库$/, "Allow vault $1"],
+    [/^复制 (.+) 的公钥$/, "Copy public key for $1"],
+    [/^预加载 (.+) 的私钥$/, "Preload private key for $1"],
+    [/^清除 (.+) 已加载的私钥$/, "Clear the loaded private key for $1"],
+    [/^撤销授权（(.+) 的全部授权）$/, "Revoke all approvals for $1"],
+    [/^撤销 (.+)（PID (\d+)）对 (.+) 的授权$/, "Revoke $1 (PID $2) approval for $3"],
+    [/^(.+)模式$/, (_, label) => "Retention mode for " + (english.get(label) || label)],
+    [/^(.+)时长（秒）$/, (_, label) => "Duration in seconds for " + (english.get(label) || label)],
+    [/^当前账户为 (.+)。$/, "Current account: $1."],
+    [/^发现完成，已更新 (\d+) 把公钥。$/, "Sync finished. $1 public keys updated."],
+    [/^已清除已加载的私钥。当前仍有 (\d+) 项进程授权。$/, "Loaded private keys cleared. $1 signing approvals remain."],
+    [/^(.+)，进行中。$/, (_, label) => (english.get(label) || label) + " is in progress."]
+  ];
+
+  function translate(text) {
+    const key = text.trim();
+    const fixed = english.get(key);
+    if (fixed) return text.replace(key, fixed);
+    const pattern = formats.find(([expression]) => expression.test(key));
+    if (pattern) return text.replace(key, key.replace(...pattern));
+    return text;
+  }
+
+  function mount(root) {
+    const vaults = [
+      { id: "work", name: "Engineering" },
+      { id: "personal", name: "Personal" },
+      { id: "archive", name: "Archive" }
+    ];
+    const catalog = [
+      { id: "workstation", vaultId: "work", vault: "Engineering", name: "workstation", fingerprint: "SHA256:kioLnfsY0iUeCAGtm7v5j/4n78AeR2e6gKYDj4/ymgk", publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4TPhoIR0Dy1yQUlm8JMA/Et3/Y6M/BIRb1ivbjTvyg" },
+      { id: "build", vaultId: "work", vault: "Engineering", name: "build-server", fingerprint: "SHA256:dKDnl59FUZBtTdrQiYTsPc43d1w+c7812cytC5mSXlI", publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKotG0Dl2nLrvjVJDzdlt7gm3RvABup5w1PcndxpGWkY" },
+      { id: "lab", vaultId: "personal", vault: "Personal", name: "lab-access", fingerprint: "SHA256:buxNpQQbxBHwmblvTK4LQmEoFgYpjU43115C/t4dvmA", publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG3YB0uSXddlWlze/XyUZ9OGUKC6uTmYmfx5zyYSINvX" },
+      { id: "archived", vaultId: "archive", vault: "Archive", name: "archive-access", fingerprint: "SHA256:MfLfx99Vmn7Ezd0BQrOI5zwrlnBgX3aVVyfZzqVBhEA", publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID6eZv+7lbncxJVo5xD7UBR/yp7OZoaSEowBR+j3MajV" }
+    ];
+    const pages = {
+      keys: ["SSH 密钥", "key-round"],
+      activity: ["活动", "activity"], settings: ["设置", "settings"], about: ["关于", "info"]
+    };
+    const accountChoices = {
+      "demo@example.test": "demo@example.test",
+      "engineering@example.test": "Alex Chen(engineering@example.test)"
+    };
+    const accountLabel = id => accountChoices[id] || id;
+    const cacheDefaults = { keyMode: "fixed", keySeconds: "300", approvalMode: "fixed", approvalSeconds: "600" };
+    const settingDefaults = {
+      schemaVersion: 1, startup: false, systemDefault: false, waitForPassword: false,
+      theme: "system", language: "system", autoUpdate: true, logging: false, logLevel: "INFO", ...cacheDefaults
+    };
+    const esc = value => String(value).replace(/[&<>"']/g, char =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+    const icon = name => name === "github"
+      ? '<span class="ops-github-mark" aria-hidden="true"></span>'
+      : `<i data-lucide="${name}" aria-hidden="true"></i>`;
+    const quiet = value => `<p class="ops-quiet">${value}</p>`;
+    const button = (label, action, { primary = false, disabled = false, glyph = "", labelFor = "" } = {}) =>
+      `<button type="button" class="ops-button${primary ? " ops-primary" : ""}" data-action="${esc(action)}"${disabled ? " disabled" : ""}${labelFor ? ` aria-label="${esc(labelFor)}"` : ""}>${glyph ? icon(glyph) : ""}${label}</button>`;
+    const textButton = (label, action) =>
+      `<button type="button" class="ops-text-button" data-action="${action}">${label}</button>`;
+    const iconButton = (label, action, glyph) =>
+      `<button type="button" class="ops-icon-button" aria-label="${label}" data-action="${action}">${icon(glyph)}</button>`;
+    const heading = (title, description, actions = "") =>
+      `<header class="ops-heading"><div><h1>${title}</h1>${description ? quiet(description) : ""}</div>${actions ? `<div class="ops-actions">${actions}</div>` : ""}</header>`;
+    const info = (message, { kind = "info", dismissible = false } = {}) =>
+      `<div class="ops-infobar" data-kind="${kind}">${icon(kind === "warning" ? "triangle-alert" : "info")}<p>${message}</p>${dismissible ? iconButton("关闭提示", "dismiss", "x") : ""}</div>`;
+    const row = (glyph, title, description, control = "", detail = "") =>
+      `<div class="ops-setting-row">${icon(glyph)}<div><strong>${title}</strong>${description ? quiet(description) : ""}</div><div>${control}</div>${detail ? `<div class="ops-setting-detail">${detail}</div>` : ""}</div>`;
+    const select = (label, action, choices, value, { disabled = false } = {}) =>
+      `<select data-action="${action}" aria-label="${label}"${disabled ? " disabled" : ""}>${Object.entries(choices).map(([id, name]) =>
+        `<option value="${id}"${id === value ? " selected" : ""}>${name}</option>`).join("")}</select>`;
+    const toggle = (label, action, value, { disabled = false } = {}) =>
+      `<label class="ops-switch"><input type="checkbox" role="switch" data-action="${action}" aria-label="${label}"${value ? " checked" : ""}${disabled ? " disabled" : ""}><span>${value ? "开" : "关"}</span></label>`;
+    const metricState = (label, tone = "neutral") => `<span class="ops-status" data-tone="${tone}">${esc(label)}</span>`;
+    const appIcon = glyph => `<span class="ops-app-icon" aria-hidden="true">${icon(glyph)}</span>`;
+    const timed = mode => mode === "fixed" || mode === "idle";
+
+    function localTime(timestamp) {
+      const value = new Date(timestamp);
+      const pad = part => String(part).padStart(2, "0");
+      return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+    }
+
+    const emptyActivityFilters = () => ({ process: new Set(), key: new Set(), result: new Set() });
+
+    function sampleActivity(now) {
+      const examples = [
+        ["warp.exe", "workstation", "已签名"],
+        ["Code.exe", "build-server", "已签名"],
+        ["WindowsTerminal.exe", "lab-access", "已拒绝"],
+        ["Code.exe", "workstation", "已签名"],
+        ["warp.exe", "build-server", "已取消"],
+        ["WindowsTerminal.exe", "workstation", "已签名"],
+        ["warp.exe", "lab-access", "已拒绝"]
+      ];
+      const appPids = { "warp.exe": 10432, "Code.exe": 13108, "WindowsTerminal.exe": 8420 };
+      const commands = {
+        workstation: "ssh -v -o ConnectTimeout=10 -o ForwardAgent=no -o ServerAliveInterval=30 workstation.example.test",
+        "build-server": "ssh -T -o BatchMode=yes -o ControlMaster=no -o StrictHostKeyChecking=yes git@build.example.test",
+        "lab-access": "ssh lab.example.test"
+      };
+      const entry = ([process, key, result], time) => ({ process, appPid: appPids[process], command: commands[key], key, result, time });
+      const recent = examples.slice(0, 3).map((example, index) => entry(example, now - (2 + index * 4) * 60000));
+      const history = [1, 2, 3].flatMap(days => examples.map((example, index) => {
+        const time = new Date(now);
+        time.setDate(time.getDate() - days);
+        time.setHours(17 - index, 18, 0, 0);
+        return entry(example, time.getTime());
+      }));
+      return [...recent, ...history];
+    }
+
+    function createModel(scenario, priorSettings = settingDefaults, startupAccount = "engineering@example.test") {
+      const preloadFixture = ["key-preload-failure", "key-preload-partial"].includes(scenario);
+      const signingFixture = ["signing-toast", "signing-toast-once"].includes(scenario);
+      const updateFixture = scenario.startsWith("updates-") ? scenario.slice(8) : "";
+      const ready = preloadFixture || signingFixture || Boolean(updateFixture) || ["ready", "activity", "provider-failed", "vault-save", "discover", "cache", "logs"].includes(scenario);
+      const startup = scenario === "startup";
+      const connected = ready || ["new-account", "no-access"].includes(scenario) || (startup && Boolean(startupAccount));
+      const settings = { ...priorSettings, waitForPassword: startup || priorSettings.waitForPassword };
+      if (scenario === "logs") Object.assign(settings, { logging: true, logLevel: "INFO" });
+      if (scenario === "signing-toast-once") settings.approvalMode = "off";
+      const account = startup ? startupAccount : connected ? "engineering@example.test" : "";
+      const allowed = ready ? ["work", "personal"] : [];
+      const now = Date.now();
+      return {
+        settings, cacheOpen: { key: true, approval: true }, disableStartupAfterRestore: false,
+        page: updateFixture ? "about" : scenario === "activity" ? "activity" : ["cache", "logs"].includes(scenario) ? "settings" : "keys", pane: false,
+        connected, account, accountChoice: scenario === "picker" ? Object.keys(accountChoices)[0] : "",
+        pickerIntent: "connect",
+        availableAccounts: scenario === "no-accounts" || scenario === "cli-missing" ? {} : accountChoices,
+        pickerStatus: scenario === "cli-missing" ? "missing" : scenario === "no-accounts" ? "empty" : "ready",
+        showPickerNotice: scenario === "no-accounts" || scenario === "cli-missing",
+        installOnRetry: scenario === "cli-missing",
+        allowedVaults: new Set(allowed),
+        lastVaultSync: ready ? now - 6 * 60000 : null, lastKeySync: ready ? now - 4 * 60000 : null,
+        lastDesktopRequest: connected && !startup && scenario !== "no-access" ? { outcome: scenario === "provider-failed" ? "denied" : "success", at: now - 2 * 60000 } : null,
+        vaultChange: null, vaultError: null, failNextVaultSave: scenario === "vault-save",
+        scan: null, logsUsed: scenario === "logs" ? 1.4 : 0,
+        hasDiscovered: ready, keys: ready ? catalog.filter(key => allowed.includes(key.vaultId)) : [],
+        loaded: new Set(ready && !preloadFixture && settings.keyMode !== "off" ? ["workstation", "build"] : []),
+        expanded: new Set(), preload: null, keyErrors: new Set(),
+        preloadFailures: new Set(scenario === "key-preload-failure" ? ["workstation", "build", "lab"] :
+          scenario === "key-preload-partial" ? ["workstation"] : []),
+        grants: ready && settings.approvalMode !== "off" ? [
+          { id: "warp", keyId: "workstation", process: "warp.exe", pid: 10432, expires: now + 8 * 60000 },
+          { id: "terminal", keyId: "workstation", process: "WindowsTerminal.exe", pid: 8420, expires: now + 6 * 60000 },
+          { id: "editor", keyId: "build", process: "Code.exe", pid: 13108, expires: now + 4 * 60000 }
+        ] : [],
+        activity: ready ? sampleActivity(now) : [],
+        activityFilters: emptyActivityFilters(), activityFilterOpen: "", applicationSearch: "", activityTimeOrder: "descending",
+        updateChecking: false, updateStatus: updateFixture, updateOutcome: updateFixture || "current", message: "", messageKind: "info",
+        dialog: scenario === "picker" ? "login" : "",
+        toast: startup, signingToast: signingFixture, agentTransition: null
+      };
+    }
+
+    let model = createModel(preview.scenario, { ...settingDefaults, theme: preview.theme, language: preview.language });
+    let language = preview.language;
+    const localize = text => language === "en" ? translate(text) : text;
+
+    function localizeContent(element) {
+      if (language !== "en") return;
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.parentElement.closest("[data-preserve-language]")) node.data = localize(node.data);
+      }
+      for (const item of element.querySelectorAll("[aria-label], [data-label], [data-tooltip]")) {
+        for (const attribute of ["aria-label", "data-label", "data-tooltip"]) {
+          if (!item.hasAttribute(attribute)) continue;
+          const value = item.getAttribute(attribute);
+          item.setAttribute(attribute, attribute === "data-tooltip" ? value.split("、").map(localize).join(", ") : localize(value));
+        }
+      }
+    }
+
+    function namespaceIds() {
+      for (const element of root.querySelectorAll("[id]")) element.id = "stacked-" + element.id;
+      for (const attribute of ["aria-controls", "aria-labelledby", "aria-describedby"]) {
+        for (const element of root.querySelectorAll("[" + attribute + "]")) {
+          const ids = element.getAttribute(attribute).split(" ");
+          element.setAttribute(attribute, ids.map(id => "stacked-" + id).join(" "));
+        }
+      }
+    }
+    let renderedPage = "";
+    let scenarioAnchor = "";
+    const scrollByPage = new Map();
+    const commandScrollTimers = new WeakMap();
+    const live = document.createElement("span");
+    live.className = "ops-sr";
+    live.setAttribute("aria-live", "polite");
+    live.lang = language;
+    root.after(live);
+
+    function powershellCommand() {
+      const pipe = model.settings.systemDefault ? "openssh-ssh-agent" : "opssh-agent-0123456789abcdef";
+      return "$env:SSH_AUTH_SOCK = '\\\\.\\pipe\\" + pipe + "'";
+    }
+
+    function renderCacheCard(glyph, label, prefix) {
+      const settings = model.settings;
+      const mode = settings[`${prefix}Mode`];
+      const modes = { off: '不缓存', fixed: '固定时长', idle: '空闲超时', 'until-exit': '直到 opssh 退出' };
+      const hints = {
+        off: prefix === "key" ? "私钥仅用于当前请求，完成后释放。" : "每次请求单独批准。",
+        fixed: "从缓存建立时开始计时。",
+        idle: "在指定时长内未使用时清除。",
+        "until-exit": prefix === "key" ? "退出时清除，也可手动清除。" : "进程有效期间保留，可提前撤销，退出时清除。"
+      };
+      return `<details class="ops-rows ops-cache-card" aria-labelledby="ops-cache-title-${prefix}" data-cache-editor="${prefix}"${model.cacheOpen[prefix] ? " open" : ""}>
+        <summary class="ops-cache-head">${icon(glyph)}<span><strong id="ops-cache-title-${prefix}">${label}</strong></span>
+          <span class="ops-cache-chevron">${icon("chevron-down")}</span></summary>
+        <div class="ops-cache-grid">
+          <label class="ops-field ops-cache-mode"><span>保留方式</span>
+            ${select(`${label}模式`, `cache:${prefix}Mode`, modes, mode)}
+          </label>
+          ${timed(mode) ? `<label class="ops-field ops-cache-duration">
+            <span>时长（秒）</span>
+            <input type="text" inputmode="numeric" pattern="[0-9]+" maxlength="7"
+              aria-label="${label}时长（秒）" data-action="cache:${prefix}Seconds"
+              aria-describedby="ops-cache-error-${prefix}"
+              value="${esc(settings[`${prefix}Seconds`])}">
+            <small id="ops-cache-error-${prefix}" class="ops-cache-error" role="status" hidden></small>
+          </label>` : ""}
+        </div>
+        <p class="ops-quiet ops-cache-hint">${hints[mode]}</p>
+      </details>`;
+    }
+
+    function renderSettings() {
+      const settings = model.settings;
+      const targetLanguage = resolveLanguage(settings.language);
+      const languageHint = targetLanguage === language ? "" :
+        targetLanguage === "zh-Hans" ? "重新打开工作区以应用简体中文。" : "Reopen the workspace to apply English.";
+      return `<div class="ops-stack ops-preferences">
+        ${heading('设置', '')}
+        <section class="ops-setting-group" aria-labelledby="ops-startup-heading">
+          <h2 id="ops-startup-heading">启动</h2>
+          <div class="ops-rows">
+            ${row('power', '登录 Windows 时启动', '', toggle('登录 Windows 时启动', 'startup', settings.startup))}
+            ${row('timer', '等待 1Password 启动', '1Password 就绪后通知你选择账户。', toggle('等待 1Password 启动', 'wait-password', settings.waitForPassword))}
+          </div>
+        </section>
+        <section class="ops-setting-group" aria-labelledby="ops-ssh-heading">
+          <h2 id="ops-ssh-heading">SSH 集成</h2>
+          <div class="ops-rows">
+            ${row('plug', '设为系统默认 SSH 代理', settings.startup ? '' : '请先启用登录时启动。', toggle('设为系统默认 SSH 代理', 'system-default', settings.systemDefault, { disabled: !settings.startup }))}
+            ${settings.systemDefault ? '' : row('terminal', '当前 PowerShell 会话', '仅影响当前会话。',
+              button('复制命令', 'copy-command', { glyph: 'copy' }),
+              `<pre class="ops-code" data-powershell-command><code>${esc(powershellCommand())}</code></pre><p data-copy-status class="ops-quiet" hidden></p>`)}
+          </div>
+        </section>
+        <section class="ops-setting-group" aria-labelledby="ops-cache-heading">
+          <h2 id="ops-cache-heading">缓存策略</h2>
+          <div class="ops-cache-list">
+            ${renderCacheCard('key-round', '私钥缓存', 'key')}
+            ${renderCacheCard('shield-check', '批准缓存', 'approval')}
+          </div>
+        </section>
+        <section class="ops-setting-group" aria-labelledby="ops-logs-heading">
+          <h2 id="ops-logs-heading">日志</h2>
+          <div class="ops-rows">
+            ${row('folder-open', '日志目录', '<code>logs\\</code>', button('打开目录', 'open-logs', { glyph: 'external-link' }))}
+            ${row('file-text', '启用日志', '', toggle('启用日志', 'logging', settings.logging))}
+            ${row('list-filter', '日志级别', settings.logging ? '' : '启用日志后可更改。', select('日志级别', 'log-level',
+              { ERROR: 'ERROR', WARN: 'WARN', INFO: 'INFO', DEBUG: 'DEBUG' }, settings.logLevel, { disabled: !settings.logging }))}
+            ${row('hard-drive', '日志占用空间', '', `<div class="ops-inline-actions"><span class="ops-mono">${model.logsUsed ? "1.4 MB" : "0 B"}</span>
+              ${button('清理日志', 'clear-logs', { disabled: !model.logsUsed, glyph: 'trash-2' })}</div>`)}
+          </div>
+        </section>
+        <section class="ops-setting-group" aria-labelledby="ops-appearance-heading">
+          <h2 id="ops-appearance-heading">偏好</h2>
+          <div class="ops-rows">
+            ${row('palette', '主题', '', select('主题', 'theme', { system: '跟随系统', light: '浅色', dark: '深色' }, settings.theme))}
+            ${row('languages', '语言', '', select('语言', 'language', { system: '跟随系统', 'zh-Hans': '简体中文', en: 'English' }, settings.language),
+              languageHint ? `<div class="ops-section-head ops-language-hint"><span lang="${targetLanguage}" data-preserve-language>${languageHint}</span>${button("重新打开", "reopen")}</div>` : "")}
+          </div>
+        </section>
+      </div>`;
+    }
+
+    const updateStatusText = {
+      checking: "正在从 GitHub 检查更新…",
+      current: "已是最新的正式版本。",
+      available: "有新版本 0.2.0 可用。",
+      unavailable: "无法检查更新，请稍后重试。",
+      "no-release": "GitHub 上还没有正式发行版。"
+    };
+
+    function renderAbout() {
+      const release = model.updateStatus === "available"
+        ? '<a class="ops-link" href="https://github.com/Cirnouo/opssh/releases" target="_blank" rel="noopener noreferrer">打开 GitHub 发行页</a>' : "";
+      const settings = model.settings;
+      const github = '<a class="ops-link" href="https://github.com/Cirnouo/opssh" target="_blank" rel="noopener noreferrer">Cirnouo/opssh</a>';
+      return `<div class="ops-stack ops-preferences">
+        ${heading('关于', '')}
+        <div class="ops-about-brand">
+          <span class="ops-app-icon" aria-hidden="true">${icon('terminal')}</span>
+          <div>
+            <h2>opssh</h2>
+            <p class="ops-quiet">使用 1Password 中的 SSH 密钥签名。</p>
+          </div>
+        </div>
+        <section class="ops-setting-group" aria-labelledby="ops-updates-heading">
+          <h2 id="ops-updates-heading">版本和更新</h2>
+          <div class="ops-rows">
+            ${row('package', '当前版本', 'Windows x64', '<span class="ops-mono">0.1.0</span>')}
+            ${row('refresh-cw', '检查更新', esc(updateStatusText[model.updateStatus] || ''),
+              `<div class="ops-inline-actions">${model.updateChecking ? '<span class="ops-agent-spin" aria-hidden="true"></span>' : ""}${button(model.updateChecking ? '检查中…' : '检查更新', 'check-update', { disabled: model.updateChecking })}</div>`, release)}
+            ${row('download', '启动时自动检查更新', '发现新版本时通知你。', toggle('启动时自动检查更新', 'auto-update', settings.autoUpdate))}
+          </div>
+        </section>
+        <section class="ops-setting-group" aria-labelledby="ops-project-heading">
+          <h2 id="ops-project-heading">项目信息</h2>
+          <div class="ops-rows">
+            ${row('user-round', '开发者', '', '<span>Cirnouo</span>')}
+            ${row('scale', '许可证', '', '<span>Apache License 2.0</span>')}
+            ${row('github', 'GitHub', '', github)}
+          </div>
+        </section>
+      </div>`;
+    }
+
+    function renderKeys() {
+      const keys = model.hasDiscovered ? model.keys : [];
+      const mayDiscover = model.allowedVaults.size > 0;
+      const scan = model.scan;
+      const actions = scan ? button('取消同步', 'cancel-discovery') :
+        button('同步 SSH 密钥', 'discover', { primary: true, disabled: !mayDiscover || Boolean(model.vaultChange), glyph: 'refresh-cw' });
+      const bulkActions = `<div class="ops-actions" role="group" aria-label="批量操作">
+        ${button('预加载全部私钥', 'preload-all', {
+          disabled: Boolean(scan || model.preload) || !mayDiscover || model.settings.keyMode === "off" || !keys.some((key) => !model.loaded.has(key.id)),
+          glyph: 'download'
+        })}
+        ${button('清除已加载私钥', 'evict-all', { disabled: model.loaded.size === 0, glyph: 'package-minus' })}
+        ${button('撤销全部授权', 'revoke-all', { disabled: model.grants.length === 0, glyph: 'shield-x' })}
+      </div>`;
+      const status = !mayDiscover ? info('请先允许至少一个保险库，再同步 SSH 密钥。')
+        : model.settings.keyMode === "off" ? info('私钥缓存设为「不缓存」。签名时会临时读取私钥。') : '';
+      const empty = !model.hasDiscovered
+        ? '尚未同步公钥。'
+        : '所选保险库中没有 SSH 密钥。';
+
+      return `<div class="ops-stack">
+        ${heading('SSH 密钥', '')}
+        ${renderAccount()}
+        <section class="ops-setting-group" id="ops-key-index" aria-label="公钥索引">
+        <div class="ops-section-head"><div><h2>公钥索引</h2>${syncTime(model.lastKeySync)}</div>${actions}</div>
+        ${scan ? `<div class="ops-rows ops-scan" role="status">
+          <div class="ops-section-head"><strong>${scan.phase === "vaults" ? "正在扫描保险库" : "正在读取 SSH 公钥"}</strong>
+            ${scan.phase === "vaults" ? `<small class="ops-quiet">${scan.completed} / ${scan.vaults.length}</small>` : ""}</div>
+          ${scan.phase === "vaults" ? `<progress value="${scan.completed}" max="${scan.vaults.length}" aria-label="已扫描保险库"></progress>` : '<progress aria-label="正在读取 SSH 公钥"></progress>'}
+        </div>` : ""}
+        ${status}
+        <div class="ops-key-counts" aria-label="SSH 密钥统计">
+          <span><strong>${keys.length}</strong> 把公钥</span><span><strong>${model.grants.length}</strong> 项进程授权</span>
+        </div>
+        ${bulkActions}
+        ${keys.length ? renderKeyTable(keys) : `<p class="ops-empty">${empty}</p>`}
+        </section>
+      </div>`;
+    }
+
+    function renderKeyTable(keys) {
+      return `<div class="ops-table-wrap ops-key-scroll" role="region" aria-label="公钥索引">
+        <table class="ops-table ops-key-table" aria-label="SSH 密钥">
+          <colgroup><col class="ops-col-key"><col class="ops-col-loaded"><col class="ops-col-approval"><col class="ops-col-actions"></colgroup>
+          <thead><tr>
+            <th scope="col">密钥</th>
+            <th scope="col">私钥加载状态</th>
+            <th scope="col">进程授权</th>
+            <th scope="col">操作</th>
+          </tr></thead>
+          <tbody>${keys.map(renderKeyRow).join('')}</tbody>
+        </table>
+      </div>`;
+    }
+
+    function renderKeyRow(key) {
+      const keyGrants = model.grants.filter((grant) => grant.keyId === key.id);
+      const isLoaded = model.loaded.has(key.id);
+      const isExpanded = model.expanded.has(key.id);
+      const isLoading = model.preload?.has(key.id);
+      const failed = model.keyErrors.has(key.id);
+      const keyStatus = isLoading ? metricState("正在加载") : failed ? metricState("加载失败", "danger") :
+        metricState(isLoaded ? "已加载" : "未加载", isLoaded ? "success" : "neutral");
+      const id = esc(key.id);
+      const name = esc(key.name);
+      const toggleLabel = `${isExpanded ? '收起' : '展开'} ${name} 的进程授权（${keyGrants.length} 项）`;
+      const toggle = `<button type="button" class="ops-button ops-key-expand ops-grant-toggle" data-action="expand:${id}"
+        aria-label="${toggleLabel}" aria-expanded="${isExpanded}"${isExpanded ? ` aria-controls="ops-grants-${id}"` : ''}>
+        ${icon(isExpanded ? 'chevron-down' : 'chevron-right')}<span>${keyGrants.length} 项</span>
+      </button>`;
+
+      return `<tr class="ops-key-row">
+        <th scope="row" data-label="密钥">
+          <div class="ops-key-id">
+            <strong>${name}</strong>
+            <span class="ops-quiet">${esc(key.vault)}</span>
+            <span class="ops-quiet ops-mono">${esc(key.fingerprint)}</span>
+          </div>
+        </th>
+        <td data-label="私钥加载状态">${keyStatus}${failed ? quiet("1Password 未返回私钥。请检查所选的 SSH 密钥项目。") : ""}</td>
+        <td data-label="进程授权">${toggle}</td>
+        <td data-label="操作"><div class="ops-row-actions">
+          ${button('复制公钥', `copy-key:${key.id}`, { glyph: "copy", labelFor: `复制 ${key.name} 的公钥` })}
+          ${button(failed ? '重试预加载' : '预加载私钥', `preload:${key.id}`, {
+            disabled: Boolean(model.scan || model.preload) || isLoaded || model.settings.keyMode === "off" || model.allowedVaults.size === 0,
+            labelFor: `预加载 ${key.name} 的私钥`
+          })}
+          ${button('清除私钥缓存', `evict:${key.id}`, {
+            disabled: !isLoaded,
+            labelFor: `清除 ${key.name} 已加载的私钥`
+          })}
+          ${button('撤销该密钥授权', `revoke-key:${key.id}`, {
+            disabled: keyGrants.length === 0,
+            labelFor: `撤销授权（${key.name} 的全部授权）`
+          })}
+        </div></td>
+      </tr>${isExpanded ? `<tr class="ops-expanded">
+        <td colspan="4"><div class="ops-grant-pane" id="ops-grants-${id}">
+          ${renderGrantTable(key, keyGrants)}
+        </div></td>
+      </tr>` : ''}`;
+    }
+
+    function renderGrantTable(key, keyGrants) {
+      if (!keyGrants.length) return '<p class="ops-empty">此密钥暂无进程授权。</p>';
+
+      return `<table class="ops-table ops-grant-table" aria-label="${esc(key.name)} 的进程授权">
+        <colgroup><col class="ops-col-process"><col class="ops-col-pid"><col class="ops-col-time"><col class="ops-col-actions"></colgroup>
+        <thead><tr>
+          <th scope="col">进程名称</th>
+          <th scope="col">PID</th>
+          <th scope="col">到期时间</th>
+          <th scope="col">操作</th>
+        </tr></thead>
+        <tbody>${keyGrants.map((grant) => `<tr>
+          <th scope="row" data-label="进程名称" class="ops-mono">${esc(grant.process)}</th>
+          <td data-label="PID" class="ops-mono">${esc(grant.pid)}</td>
+          <td data-label="到期时间" class="ops-mono"><time datetime="${new Date(grant.expires).toISOString()}">${esc(localTime(grant.expires))}</time></td>
+          <td data-label="操作">${button('撤销此授权', `revoke-grant:${grant.id}`, {
+            labelFor: `撤销 ${grant.process}（PID ${grant.pid}）对 ${key.name} 的授权`
+          })}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function renderActivity() {
+      const groups = [
+        { id: 'process', label: '应用名称', value: entry => entry.process },
+        { id: 'key', label: '密钥名称', value: entry => entry.key || '—' },
+        { id: 'result', label: '结果', value: entry => entry.result }
+      ];
+      const activity = model.activity;
+      const filters = model.activityFilters;
+      const entries = activity.filter(entry => groups.every(({ id, value }) =>
+        filters[id].size === 0 || filters[id].has(value(entry))));
+      const order = model.activityTimeOrder === "descending" ? -1 : 1;
+      entries.sort((first, second) => order * (first.time - second.time));
+      const clearAction = button('清除活动', 'clear-activity', {
+        disabled: activity.length === 0,
+        glyph: 'trash-2'
+      });
+      const reset = button('重置筛选', 'filter-reset', {
+        disabled: groups.every(({ id }) => filters[id].size === 0)
+      });
+      const filtered = groups.some(({ id }) => filters[id].size > 0);
+      const count = filtered ? `共 ${activity.length} 条 · 显示 ${entries.length} 条` : `${activity.length} 条记录`;
+      return `<div class="ops-stack ops-activity-page">
+        ${heading('活动', '', clearAction)}
+        <div class="ops-activity-filters" role="group" aria-label="活动筛选">
+          ${groups.map(group => renderActivityFilter(group, activity)).join('')}
+          ${reset}
+        </div>
+        ${activity.length ? `<p class="ops-activity-count" role="status">${count}</p>` : ""}
+        ${renderActivityTable(entries)}
+      </div>`;
+    }
+
+    function applicationMatches(name, query) {
+      return name.toLocaleLowerCase(language).includes(query.trim().toLocaleLowerCase(language));
+    }
+
+    function updateApplicationSearch(search) {
+      model.applicationSearch = search.value;
+      const flyout = search.closest("[data-application-filter]");
+      const options = flyout.querySelector("[data-filter-scroll]");
+      let hasMatches = false;
+      for (const option of options.querySelectorAll(".ops-activity-filter-option")) {
+        const name = option.querySelector("input").value;
+        option.hidden = !applicationMatches(name, search.value);
+        hasMatches ||= !option.hidden;
+      }
+      flyout.querySelector("[data-action='filter-search-clear']").hidden = !search.value;
+      flyout.querySelector(".ops-activity-filter-empty").hidden = hasMatches;
+      options.scrollTop = 0;
+      live.textContent = hasMatches ? "" : localize("没有匹配的应用。");
+    }
+
+    function renderActivityFilter({ id, label, value }, activity) {
+      const selected = model.activityFilters[id];
+      const open = model.activityFilterOpen === id;
+      const choices = [...new Set(activity.map(value))].sort((first, second) => first.localeCompare(second));
+      const menuId = `ops-activity-filter-${id}`;
+      const application = id === "process";
+      const query = model.applicationSearch;
+      const options = choices.map(choice => `<label class="ops-activity-filter-option"${application && !applicationMatches(choice, query) ? " hidden" : ""}>
+        <input type="checkbox" data-action="filter:${id}" value="${esc(choice)}"${selected.has(choice) ? " checked" : ""}>
+        <span>${esc(choice)}</span>
+      </label>`).join("");
+      const applicationContent = application ? `<div class="ops-activity-filter-search">
+          <input type="search" data-action="filter-search" aria-label="搜索应用" placeholder="${esc(localize("搜索应用"))}"
+            aria-controls="ops-activity-application-options" autocomplete="off" value="${esc(query)}">
+          <button type="button" class="ops-icon-button" data-action="filter-search-clear" aria-label="清除搜索"${query ? "" : " hidden"}>${icon("x")}</button>
+        </div>
+        <div class="ops-activity-filter-options" id="ops-activity-application-options" data-filter-scroll>${options}</div>
+        <p class="ops-quiet ops-activity-filter-empty"${choices.some(choice => applicationMatches(choice, query)) ? " hidden" : ""}>没有匹配的应用。</p>` : "";
+      return `<div class="ops-activity-filter">
+        <button type="button" class="ops-button ops-activity-filter-button" data-action="filter-open:${id}"
+          data-filtered="${selected.size > 0}" aria-expanded="${open}"${open ? ` aria-controls="${menuId}"` : ""}
+          ${choices.length ? "" : "disabled"}${selected.size ? ` data-tooltip="${esc([...selected].join("、"))}"` : ""}>
+          <span>${label}${selected.size ? ` (${selected.size})` : ""}</span>${icon("chevron-down")}
+        </button>
+        ${open ? `<div class="ops-activity-filter-menu" id="${menuId}" role="group" aria-label="${label}"${application ? " data-application-filter" : " data-filter-scroll"}>
+          ${application ? applicationContent : options}
+        </div>` : ""}
+      </div>`;
+    }
+
+    function renderActivityTable(entries) {
+      if (!entries.length) {
+        const message = model.activity.length ? '没有符合当前筛选条件的活动。' : '暂无 SSH 活动。';
+        return `<p class="ops-empty">${message}</p>`;
+      }
+
+      return `<div class="ops-table-wrap ops-activity-scroll" role="region" aria-label="SSH 活动列表">
+        <table class="ops-table ops-activity-table" aria-label="SSH 活动">
+          <colgroup><col class="ops-col-process"><col class="ops-col-key"><col class="ops-col-result"><col class="ops-col-time"></colgroup>
+          <thead><tr>
+            <th scope="col">应用</th>
+            <th scope="col">密钥</th>
+            <th scope="col">结果</th>
+            <th scope="col" aria-sort="${model.activityTimeOrder}">
+              <button type="button" class="ops-activity-sort" data-action="sort-time">时间
+                ${icon(model.activityTimeOrder === "descending" ? "chevron-down" : "chevron-up")}
+              </button>
+            </th>
+          </tr></thead>
+          <tbody>${entries.map(entry => `<tr>
+            <th scope="row" data-label="应用">
+              <div class="ops-activity-app"><strong>${esc(entry.process)}</strong><small class="ops-mono ops-quiet">PID ${esc(entry.appPid ?? '—')}</small></div>
+              <code class="ops-activity-command ops-mono" aria-label="SSH 请求命令">${esc(entry.command || '—')}</code>
+            </th>
+            <td data-label="密钥">${esc(entry.key || '—')}</td>
+            <td data-label="结果">${renderActivityResult(entry.result)}</td>
+            <td data-label="时间" class="ops-mono"><time datetime="${new Date(entry.time).toISOString()}">${esc(localTime(entry.time))}</time></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+    }
+
+    function renderActivityResult(result) {
+      const tone = result === "已签名" ? "success"
+        : ["已拒绝", "失败"].includes(result) ? "danger"
+        : 'neutral';
+      return metricState(result, tone);
+    }
+
+    function syncTime(timestamp) {
+      return `<p class="ops-quiet ops-sync-time">上次成功同步 · ${timestamp
+        ? `<time class="ops-mono" datetime="${new Date(timestamp).toISOString()}">${esc(localTime(timestamp))}</time>`
+        : "从未"}</p>`;
+    }
+
+    function renderAccount() {
+      const request = model.lastDesktopRequest;
+      const outcomes = { success: ["上次访问成功", "success"], denied: ["上次访问未获授权", "warning"], failure: ["上次访问失败", "danger"] };
+      const requestStatus = request ? `<div class="ops-request-status">
+        ${metricState(...outcomes[request.outcome])}
+        <time class="ops-mono" datetime="${new Date(request.at).toISOString()}" aria-label="上次请求时间">${esc(localTime(request.at))}</time>
+      </div>` : metricState("尚未请求");
+      const account = esc(accountLabel(model.account));
+      const actions = `<div class="ops-actions ops-account-actions">
+        ${button("切换账户", "switch-account")}${button("移除账户", "logout", { labelFor: "移除当前账户" })}
+      </div>`;
+      const accountRow = row("user-round", "已选账户", account, actions);
+      const accessRow = row("shield", "1Password 访问记录", request?.outcome === "denied" ? "请在下次访问时授权。" : "", requestStatus);
+      const count = `已允许 ${model.allowedVaults.size} / ${vaults.length} 个`;
+      const vaultActions = `<div class="ops-inline-actions"><small class="ops-quiet">${count}</small>
+        ${button("同步保险库", "reload-vaults", { glyph: "refresh-cw", disabled: Boolean(model.vaultChange || model.scan) })}</div>`;
+      const rows = vaults.map(vault => {
+        const saving = model.vaultChange?.id === vault.id;
+        const failed = model.vaultError?.id === vault.id;
+        const retry = failed ? `<div class="ops-row-note"><small class="ops-row-error" role="alert">更改未保存，已恢复上次设置。</small>${textButton("重试", `retry-vault:${vault.id}`)}</div>` : "";
+        return row("vault", vault.name, saving ? "正在保存…" : "", toggle(`允许 ${vault.name} 保险库`, `vault:${vault.id}`,
+          saving ? model.vaultChange.enabled : model.allowedVaults.has(vault.id), { disabled: Boolean(model.vaultChange || model.scan) }), retry);
+      }).join("");
+      return `<section class="ops-provider" data-layout="stacked" aria-label="1Password">
+        <h2>1Password</h2>
+        ${model.showPickerNotice ? renderPickerNotice() : ""}
+        <div class="ops-account-stack"><div class="ops-rows">${accountRow}</div><div class="ops-rows">${accessRow}</div></div>
+        <section class="ops-rows ops-vault-rows">
+          ${row("vault", "允许发现的保险库", "", vaultActions, syncTime(model.lastVaultSync))}
+          <div class="ops-vault-list" id="ops-vault-list">
+            ${rows}
+            <div class="ops-vault-hint">${quiet("取消允许会立即移除对应密钥和授权。新增公钥会在下次同步密钥时出现。")}</div>
+          </div>
+        </section>
+      </section>`;
+    }
+
+    function renderSignedOut() {
+      return `<div class="ops-login">
+        ${appIcon("key-round")}
+        <h1>连接 1Password</h1>
+        ${model.showPickerNotice ? "" : quiet("请先登录 1Password 桌面应用。")}
+        ${model.showPickerNotice ? renderPickerNotice() : button("连接 1Password", "login", { primary: true })}
+      </div>`;
+    }
+
+    function renderPickerNotice() {
+      if (model.pickerStatus === "checking") return '<p class="ops-quiet" role="status">正在查找此设备上的 1Password 账户…</p>';
+      const message = model.pickerStatus === "missing"
+        ? "未找到 1Password CLI。安装并在 1Password 中启用 CLI 集成后，点击重试。"
+        : model.pickerStatus === "no-other" ? "没有其他可切换的账户。请先在 1Password 桌面应用中登录另一个账户。"
+        : "1Password 桌面应用中没有已登录的账户。登录后重试。";
+      return `<div class="ops-stack ops-account-notice" role="status">
+        ${info(message, { kind: "warning" })}
+        <div class="ops-actions">${button("重试", "retry-picker", { primary: true })}</div>
+      </div>`;
+    }
+
+    function renderToast() {
+      if (model.signingToast) {
+        const key = catalog[0];
+        return `<aside class="ops-toast ops-signing-toast ops-stack" aria-label="Windows 通知 · SSH 签名请求">
+          <div class="ops-section-head"><span class="ops-title">${appIcon("terminal")} opssh</span>${iconButton("关闭通知", "signing-dismiss", "x")}</div>
+          <div class="ops-signing-body">
+            <span class="ops-process-icon" aria-hidden="true">${icon("terminal")}</span>
+            <div><strong>Opssh.Tray.exe · PID 18420</strong><p>SSH 密钥：${esc(key.name)}</p><code class="ops-mono ops-quiet">${esc(key.fingerprint)}</code></div>
+          </div>
+          <div class="ops-actions">${model.settings.approvalMode === "off" ? "" : button("授权此应用", "signing-dismiss")}
+            ${button("仅授权请求", "signing-dismiss")}${button("拒绝", "signing-dismiss")}</div>
+        </aside>`;
+      }
+      if (!model.toast) return "";
+      return `<aside class="ops-toast ops-stack" aria-label="Windows 通知演示">
+        <div class="ops-section-head"><span class="ops-title">${appIcon("terminal")} opssh</span>${iconButton("关闭通知", "toast-no", "x")}</div>
+        <div><strong>1Password 已就绪</strong>${model.account ? quiet(`当前账户为 ${esc(accountLabel(model.account))}。`) : ""}</div>
+        <div class="ops-actions">${button("选择账户", "toast-yes", { primary: true })}${button("稍后", "toast-no")}</div>
+      </aside>`;
+    }
+
+    function renderDialog() {
+      let title;
+      let detail;
+      let action;
+      if (model.dialog === "login") {
+        title = model.pickerIntent === "authorize" ? "选择要授权的 1Password 账户"
+          : model.pickerIntent === "switch" ? "切换 1Password 账户" : "连接 1Password 账户";
+        detail = `<label class="ops-field ops-picker-account">账户
+            ${select("选择 1Password 账户", "choose-account", eligibleAccounts(), model.accountChoice)}</label>
+            ${quiet("可能需要在 1Password 中授权。")}`;
+        action = button("在 1Password 中继续", "login-start", { primary: true });
+      } else if (model.dialog === "authorize") {
+        title = "1Password 授权";
+        detail = `<p>为 <strong>${esc(accountLabel(model.accountChoice))}</strong> 请求授权。</p>${model.connected && model.accountChoice !== model.account
+          ? "<p>新账户授权后会清除旧账户的保险库范围、密钥、授权和活动。</p>"
+          : ""}`;
+        action = button("模拟批准", "authorize", { primary: true });
+      } else if (model.dialog === "logout") {
+        title = "移除 opssh 中的账户？";
+        detail = `<p>将清除 <strong>${esc(accountLabel(model.account))}</strong> 在 opssh 中的保险库范围、公钥索引、私钥缓存、进程授权和活动。</p>`;
+        action = button("移除账户", "confirm-logout", { primary: true });
+      } else if (model.dialog === "clear-logs") {
+        title = "清理诊断日志？";
+        detail = "<p>删除现有日志，释放 1.4 MB。日志开启时会继续记录。</p>";
+        action = button("清理日志", "confirm-clear-logs", { primary: true });
+      } else if (model.dialog === "copy-key") {
+        title = "复制公钥";
+        detail = `${quiet("请选择并复制 OpenSSH 公钥。")}<textarea readonly rows="3" class="ops-copy-field ops-mono" aria-label="OpenSSH 公钥">${esc(model.copyValue)}</textarea>`;
+        return `<dialog class="ops-dialog" aria-modal="true" aria-labelledby="ops-dialog-title"><div class="ops-stack">
+          <h2 id="ops-dialog-title">${title}</h2>${detail}<div class="ops-actions">${button("关闭", "cancel-dialog")}</div>
+        </div></dialog>`;
+      } else if (model.dialog === "system-default") {
+        const enabling = !model.settings.systemDefault;
+        const requiresElevation = preview.elevation !== "elevated" && preview.defaultOutcome !== "service-absent";
+        title = enabling ? "设为系统默认 SSH 代理？" : "恢复 Windows OpenSSH 代理？";
+        detail = enabling ?
+          "<p>opssh 将接管默认 SSH 管道。若 OpenSSH 代理服务设为自动且正在运行，将停止并禁用该服务。</p>" :
+          "<p>opssh 将切回专用管道。若已安装 OpenSSH，将代理服务设为自动并启动。</p>";
+        if (requiresElevation) detail += quiet("需要管理员批准");
+        return `<dialog class="ops-dialog" aria-modal="true" aria-labelledby="ops-dialog-title"><div class="ops-stack">
+          <h2 id="ops-dialog-title">${title}</h2><div data-agent-description>${detail}</div>
+          <section class="ops-agent-progress" aria-label="切换进度" data-agent-progress hidden></section>
+          <div class="ops-actions" data-agent-actions>${button(enabling ? "设为默认" : "恢复 OpenSSH", "confirm-default", { primary: true, glyph: requiresElevation ? "shield" : "" })}${button("取消", "cancel-dialog")}</div>
+        </div></dialog>`;
+      } else if (model.dialog === "clear-activity") {
+        title = "清除活动？";
+        detail = "<p>删除所有 SSH 活动记录。</p>";
+        action = button("清除活动", "confirm-clear", { primary: true });
+      } else {
+        return "";
+      }
+      return `<dialog class="ops-dialog" aria-modal="true" aria-labelledby="ops-dialog-title"><div class="ops-stack">
+        <h2 id="ops-dialog-title">${title}</h2>${detail}
+        <div class="ops-actions">${action}${button("取消", "cancel-dialog")}</div>
+      </div></dialog>`;
+    }
+
+    function navItem(page, current) {
+      const [label, glyph] = pages[page];
+      const inactive = !model.connected && page === "activity";
+      return `<li><button type="button" class="ops-nav" data-action="nav:${page}" aria-label="${label}"${current ? ' aria-current="page"' : ""}${inactive ? " disabled" : ""}>
+        ${icon(glyph)}<span>${label}</span>
+      </button></li>`;
+    }
+
+    function draw(focusAction, focusValue) {
+      const samePage = renderedPage === model.page;
+      const filterChanged = focusAction?.startsWith("filter:") || focusAction === "filter-reset";
+      if (renderedPage) {
+        const activity = root.querySelector(".ops-activity-scroll");
+        scrollByPage.set(renderedPage, {
+          mainTop: root.querySelector(".ops-main")?.scrollTop,
+          activityTop: activity?.scrollTop, activityLeft: activity?.scrollLeft,
+          keyLeft: root.querySelector(".ops-key-scroll")?.scrollLeft
+        });
+      }
+      const { mainTop, activityTop, activityLeft, keyLeft } = scrollByPage.get(model.page) || {};
+      const filterTop = samePage && focusAction?.startsWith("filter:") ? root.querySelector("[data-filter-scroll]")?.scrollTop : 0;
+      const signedOut = !model.connected && model.page === "keys";
+      const content = signedOut ? renderSignedOut() : ({
+        keys: renderKeys, activity: renderActivity,
+        settings: renderSettings, about: renderAbout
+      })[model.page]();
+      root.dataset.theme = model.settings.theme;
+      root.lang = language;
+      live.lang = language;
+      const narrow = dimensions().width < 1007;
+      const overlay = narrow && model.pane;
+      const modal = Boolean(model.dialog);
+      root.innerHTML = `<div class="ops-window"${narrow ? " data-narrow" : ""}>
+        <header class="ops-titlebar"${modal ? " inert" : ""}>
+          ${narrow ? `<button type="button" class="ops-icon-button ops-pane-toggle" data-action="pane"
+            aria-label="切换导航窗格" aria-controls="ops-navigation" aria-expanded="${overlay}">${icon("menu")}</button>` : ""}
+          <span class="ops-title">${appIcon("terminal")}<span>opssh</span></span>
+          <span class="ops-caption" aria-hidden="true"><span class="ops-min"></span><span class="ops-max"></span><span class="ops-close"></span></span>
+        </header>
+        <div class="ops-layout"${modal ? " inert" : ""}>
+          <nav class="ops-sidebar" id="ops-navigation" aria-label="opssh 导航"${narrow && !overlay ? " hidden" : ""}>
+            <ul>${["keys","activity"].map(page => navItem(page, page === model.page)).join("")}</ul>
+            <ul>${["settings","about"].map(page => navItem(page, page === model.page)).join("")}</ul>
+          </nav>
+          ${overlay ? '<div class="ops-pane-dismiss" aria-hidden="true"></div>' : ""}
+          <div class="ops-surface${signedOut ? " ops-signedout" : ""}"${overlay ? " inert" : ""}>
+            ${!signedOut && model.message ? `<div class="ops-feedback">${info(esc(model.message), { kind: model.messageKind, dismissible: true })}</div>` : ""}
+            <main class="ops-main"${!samePage && renderedPage ? " data-enter" : ""}>${content}</main>
+          </div>
+        </div>
+        <div${modal ? " inert" : ""}>${renderToast()}</div>
+        ${modal ? '<div class="ops-dialog-backdrop" aria-hidden="true"></div>' : ""}
+        ${renderDialog()}
+      </div>`;
+      namespaceIds();
+      localizeContent(root);
+      renderedPage = model.page;
+      for (const [selector, top] of [[".ops-main", mainTop], [".ops-activity-scroll", filterChanged ? 0 : activityTop], ["[data-filter-scroll]", filterTop]]) {
+        const element = root.querySelector(selector);
+        if (element && top) element.scrollTop = top;
+      }
+      const keyTable = root.querySelector(".ops-key-scroll");
+      if (keyTable && keyLeft) keyTable.scrollLeft = keyLeft;
+      const activityTable = root.querySelector(".ops-activity-scroll");
+      if (activityTable && activityLeft) activityTable.scrollLeft = activityLeft;
+      globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+      const dialog = root.querySelector("dialog");
+      if (dialog) {
+        dialog.addEventListener("cancel", event => {
+          event.preventDefault();
+          if (model.agentTransition?.running) return;
+          draw(click("cancel-dialog"));
+        });
+        dialog.show();
+        if (model.agentTransition && !model.agentTransition.running) {
+          dialog.querySelector("[data-agent-description]").hidden = true;
+          paintAgentTransition(dialog, model.agentTransition);
+        }
+        if (!focusAction) dialog.querySelector("select, .ops-copy-field, button")?.focus({ preventScroll: true });
+      }
+      if (focusAction) {
+        const targetAction = focusAction === "filter-reset" ? "filter-open:process" : focusAction;
+        const target = [...(dialog || root).querySelectorAll("[data-action]")].find(control =>
+          control.dataset.action === targetAction && !control.disabled && (focusValue === undefined || control.value === focusValue));
+        if (target) target.focus({ preventScroll: true });
+        else if (dialog) dialog.querySelector("select, .ops-copy-field, button")?.focus({ preventScroll: true });
+      }
+      live.textContent = localize(model.message || (model.page === "about" ? updateStatusText[model.updateStatus] || "" : ""));
+      revealScenario();
+    }
+
+    function notify(message, kind = "info") {
+      model.message = message;
+      model.messageKind = kind;
+    }
+
+    function eligibleAccounts() {
+      return Object.fromEntries(Object.entries(model.availableAccounts).filter(([id]) => model.pickerIntent !== "switch" || id !== model.account));
+    }
+
+    function openAccountPicker(intent = model.pickerIntent) {
+      model.pickerIntent = intent;
+      const first = Object.keys(eligibleAccounts())[0];
+      model.accountChoice = first || "";
+      model.showPickerNotice = !first;
+      if (!first) {
+        model.dialog = "";
+        if (model.pickerStatus === "ready") model.pickerStatus = intent === "switch" ? "no-other" : "empty";
+        return "retry-picker";
+      }
+      model.dialog = "login";
+      return "choose-account";
+    }
+
+    function retryAccountPicker() {
+      const current = model;
+      const previous = current.pickerStatus;
+      current.pickerStatus = "checking";
+      setTimeout(() => {
+        if (model !== current) return;
+        if (current.installOnRetry) {
+          current.installOnRetry = false;
+          current.availableAccounts = accountChoices;
+          current.pickerStatus = "ready";
+        } else {
+          current.pickerStatus = previous;
+        }
+        draw(openAccountPicker());
+      }, 650);
+    }
+
+    function paintAgentTransition(dialog, transition) {
+      const phaseText = { running: "进行中", done: "完成", skipped: "跳过", failed: "失败", pending: "待确认" };
+      const phaseIcon = { done: "circle-check", skipped: "minus", failed: "circle-x", pending: "triangle-alert" };
+      const progress = dialog.querySelector("[data-agent-progress]");
+      progress.hidden = false;
+      progress.innerHTML = `<ol class="ops-agent-steps" aria-label="切换步骤">${transition.rows.map(item => `
+        <li data-phase="${item.phase}"${item.phase === "running" ? ' aria-current="step"' : ""}>
+          ${item.phase === "running" ? '<span class="ops-agent-spin" aria-hidden="true"></span>' : icon(phaseIcon[item.phase])}
+          <div><strong>${esc(item.title)}</strong>${item.detail ? quiet(esc(item.detail)) : ""}</div>
+          <small class="ops-quiet">${phaseText[item.phase]}</small>
+        </li>`).join("")}</ol>
+        ${transition.summary ? info(esc(transition.summary), { kind: transition.result === "success" ? "info" : "warning" }) : ""}`;
+      const actions = dialog.querySelector("[data-agent-actions]");
+      actions.innerHTML = transition.running ? "" : button("关闭", "cancel-dialog", { primary: true });
+      localizeContent(progress);
+      localizeContent(actions);
+      live.textContent = localize(transition.summary || `${transition.rows.at(-1).title}，进行中。`);
+      globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+      if (!transition.running) actions.querySelector("button").focus({ preventScroll: true });
+      dialog.scrollTop = dialog.scrollHeight;
+    }
+
+    function beginAgentTransition() {
+      const current = model;
+      const dialog = root.querySelector("dialog");
+      if (current.agentTransition || !dialog) return;
+      const enable = !current.settings.systemDefault;
+      const demoOutcome = preview.defaultOutcome;
+      const serviceAbsent = demoOutcome === "service-absent";
+      const inspect = [enable ? "检查 OpenSSH 服务和默认 SSH 管道" : "检查 Windows OpenSSH 代理服务", serviceAbsent ? "未找到 OpenSSH 代理服务。" :
+        enable ? "服务正在运行，启动类型为自动。已检查默认管道。" : "服务已停止，启动类型为禁用。"];
+      const pipe = enable ? ["为 opssh 取得默认 SSH 管道", "opssh 已开始监听默认管道。"] :
+        ["释放默认 SSH 管道", "opssh 已切回专用管道。"];
+      const save = ["保存并验证代理设置", "已保存选择，已确认监听状态。"];
+      const serviceSteps = enable ? [
+        ["停止 Windows OpenSSH 代理服务", ""],
+        ["禁用 Windows OpenSSH 代理服务", ""]
+      ] : [
+        ["将 Windows OpenSSH 代理设为自动启动", ""],
+        ["启动 Windows OpenSSH 代理服务", ""]
+      ];
+      if (serviceAbsent) serviceSteps.forEach(step => step[2] = true);
+      const steps = enable ? [inspect, ...serviceSteps, pipe, save] : [inspect, pipe, ...serviceSteps, save];
+      const transition = { rows: [], running: true, result: "", summary: "" };
+      current.agentTransition = transition;
+      dialog.querySelector("h2").textContent = enable && language === "en" ? "Set the default SSH agent" : localize(enable ? "设为系统默认 SSH 代理" : "恢复 Windows OpenSSH 代理");
+      dialog.querySelector("[data-agent-description]").hidden = true;
+      dialog.focus({ preventScroll: true });
+
+      function finish(result, summary) {
+        transition.running = false;
+        transition.result = result;
+        transition.summary = summary;
+        if (result === "success") {
+          current.settings.systemDefault = enable;
+          if (current.disableStartupAfterRestore) current.settings.startup = false;
+          const control = root.querySelector('input[data-action="system-default"]');
+          control.checked = enable;
+          control.nextElementSibling.textContent = localize(enable ? "开" : "关");
+        }
+        paintAgentTransition(dialog, transition);
+      }
+
+      function showStep(index) {
+        if (model !== current || current.agentTransition !== transition || !dialog.open) return;
+        const step = steps[index];
+        if (!step) {
+          finish("success", enable ? "设置完成。opssh 现为系统默认 SSH 代理。" :
+            serviceAbsent ? "设置完成。opssh 已切回专用管道，Windows OpenSSH 代理服务不存在。" :
+            "设置完成。已恢复 Windows OpenSSH 代理。");
+          return;
+        }
+        const row = { title: step[0], detail: "", phase: "running" };
+        transition.rows.push(row);
+        if (step[2]) {
+          row.phase = "skipped";
+          row.detail = "系统未安装 Windows OpenSSH 代理服务。";
+          showStep(index + 1);
+          return;
+        }
+        paintAgentTransition(dialog, transition);
+        setTimeout(() => {
+          if (model !== current || current.agentTransition !== transition || !dialog.open) return;
+          if (demoOutcome === "service-pending" && step === serviceSteps[0]) {
+            row.phase = "pending";
+            row.detail = "Windows 尚未确认服务操作的结果。";
+            finish("pending", "已保留恢复记录。请先检查 Windows OpenSSH 代理服务状态。");
+            return;
+          }
+          if (demoOutcome === "pipe-failure" && step === pipe) {
+            row.phase = "failed";
+            row.detail = enable ? "默认 SSH 管道已被占用。" : "无法释放默认 SSH 管道。";
+            const rollback = { title: "恢复切换前的状态", detail: "", phase: "running" };
+            transition.rows.push(rollback);
+            paintAgentTransition(dialog, transition);
+            setTimeout(() => {
+              if (model !== current || current.agentTransition !== transition || !dialog.open) return;
+              rollback.phase = "done";
+              rollback.detail = "已确认原服务和管道状态。";
+              finish("failed", "切换失败，已恢复原设置。");
+            }, 850);
+            return;
+          }
+          row.phase = "done";
+          row.detail = step[1];
+          showStep(index + 1);
+        }, index === 0 ? 1250 : 850);
+      }
+      showStep(0);
+    }
+
+    function saveVault(id, enabled) {
+      const current = model;
+      if (current.vaultChange || current.scan || !vaults.some(vault => vault.id === id)) return;
+      const change = { id, enabled };
+      current.vaultChange = change;
+      current.vaultError = null;
+      setTimeout(() => {
+        if (model !== current || current.vaultChange !== change) return;
+        current.vaultChange = null;
+        if (current.failNextVaultSave) {
+          current.failNextVaultSave = false;
+          current.vaultError = change;
+          draw(`retry-vault:${id}`);
+          return;
+        }
+        if (enabled) {
+          current.allowedVaults.add(id);
+          notify("已允许保险库。");
+        } else {
+          current.allowedVaults.delete(id);
+          current.keys = current.keys.filter(key => key.vaultId !== id);
+          retainIndexedKeys();
+          notify("已排除此保险库及其密钥和授权。");
+        }
+        draw(`vault:${id}`);
+      }, 550);
+    }
+
+    function discoverKeys() {
+      const current = model;
+      if (current.scan || current.vaultChange || !current.allowedVaults.size) return;
+      const scan = { vaults: [...current.allowedVaults], completed: 0, phase: "vaults" };
+      current.scan = scan;
+      notify("");
+      const advance = () => {
+        if (model !== current || current.scan !== scan) return;
+        if (scan.phase === "vaults") {
+          scan.completed += 1;
+          if (scan.completed === scan.vaults.length) scan.phase = "public";
+          draw();
+          setTimeout(advance, 1050);
+          return;
+        }
+        current.scan = null;
+        recordDesktopRequest();
+        current.keys = catalog.filter(key => scan.vaults.includes(key.vaultId));
+        current.hasDiscovered = true;
+        current.lastKeySync = Date.now();
+        retainIndexedKeys();
+        notify(`发现完成，已更新 ${current.keys.length} 把公钥。`);
+        draw("discover");
+      };
+      setTimeout(advance, 950);
+    }
+
+    function preloadKeys(ids) {
+      const current = model;
+      if (current.scan || current.preload || current.settings.keyMode === "off") return;
+      const pending = new Set(ids.filter(id => !current.loaded.has(id)));
+      if (!pending.size) return;
+      current.preload = pending;
+      setTimeout(() => {
+        if (model !== current || current.preload !== pending) return;
+        current.preload = null;
+        recordDesktopRequest();
+        let failed = false;
+        for (const id of pending) {
+          if (!current.keys.some(key => key.id === id)) continue;
+          if (current.preloadFailures.delete(id)) {
+            current.keyErrors.add(id);
+            failed = true;
+          } else {
+            current.keyErrors.delete(id);
+            current.loaded.add(id);
+          }
+        }
+        notify(failed ? "部分私钥未能加载。请检查失败的密钥。" :
+          ids.length === 1 ? "已预加载这把密钥的私钥。" : "已预加载全部私钥。", failed ? "warning" : "info");
+        draw(ids.length === 1 ? (failed ? `preload:${ids[0]}` : `evict:${ids[0]}`) : "preload-all");
+      }, 650);
+    }
+
+    function retainIndexedKeys() {
+      const ids = new Set(model.keys.map(key => key.id));
+      model.loaded = new Set([...model.loaded].filter(id => ids.has(id)));
+      model.grants = model.grants.filter(grant => ids.has(grant.keyId));
+      model.expanded = new Set([...model.expanded].filter(id => ids.has(id)));
+      model.keyErrors = new Set([...model.keyErrors].filter(id => ids.has(id)));
+    }
+
+    function resetAccountData() {
+      model.scan = null;
+      model.preload = null;
+      model.keyErrors.clear();
+      model.vaultChange = null;
+      model.vaultError = null;
+      model.allowedVaults.clear();
+      model.keys = [];
+      model.hasDiscovered = false;
+      model.lastVaultSync = null;
+      model.lastKeySync = null;
+      retainIndexedKeys();
+      model.activity = [];
+      model.activityFilters = emptyActivityFilters();
+      model.activityFilterOpen = "";
+      model.applicationSearch = "";
+      model.activityTimeOrder = "descending";
+    }
+
+    async function copyPowerShellCommand() {
+      const current = model;
+      let copied = false;
+      try {
+        if (globalThis.navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(powershellCommand());
+          copied = true;
+        }
+      } catch {
+        // The preview host can restrict clipboard access.
+      }
+      if (model !== current || model.page !== "settings") return;
+      if (!copied) {
+        const command = root.querySelector("[data-powershell-command]");
+        const selection = globalThis.getSelection?.();
+        if (command && selection) {
+          const range = document.createRange();
+          range.selectNodeContents(command);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          try {
+            copied = document.execCommand?.("copy") === true;
+          } catch {
+            // Keep the selection available for Ctrl+C.
+          }
+          if (!copied) {
+            const status = root.querySelector("[data-copy-status]");
+            status.textContent = localize("已选中命令，按 Ctrl+C 复制。");
+            status.hidden = false;
+            live.textContent = status.textContent;
+            return;
+          }
+        }
+      }
+      notify(copied ? "已复制 PowerShell 命令。" : "剪贴板不可用，请手动选择并复制命令。", copied ? "info" : "warning");
+      draw("copy-command");
+    }
+
+    async function copyPublicKey(id) {
+      const current = model;
+      const key = current.keys.find(item => item.id === id);
+      if (!key) return;
+      let copied = false;
+      try {
+        if (globalThis.navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(key.publicKey);
+          copied = true;
+        }
+      } catch {
+        // Some preview hosts restrict clipboard access.
+      }
+      if (model !== current || model.page !== "keys" || model.dialog || !model.keys.includes(key)) return;
+      if (copied) {
+        notify("已复制 OpenSSH 公钥。");
+        draw(`copy-key:${id}`);
+        return;
+      }
+      model.dialog = "copy-key";
+      model.copyFrom = `copy-key:${id}`;
+      model.copyValue = key.publicKey;
+      draw();
+      root.querySelector(".ops-copy-field")?.select();
+    }
+
+    function recordDesktopRequest() {
+      model.lastDesktopRequest = { outcome: "success", at: Date.now() };
+    }
+
+    function setCachePolicy(field, value) {
+      if (model.settings[field] === value) return;
+      model.settings[field] = value;
+      if (field.startsWith("key")) {
+        model.preload = null;
+        model.loaded.clear();
+        model.keyErrors.clear();
+      }
+      else model.grants = [];
+    }
+
+    function commitCacheDuration(control, field) {
+      const seconds = Number(control.value);
+      const valid = /^\d+$/.test(control.value) && seconds >= 1 && seconds <= 2592000;
+      const error = control.parentElement.querySelector(".ops-cache-error");
+      control.setAttribute("aria-invalid", String(!valid));
+      error.hidden = valid;
+      error.textContent = valid ? "" : localize("请输入 1 到 2,592,000 之间的整数。");
+      if (valid) {
+        control.value = String(seconds);
+        setCachePolicy(field, control.value);
+      }
+    }
+
+    async function checkForUpdates() {
+      const current = model;
+      if (current.updateChecking) return;
+      current.updateChecking = true;
+      current.updateStatus = "checking";
+      await new Promise(resolve => setTimeout(resolve, 800));
+      if (model !== current) return;
+      current.updateChecking = false;
+      current.updateStatus = current.updateOutcome;
+      if (current.page === "about") draw(document.activeElement?.dataset?.action);
+    }
+
+    function click(action) {
+      const [verb, id] = action.split(":");
+      switch (verb) {
+        case "nav":
+          model.page = id;
+          model.activityFilterOpen = "";
+          notify("");
+          if (model.pane) { model.pane = false; return "pane"; }
+          break;
+        case "pane": model.pane = !model.pane; break;
+        case "pane-dismiss": model.pane = false; return "pane";
+        case "dismiss": notify(""); break;
+        case "reopen": language = resolveLanguage(model.settings.language); notify(""); return "language";
+        case "login": return openAccountPicker("connect");
+        case "switch-account": return openAccountPicker("switch");
+        case "retry-picker": retryAccountPicker(); return "";
+        case "login-start":
+          if (!Object.hasOwn(eligibleAccounts(), model.accountChoice)) return openAccountPicker();
+          model.dialog = "authorize";
+          return "authorize";
+        case "authorize": {
+          const account = model.accountChoice;
+          if (!account) return "choose-account";
+          if (model.account !== account) resetAccountData();
+          model.account = account;
+          model.connected = true;
+          recordDesktopRequest();
+          model.page = "keys";
+          model.lastVaultSync = Date.now();
+          model.dialog = "";
+          notify("账户已连接。");
+          return "nav:keys";
+        }
+        case "logout":
+          model.dialog = "logout";
+          return "cancel-dialog";
+        case "reload-vaults":
+          if (model.scan || model.vaultChange) return action;
+          recordDesktopRequest();
+          model.lastVaultSync = Date.now();
+          notify("保险库列表已更新。");
+          return action;
+        case "retry-vault":
+          if (model.vaultError?.id === id) saveVault(id, model.vaultError.enabled);
+          return action;
+        case "confirm-logout":
+          resetAccountData();
+          model.account = "";
+          model.accountChoice = "";
+          model.connected = false;
+          model.lastDesktopRequest = null;
+          model.dialog = "";
+          notify("");
+          return "login";
+        case "cancel-dialog": {
+          const previous = model.dialog;
+          model.dialog = "";
+          if (previous === "system-default") {
+            const trigger = model.disableStartupAfterRestore ? "startup" : "system-default";
+            model.disableStartupAfterRestore = false;
+            model.agentTransition = null;
+            return trigger;
+          }
+          if (previous === "clear-activity" || previous === "logout") return previous;
+          if (previous === "clear-logs") return previous;
+          if (previous === "copy-key") return model.copyFrom;
+          return model.connected ? "switch-account" : "login";
+        }
+        case "toast-yes":
+          model.toast = false;
+          return openAccountPicker("authorize");
+        case "toast-no": model.toast = false; return "login";
+        case "signing-dismiss": model.signingToast = false; return "nav:keys";
+        case "discover": discoverKeys(); return "cancel-discovery";
+        case "cancel-discovery":
+          model.scan = null;
+          notify("已取消同步，保留上次结果。");
+          return "discover";
+        case "open-logs":
+          reviewStatus.lang = language;
+          reviewStatus.textContent = localize("预览操作：在文件资源管理器中打开日志目录。");
+          return action;
+        case "clear-logs": model.dialog = "clear-logs"; return "cancel-dialog";
+        case "confirm-clear-logs":
+          model.logsUsed = 0;
+          model.dialog = "";
+          notify("日志已清理。");
+          return "open-logs";
+        case "expand":
+          if (model.expanded.has(id)) model.expanded.delete(id);
+          else model.expanded.add(id);
+          break;
+        case "preload":
+          preloadKeys([id]);
+          break;
+        case "evict":
+          model.loaded.delete(id);
+          notify("已清除这把密钥的私钥缓存。");
+          return `preload:${id}`;
+        case "preload-all":
+          preloadKeys(model.keys.map(key => key.id));
+          break;
+        case "evict-all":
+          model.loaded.clear();
+          notify(`已清除已加载的私钥。当前仍有 ${model.grants.length} 项进程授权。`);
+          break;
+        case "revoke-key":
+          model.grants = model.grants.filter(grant => grant.keyId !== id);
+          notify("已撤销这把密钥的全部进程授权。");
+          return `expand:${id}`;
+        case "revoke-grant": {
+          const keyId = model.grants.find(grant => grant.id === id)?.keyId;
+          model.grants = model.grants.filter(grant => grant.id !== id);
+          notify("已撤销该进程的授权。");
+          return `expand:${keyId}`;
+        }
+        case "revoke-all":
+          model.grants = [];
+          notify("已撤销全部进程授权。");
+          break;
+        case "filter-open":
+          model.activityFilterOpen = model.activityFilterOpen === id ? "" : id;
+          if (model.activityFilterOpen === "process") return "filter-search";
+          break;
+        case "sort-time":
+          model.activityTimeOrder = model.activityTimeOrder === "descending" ? "ascending" : "descending";
+          break;
+        case "filter-reset":
+          model.activityFilters = emptyActivityFilters();
+          model.activityFilterOpen = "";
+          model.applicationSearch = "";
+          break;
+        case "clear-activity": model.dialog = "clear-activity"; return "cancel-dialog";
+        case "confirm-clear":
+          model.activity = [];
+          model.activityFilters = emptyActivityFilters();
+          model.activityFilterOpen = "";
+          model.applicationSearch = "";
+          model.dialog = "";
+          notify("活动已清除。");
+          return "nav:activity";
+        case "check-update": void checkForUpdates(); break;
+      }
+      return action;
+    }
+
+    function change(control) {
+      const action = control.dataset.action;
+      if (!action) return;
+      const [verb, id] = action.split(":");
+      switch (verb) {
+        case "choose-account":
+          if (Object.hasOwn(eligibleAccounts(), control.value)) model.accountChoice = control.value;
+          break;
+        case "filter":
+          if (control.checked) model.activityFilters[id].add(control.value);
+          else model.activityFilters[id].delete(control.value);
+          return draw(action, control.value);
+        case "vault": saveVault(id, control.checked); break;
+        case "logging": model.settings.logging = control.checked; break;
+        case "log-level":
+          if (model.settings.logging && ["ERROR", "WARN", "INFO", "DEBUG"].includes(control.value)) model.settings.logLevel = control.value;
+          break;
+        case "startup":
+          if (!control.checked && model.settings.systemDefault) {
+            model.disableStartupAfterRestore = true;
+            model.dialog = "system-default";
+            return draw("cancel-dialog");
+          }
+          model.settings.startup = control.checked;
+          break;
+        case "wait-password": model.settings.waitForPassword = control.checked; break;
+        case "system-default":
+          if (!model.settings.startup) return;
+          model.dialog = "system-default";
+          return draw("cancel-dialog");
+        case "theme": model.settings.theme = control.value; break;
+        case "language":
+          model.settings.language = control.value;
+          break;
+        case "auto-update": model.settings.autoUpdate = control.checked; break;
+        case "cache":
+          if (id.endsWith("Seconds")) return commitCacheDuration(control, id);
+          setCachePolicy(id, control.value);
+          break;
+        default: return;
+      }
+      draw(action);
+    }
+
+    function moveHorizontally(element, delta, deltaMode) {
+      const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? element.clientWidth : 1;
+      const before = element.scrollLeft;
+      element.scrollLeft = before + Math.sign(delta) * Math.max(1, Math.abs(delta * unit));
+      return element.scrollLeft !== before;
+    }
+
+    root.addEventListener("wheel", event => {
+      if (!event.shiftKey || event.ctrlKey || !event.cancelable) return;
+      const table = event.target.closest(".ops-activity-scroll, .ops-key-scroll");
+      if (!table) return;
+      const deltaMode = event.deltaMode;
+      const delta = event.deltaX || event.deltaY;
+      if (!Number.isFinite(delta) || delta === 0) return;
+      const command = event.target.closest(".ops-activity-command");
+      if (command && command.scrollWidth > command.clientWidth && moveHorizontally(command, delta, deltaMode)) {
+        event.preventDefault();
+        command.dataset.wheelScrolling = "";
+        clearTimeout(commandScrollTimers.get(command));
+        commandScrollTimers.set(command, setTimeout(() => {
+          delete command.dataset.wheelScrolling;
+          commandScrollTimers.delete(command);
+        }, 700));
+        return;
+      }
+      if (moveHorizontally(table, delta, deltaMode)) event.preventDefault();
+    }, { passive: false });
+
+    root.addEventListener("click", event => {
+      if (event.target.closest(".ops-pane-dismiss")) return draw(click("pane-dismiss"));
+      const control = event.target.closest("button[data-action]");
+      if (control?.dataset.action.startsWith("copy-key:")) {
+        void copyPublicKey(control.dataset.action.split(":")[1]);
+        return;
+      }
+      if (model.activityFilterOpen && !event.target.closest(".ops-activity-filter")) {
+        model.activityFilterOpen = "";
+        if (!control) return draw();
+      }
+      if (!control || control.disabled) return;
+      if (control.dataset.action === "filter-search-clear") {
+        const search = root.querySelector("[data-action='filter-search']");
+        search.value = "";
+        updateApplicationSearch(search);
+        search.focus({ preventScroll: true });
+        return;
+      }
+      if (control.dataset.action === "copy-command") {
+        void copyPowerShellCommand();
+        return;
+      }
+      if (control.dataset.action === "confirm-default") {
+        beginAgentTransition();
+        return;
+      }
+      draw(click(control.dataset.action));
+    });
+    root.addEventListener("change", event => change(event.target));
+    root.addEventListener("input", event => {
+      if (event.target.dataset.action === "filter-search") updateApplicationSearch(event.target);
+    });
+    root.addEventListener("toggle", event => {
+      const prefix = event.target.dataset.cacheEditor;
+      if (prefix) model.cacheOpen[prefix] = event.target.open;
+    }, true);
+    root.addEventListener("keydown", event => {
+      if (event.key === "Escape" && model.dialog) {
+        event.preventDefault();
+        if (!model.agentTransition?.running) draw(click("cancel-dialog"));
+        return;
+      }
+      if (event.key === "Escape" && model.pane) {
+        event.preventDefault();
+        draw(click("pane-dismiss"));
+        return;
+      }
+      if (event.key === "Escape" && model.activityFilterOpen) {
+        event.preventDefault();
+        const filter = model.activityFilterOpen;
+        model.activityFilterOpen = "";
+        draw(`filter-open:${filter}`);
+        return;
+      }
+      const action = event.target.dataset.action;
+      if (event.key === "ArrowDown" && action === "filter-search") {
+        const first = root.querySelector("[data-application-filter] .ops-activity-filter-option:not([hidden]) input");
+        if (first) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+      if (event.key === "Enter" && action?.startsWith("cache:") && action.endsWith("Seconds")) {
+        event.preventDefault();
+        commitCacheDuration(event.target, action.split(":")[1]);
+      }
+    });
+
+    function revealScenario() {
+      if (!scenarioAnchor || !root.getClientRects().length) return;
+      const header = root.querySelector(`#stacked-${scenarioAnchor}`);
+      if (!header) return;
+      const main = root.querySelector(".ops-main");
+      const scale = Number(getComputedStyle(root).getPropertyValue("--scale")) || 1;
+      main.scrollTop += (header.getBoundingClientRect().top - main.getBoundingClientRect().top) / scale - 16;
+      scenarioAnchor = "";
+    }
+
+    function drawScenario() {
+      model = createModel(preview.scenario, { ...settingDefaults, theme: preview.theme, language: preview.language });
+      language = preview.language;
+      renderedPage = "";
+      scrollByPage.clear();
+      scenarioAnchor = {
+        cache: "ops-cache-heading", logs: "ops-logs-heading", discover: "ops-key-index",
+        "key-preload-failure": "ops-key-index", "key-preload-partial": "ops-key-index"
+      }[preview.scenario] || "";
+      if (preview.scenario === "discover") discoverKeys();
+      draw();
+    }
+
+    new ResizeObserver(revealScenario).observe(root);
+    drawScenario();
+    return {
+      update(key) {
+        if (key === "scenario") return drawScenario();
+        if (key === "width") model.pane = false;
+        if (key === "theme") model.settings.theme = preview.theme;
+        if (key === "language") language = model.settings.language = preview.language;
+        if (!model.agentTransition?.running) draw();
+      }
+    };
+  }
+
+  const section = review.querySelector(".ops-preview");
+  function fitStage() {
+    const { width, height } = dimensions();
+    const scale = Math.min(1, (review.clientWidth || width) / width);
+    section.style.setProperty("--window-width", width + "px");
+    section.style.setProperty("--window-height", height + "px");
+    section.style.setProperty("--scaled-width", width * scale + "px");
+    section.style.setProperty("--scaled-height", height * scale + "px");
+    section.style.setProperty("--stage-height", height * scale + "px");
+    section.style.setProperty("--scale", scale);
+    section.querySelector(".ops-size").textContent = width + " × " + height + " DIP";
+  }
+
+  fitStage();
+  const workspace = mount(section.querySelector(".ops-app"));
+
+  for (const control of controls) {
+    control.addEventListener("change", () => {
+      const key = control.dataset.review;
+      preview[key] = control.value;
+      reviewStatus.textContent = "";
+      if (key === "width") fitStage();
+      workspace.update(key);
+    });
+  }
+  new ResizeObserver(fitStage).observe(review);
+})();
+</script>

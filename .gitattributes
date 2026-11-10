@@ -11,3 +11,5 @@ docs/references/opssh-desktop-ux-review.html -text
 docs/references/opssh-key-approval-preview.html -text whitespace=-blank-at-eof
 docs/references/opssh-install-uninstall-preview.html -text
 docs/references/opssh-merged-workspace-preview.html -text
+docs/references/opssh-stacked-workspace-preview.html -text
+docs/references/opssh-wix-elevation-preview.html -text
