@@ -3,6 +3,7 @@
   "Startup.Choose": "Choose account",
   "Startup.Later": "Later",
   "Startup.ToastUnavailable": "Windows could not display the 1Password authorization notification.",
+  "Startup.DefaultRequiresLogin": "Enable startup at Windows sign-in before setting opssh as the default SSH agent.",
   "Startup.DefaultRecovery": "An OpenSSH service change was interrupted. Reconcile the OpenSSH service before retrying.",
   "Startup.DefaultChangeFailed": "Windows could not change the default SSH agent. The previous configuration was restored.",
   "Startup.OpenSshStopped": "The automatic Windows OpenSSH agent is stopped. Start the service before changing the default SSH agent."

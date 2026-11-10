@@ -17,7 +17,9 @@ public sealed partial class DashboardWindow
     private ToggleSwitch loginStartup = null!;
     private ToggleSwitch waitForPassword = null!;
     private ToggleSwitch defaultAgent = null!;
+    private HyperlinkButton restoreDefaultAgent = null!;
     private TextBlock loginStartupDescription = null!;
+    private FrameworkElement powerShellCard = null!;
     private TextBlock shellCommand = null!;
     private Button copyCommand = null!;
     private CacheEditor keyCacheEditor = null!;
@@ -32,11 +34,18 @@ public sealed partial class DashboardWindow
         loginStartupDescription = Quiet(Strings.Get("Dashboard.StartWithWindowsDescription"), 12);
         waitForPassword = Switch(Strings.Get("Dashboard.WaitForPassword"), preferences.WaitForPassword);
 
-        loginStartup.Toggled += (_, _) =>
+        loginStartup.Toggled += async (_, _) =>
         {
             if (updatingSettings)
                 return;
-            if (!actions.SetLoginStartup(loginStartup.IsOn))
+            var enabled = loginStartup.IsOn;
+            if (!enabled && (actions.GetDefaultAgent() || DefaultAgentActive) &&
+                !await ChangeDefaultAgentAsync(false))
+            {
+                RefreshSystemSettings();
+                return;
+            }
+            if (!closed && !actions.SetLoginStartup(enabled))
                 ShowMessage(Strings.Get("Dashboard.StartupSaveFailed"), InfoBarSeverity.Warning);
             RefreshSystemSettings();
         };
@@ -63,9 +72,17 @@ public sealed partial class DashboardWindow
         defaultAgent = Switch(Strings.Get("Dashboard.DefaultAgent"), false);
         defaultAgent.Toggled += async (_, _) =>
         {
-            if (!updatingSettings)
+            if (!updatingSettings && loginStartup.IsOn)
                 await ChangeDefaultAgentAsync(defaultAgent.IsOn);
         };
+        restoreDefaultAgent = new HyperlinkButton
+        {
+            Content = Strings.Get("Dashboard.DisableDefaultAction"),
+            Padding = new Thickness(0),
+            Visibility = Visibility.Collapsed
+        };
+        restoreDefaultAgent.Click += async (_, _) => await ChangeDefaultAgentAsync(false);
+        var agentActions = new StackPanel { Spacing = 4, Children = { defaultAgent, restoreDefaultAgent } };
         shellCommand = Mono("—");
         shellCommand.IsTextSelectionEnabled = true;
         AutomationProperties.SetName(shellCommand, Strings.Get("Settings.CommandAutomationName"));
@@ -77,9 +94,11 @@ public sealed partial class DashboardWindow
             Orientation = Orientation.Horizontal, Spacing = 7,
             Children = { Icon("\uE8C8", 14), new TextBlock { Text = Strings.Get("Dashboard.CopyCommand") } }
         };
+        powerShellCard = SettingRow("\uE756", Strings.Get("Dashboard.PowerShell"), Strings.Get("Dashboard.PowerShellDescription"),
+            copyCommand, code);
         page.Children.Add(Section(Strings.Get("Dashboard.SshIntegration"), Cards(
-            SettingRow("\uE8A4", Strings.Get("Dashboard.DefaultAgent"), Strings.Get("Dashboard.DefaultAgentDescription"), defaultAgent),
-            SettingRow("\uE756", Strings.Get("Dashboard.PowerShell"), Strings.Get("Dashboard.PowerShellDescription"), copyCommand, code))));
+            SettingRow("\uE8A4", Strings.Get("Dashboard.DefaultAgent"), Strings.Get("Dashboard.DefaultAgentDescription"), agentActions),
+            powerShellCard)));
 
         keyCacheEditor = BuildCacheEditor("\uE192", "Settings.KeyCache", "Settings.KeyCacheDescription", DefaultKeySeconds, isKey: true);
         approvalCacheEditor = BuildCacheEditor("\uE73E", "Settings.ApprovalCache", "Settings.ApprovalCacheDescription",
@@ -120,7 +139,8 @@ public sealed partial class DashboardWindow
         updatingSettings = true;
         var startup = actions.GetLoginStartup();
         loginStartup.IsOn = startup == LoginStartupStatus.On;
-        loginStartup.IsEnabled = startup is LoginStartupStatus.On or LoginStartupStatus.Off;
+        loginStartup.IsEnabled = !changingIntegration && startup is (LoginStartupStatus.On or LoginStartupStatus.Off);
+        defaultAgent.IsEnabled = loginStartup.IsOn && !changingIntegration;
         var startupStatus = startup switch
         {
             LoginStartupStatus.Conflict => Strings.Get("Dashboard.StartupConflict"),
@@ -129,6 +149,9 @@ public sealed partial class DashboardWindow
         };
         loginStartupDescription.Text = startupStatus;
         defaultAgent.IsOn = actions.GetDefaultAgent();
+        restoreDefaultAgent.Visibility = startup is (LoginStartupStatus.Conflict or LoginStartupStatus.Unavailable) &&
+            (defaultAgent.IsOn || DefaultAgentActive) ? Visibility.Visible : Visibility.Collapsed;
+        restoreDefaultAgent.IsEnabled = !changingIntegration;
         updatingSettings = false;
     }
 
@@ -137,7 +160,7 @@ public sealed partial class DashboardWindow
         if (closed)
             return;
         updatingSettings = true;
-        defaultAgent.IsEnabled = !changingIntegration;
+        powerShellCard.Visibility = DefaultAgentActive ? Visibility.Collapsed : Visibility.Visible;
         var command = PowerShellCommand();
         shellCommand.Text = command ?? "—";
         copyCommand.IsEnabled = command is not null;
@@ -147,10 +170,11 @@ public sealed partial class DashboardWindow
         updatingSettings = false;
     }
 
+    private bool DefaultAgentActive => actions.GetDefaultAgentActive?.Invoke() ?? displayedState?.DefaultAgent == true;
+
     private string? PowerShellCommand()
     {
-        var address = (actions.GetDefaultAgentActive?.Invoke() ?? displayedState?.DefaultAgent == true)
-            ? OpenSshService.Pipe : pipe;
+        var address = DefaultAgentActive ? null : pipe;
         return address is not null && address.StartsWith(@"\\.\pipe\", StringComparison.OrdinalIgnoreCase)
             ? "$env:SSH_AUTH_SOCK = '" + address.Replace("'", "''") + "'" : null;
     }

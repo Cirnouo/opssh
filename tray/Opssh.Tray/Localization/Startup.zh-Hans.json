@@ -3,6 +3,7 @@
   "Startup.Choose": "选择账户",
   "Startup.Later": "稍后",
   "Startup.ToastUnavailable": "Windows 无法显示 1Password 授权通知。",
+  "Startup.DefaultRequiresLogin": "请先开启开机自启，再将 opssh 设为默认 SSH 代理。",
   "Startup.DefaultRecovery": "OpenSSH 服务变更已中断。请先恢复 OpenSSH 服务状态，再重试。",
   "Startup.DefaultChangeFailed": "Windows 无法切换默认 SSH 代理，已恢复原配置。",
   "Startup.OpenSshStopped": "Windows OpenSSH 代理设为自动启动，但当前已停止。请启动服务后再切换默认 SSH 代理。"

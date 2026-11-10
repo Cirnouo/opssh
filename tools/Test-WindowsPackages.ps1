@@ -17,8 +17,10 @@ if (Test-Path -LiteralPath $VerificationDirectory) { throw 'Choose a new package
 if ($Version -cnotmatch '\A[0-9]+\.[0-9]+\.[0-9]+\z') { throw 'Use the canonical package version.' }
 $stem = "opssh-$Version-windows-x64"
 $msi = Join-Path $PackageDirectory "$stem.msi"
-$bundle = Join-Path $PackageDirectory "$stem.exe"
-$zip = Join-Path $PackageDirectory "$stem.zip"
+$expectedArtifacts = @("$stem.msi", 'payload-manifest.json')
+if (Compare-Object $expectedArtifacts @(Get-ChildItem -LiteralPath $PackageDirectory -Force -Name) -CaseSensitive) {
+    throw 'Expected only the Windows x64 MSI and its payload manifest.'
+}
 $manifest = Get-Content -Raw -LiteralPath (Join-Path $PackageDirectory 'payload-manifest.json') | ConvertFrom-Json
 if ($manifest.version -cne $Version -or $manifest.architecture -cne 'x64') { throw 'Payload manifest identity mismatch.' }
 
@@ -54,96 +56,41 @@ function Get-MsiRows([string]$Table, [int]$Fields) {
     }
 }
 
-function Assert-Manifest($Entries, [hashtable]$Expected, [string]$Format) {
+function Assert-Manifest($Entries, [hashtable]$Expected) {
     $entriesByPath = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
     foreach ($entry in $Entries) {
-        if (!$entriesByPath.TryAdd($entry.path, $entry)) { throw "Duplicate $Format manifest path." }
+        if (!$entriesByPath.TryAdd($entry.path, $entry)) { throw 'Duplicate MSI manifest path.' }
     }
-    if ($Expected.Count -ne $entriesByPath.Count) { throw "$Format manifest file count differs from the curated Release." }
+    if ($Expected.Count -ne $entriesByPath.Count) { throw 'MSI manifest file count differs from the curated Release.' }
     foreach ($path in $Expected.Keys) {
-        if (!$entriesByPath.ContainsKey($path)) { throw "Missing curated $Format file $path." }
+        if (!$entriesByPath.ContainsKey($path)) { throw "Missing curated MSI file $path." }
         Assert-File $Expected[$path] $entriesByPath[$path]
     }
     return ,$entriesByPath
 }
 
 $expected = @{}
-$expectedPortable = @{ 'opssh-tray.exe' = (Join-Path $ReleaseDirectory 'opssh-portable.exe') }
 foreach ($file in Get-ChildItem -LiteralPath $ReleaseDirectory -Recurse -Force -File) {
+    if ($file.Name -ieq 'opssh-portable.exe') { throw 'Use a fresh Release directory without the retired launcher.' }
+    if ($file.Extension -ieq '.pdb') { continue }
     $name = [IO.Path]::GetRelativePath($ReleaseDirectory, $file.FullName).Replace('\', '/')
-    if ($file.Extension -ine '.pdb' -and $name -ine 'opssh-portable.exe') {
-        $expected.Add($name, $file.FullName)
-        $expectedPortable.Add("opssh-runtime/$name", $file.FullName)
-    }
+    $expected.Add($name, $file.FullName)
 }
 foreach ($name in @('LICENSE', 'THIRD-PARTY-NOTICES.md')) {
-    $source = Join-Path $LegalDirectory $name
-    $expected.Add($name, $source)
-    $expectedPortable.Add($name, $source)
+    $expected.Add($name, (Join-Path $LegalDirectory $name))
 }
 $licenses = (Get-Item -LiteralPath (Join-Path $LegalDirectory 'licenses')).FullName
 foreach ($file in Get-ChildItem -LiteralPath $licenses -Recurse -Force -File) {
     $path = [IO.Path]::GetRelativePath($licenses, $file.FullName).Replace('\', '/')
     $expected.Add("licenses/$path", $file.FullName)
-    if ($path -ine 'wix/wix-7.0.1-source.zip') {
-        $expectedPortable.Add("licenses/$path", $file.FullName)
-    }
 }
-$files = Assert-Manifest $manifest.files $expected 'MSI'
-$portableFiles = Assert-Manifest $manifest.portableFiles $expectedPortable 'ZIP'
-foreach ($file in @($msi, $bundle)) {
-    if ((Get-AuthenticodeSignature -LiteralPath $file).Status -ne 'NotSigned') {
-        throw 'Expected an unsigned Windows installer.'
-    }
-}
-$stream = [IO.File]::OpenRead($bundle)
-try {
-    $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
-    try {
-        if ($pe.PEHeaders.CoffHeader.Machine -ne 'Amd64') { throw 'Expected an x64 Burn EXE.' }
-    } finally {
-        $pe.Dispose()
-    }
-} finally {
-    $stream.Dispose()
-}
+$files = Assert-Manifest $manifest.files $expected
+if (!$files.ContainsKey('licenses/wix/wix-7.0.1-source.zip')) { throw 'The MSI must include WiX corresponding source.' }
+if ((Get-AuthenticodeSignature -LiteralPath $msi).Status -ne 'NotSigned') { throw 'Expected an unsigned Windows MSI.' }
 
-$zipFiles = Join-Path $VerificationDirectory 'zip'
 $msiFiles = Join-Path $VerificationDirectory 'msi'
-$burnFiles = Join-Path $VerificationDirectory 'burn'
-$burnBa = Join-Path $VerificationDirectory 'burn-ba'
 $wixWork = Join-Path $VerificationDirectory 'wix'
 New-Item -ItemType Directory -Path $VerificationDirectory,$wixWork | Out-Null
-[IO.Compression.ZipFile]::ExtractToDirectory($zip, $zipFiles)
-$extracted = @(Get-ChildItem -LiteralPath $zipFiles -Recurse -Force -File)
-if ($extracted.Count -ne $portableFiles.Count) { throw 'ZIP file count differs from the payload manifest.' }
-foreach ($file in $extracted) {
-    $path = [IO.Path]::GetRelativePath($zipFiles, $file.FullName).Replace('\', '/')
-    if (!$portableFiles.ContainsKey($path)) { throw "Unexpected ZIP file $path." }
-    Assert-File $file.FullName $portableFiles[$path]
-}
-$zipRoot = @('opssh-tray.exe', 'opssh-runtime', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'licenses')
-if (Compare-Object $zipRoot @(Get-ChildItem -LiteralPath $zipFiles -Force -Name) -CaseSensitive) {
-    throw 'The portable ZIP root must expose only the launcher, the runtime directory and the legal files.'
-}
-$launcher = Join-Path $zipFiles 'opssh-tray.exe'
-if ((Get-AuthenticodeSignature -LiteralPath $launcher).Status -ne 'NotSigned') {
-    throw 'Expected an unsigned Windows launcher.'
-}
-$stream = [IO.File]::OpenRead($launcher)
-try {
-    $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
-    try {
-        if ($pe.PEHeaders.CoffHeader.Machine -ne 'Amd64' -or $pe.PEHeaders.PEHeader.Subsystem -ne 'WindowsGui') {
-            throw 'Expected a native x64 Windows GUI launcher.'
-        }
-    } finally {
-        $pe.Dispose()
-    }
-} finally {
-    $stream.Dispose()
-}
-& (Join-Path $PSScriptRoot 'Test-PortableLauncher.ps1') -LauncherPath $launcher -OutputDirectory (Join-Path $VerificationDirectory 'portable smoke')
 
 Invoke-Wix @('msi', 'validate', '-acceptEula', 'wix7', '-ice', 'ICE38', '-ice', 'ICE64',
     '-intermediateFolder', $wixWork, $msi)
@@ -156,9 +103,11 @@ try {
     $database = $installer.OpenDatabase($msi, 0)
     $summary = $database.SummaryInformation(0)
     try {
-        # PID_TEMPLATE is the platform; bit 3 of PID_WORDCOUNT denotes a non-elevated package.
-        if ($summary.Property(7) -cne 'x64;1033' -or ([int]$summary.Property(15) -band 8) -eq 0) {
-            throw 'Expected a per-user x64 MSI.'
+        # PID_TEMPLATE identifies the platform, PID_PAGECOUNT the minimum engine version.
+        # Bit 3 of PID_WORDCOUNT denotes a non-elevated package.
+        if ($summary.Property(7) -cne 'x64;1033' -or [int]$summary.Property(14) -ne 500 -or
+            ([int]$summary.Property(15) -band 8) -eq 0) {
+            throw 'Expected a per-user x64 MSI requiring Windows Installer 5.0.'
         }
     } finally {
         [void][Runtime.InteropServices.Marshal]::ReleaseComObject($summary)
@@ -181,7 +130,8 @@ try {
     if ($guardTargets.Count) { throw 'The MSI must check both the tray and the core.' }
     $properties = @{}
     foreach ($row in Get-MsiRows 'Property' 2) { $properties.Add($row.Values[0], $row.Values[1]) }
-    if ($properties.ProductVersion -cne $Version -or $properties.ContainsKey('ALLUSERS') -or
+    if ($properties.ProductVersion -cne $Version -or $properties.UpgradeCode -cne '{51789FE4-B851-4225-8E02-B09E6E2C4696}' -or
+        $properties.ContainsKey('ALLUSERS') -or
         $properties.ContainsKey('ARPSYSTEMCOMPONENT') -or $properties.MSIRESTARTMANAGERCONTROL -cne 'Disable' -or
         $properties.REBOOT -cne 'ReallySuppress') {
         throw 'Unexpected MSI version, installation scope, maintenance, or shutdown policy.'
@@ -196,18 +146,43 @@ try {
         $actions.Add($row.Values[0], [int]$row.Values[2])
         $actionConditions.Add($row.Values[0], $row.Values[1])
     }
-    $uiBinding = $null
-    $uiCostInitialize = 0
-    foreach ($row in Get-MsiRows 'InstallUISequence' 3) {
-        switch -CaseSensitive ($row.Values[0]) {
-            'SetOpsshInstallDir' { $uiBinding = $row.Values }
-            'CostInitialize' { $uiCostInitialize = [int]$row.Values[2] }
-        }
-    }
+    $uiActions = @{}
+    foreach ($row in Get-MsiRows 'InstallUISequence' 3) { $uiActions.Add($row.Values[0], $row.Values) }
+    $uiBinding = $uiActions.SetOpsshInstallDir
     if (!$actions.ContainsKey('SetOpsshInstallDir') -or $actionConditions.SetOpsshInstallDir -or
         $actions.SetOpsshInstallDir -le 0 -or $actions.SetOpsshInstallDir -ge $actions.CostInitialize -or
-        !$uiBinding -or $uiBinding[1] -or [int]$uiBinding[2] -le 0 -or [int]$uiBinding[2] -ge $uiCostInitialize) {
+        !$uiBinding -or $uiBinding[1] -or [int]$uiBinding[2] -le 0 -or
+        [int]$uiBinding[2] -ge [int]$uiActions.CostInitialize[2]) {
         throw 'The per-user application directory must be set before costing in both MSI sequences.'
+    }
+    $finish = $uiActions.OpsshComplete
+    if (!$finish -or $finish[2] -cne '-1' -or $actions.ContainsKey('OpsshComplete') -or
+        $finish[1] -cne 'UILevel = 5 AND NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT MsiRunningElevated' -or
+        !$uiActions.FindRelatedProducts -or [int]$uiActions.FindRelatedProducts[2] -ge [int]$uiActions.ExecuteAction[2]) {
+        throw 'The options dialog must run only after a fresh, interactive, non-elevated installation.'
+    }
+    $optionsDialog = @(Get-MsiRows 'Dialog' 10 | Where-Object { $_.Values[0] -ceq 'OpsshComplete' })
+    if ($optionsDialog.Count -ne 1 -or $optionsDialog[0].Values[8] -cne 'Finish' -or
+        $optionsDialog[0].Values[9] -cne 'Skip') {
+        throw 'The MSI options dialog must let users apply or skip onboarding.'
+    }
+    $checkboxes = @{}
+    foreach ($row in Get-MsiRows 'CheckBox' 2) { $checkboxes.Add($row.Values[0], $row.Values[1]) }
+    $optionControls = @{ LoginStartup = 'OpsshLoginStartup'; DefaultAgent = 'OpsshDefaultAgent' }
+    foreach ($row in Get-MsiRows 'Control' 9 | Where-Object { $_.Values[0] -ceq 'OpsshComplete' -and $_.Values[2] -ceq 'CheckBox' }) {
+        $control = $row.Values[1]
+        $property = $row.Values[8]
+        if ($optionControls[$control] -cne $property -or $checkboxes[$property] -cne '1' -or $properties[$property] -cne '1') {
+            throw 'The MSI options must bind to checked-by-default private properties.'
+        }
+        $optionControls.Remove($control)
+    }
+    if ($optionControls.Count) { throw 'The MSI is missing a Finish dialog option.' }
+    $agentConditions = @(Get-MsiRows 'ControlCondition' 4 |
+        Where-Object { $_.Values[0] -ceq 'OpsshComplete' -and $_.Values[1] -ceq 'DefaultAgent' } |
+        ForEach-Object { $_.Values[2..3] -join ': ' })
+    if (Compare-Object @('Enable: OpsshLoginStartup = 1', 'Disable: NOT OpsshLoginStartup') $agentConditions -CaseSensitive) {
+        throw 'The default-agent option must depend on login startup.'
     }
     if (!$actions.ContainsKey('Wix4CloseApplications_X64') -or !$actions.ContainsKey('OpsshInUse') -or
         $actions.Wix4CloseApplications_X64 -ge $actions.OpsshInUse -or $actions.OpsshInUse -ge $actions.InstallValidate -or
@@ -270,6 +245,7 @@ try {
     $msiPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $payloadDirectories = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     [void]$payloadDirectories.Add('OpsshInstallDir')
+    $trayFileId = $null
     foreach ($row in Get-MsiRows 'File' 4) {
         $values = $row.Values
         $path = $values[2].Split('|')[-1]
@@ -287,12 +263,37 @@ try {
         if (!$msiPaths.Add($path) -or !$files.ContainsKey($path) -or [int64]$values[3] -ne $files[$path].size) {
             throw "Unexpected MSI payload row for $path."
         }
+        if ($path -ceq 'opssh-tray.exe') { $trayFileId = $values[0] }
         Assert-File (Join-Path $msiFiles ('File/' + $values[0])) $files[$path]
     }
     if ($msiPaths.Count -ne $files.Count -or
         @(Get-ChildItem -LiteralPath (Join-Path $msiFiles 'File') -File -Force).Count -ne $files.Count) {
         throw 'MSI file count differs from the payload manifest.'
     }
+    $controlEvents = @(Get-MsiRows 'ControlEvent' 6)
+    $skipEvents = @($controlEvents | Where-Object { $_.Values[0] -ceq 'OpsshComplete' -and $_.Values[1] -ceq 'Skip' })
+    if ($skipEvents.Count -ne 1 -or ($skipEvents[0].Values[2..4] -join '|') -cne 'EndDialog|Return|1') {
+        throw 'Skipping the MSI options must close the dialog without launching the tray.'
+    }
+    $finishEvents = @($controlEvents | Where-Object {
+        $_.Values[2] -ceq 'MsiLaunchApp' -or ($_.Values[0] -ceq 'OpsshComplete' -and $_.Values[1] -ceq 'Finish')
+    } | Sort-Object { [int]$_.Values[5] })
+    $expectedEvents = @(
+        "MsiLaunchApp|[#$trayFileId] --install-login-default|NOT MsiRunningElevated AND OpsshLoginStartup = 1 AND OpsshDefaultAgent = 1",
+        "MsiLaunchApp|[#$trayFileId] --install-login|NOT MsiRunningElevated AND OpsshLoginStartup = 1 AND NOT OpsshDefaultAgent",
+        'EndDialog|Return|1'
+    )
+    if (!$trayFileId -or $finishEvents.Count -ne $expectedEvents.Count) {
+        throw 'The MSI Finish dialog must offer only the two installed tray launch paths and close.'
+    }
+    for ($i = 0; $i -lt $expectedEvents.Count; $i++) {
+        $event = $finishEvents[$i].Values
+        if ($event[0] -cne 'OpsshComplete' -or $event[1] -cne 'Finish' -or [int]$event[5] -ne ($i + 1) -or
+            ($event[2..4] -join '|') -cne $expectedEvents[$i]) {
+            throw 'The MSI Finish button must dispatch fixed commands to the installed tray and always close.'
+        }
+    }
+
     $createdDirectories = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($row in Get-MsiRows 'CreateFolder' 2) { [void]$createdDirectories.Add($row.Values[0]) }
     if (!$createdDirectories.SetEquals($payloadDirectories)) { throw 'Unexpected MSI directory ownership.' }
@@ -309,36 +310,4 @@ try {
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($installer)
 }
 
-Invoke-Wix @('burn', 'extract', '-acceptEula', 'wix7', $bundle, '-out', $burnFiles, '-outba', $burnBa,
-    '-intermediateFolder', $wixWork)
-$embedded = @(Get-ChildItem -LiteralPath $burnFiles -Recurse -Force -File)
-if ($embedded.Count -ne 1 -or $embedded[0].Name -cne "$stem.msi" -or
-    (Get-FileHash -LiteralPath $embedded[0].FullName -Algorithm SHA256).Hash -cne
-    (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash) {
-    throw 'The Burn EXE must embed exactly the standalone MSI.'
-}
-
-$burn = ([xml](Get-Content -Raw -LiteralPath (Join-Path $burnBa 'manifest.xml'))).DocumentElement
-$baData = ([xml](Get-Content -Raw -LiteralPath (Join-Path $burnBa 'BootstrapperApplicationData.xml'))).DocumentElement
-$search = $burn.SelectSingleNode("*[local-name()='MsiProductSearch' and @Variable='OpsshInstalledVersion']")
-$downgrade = $baData.SelectSingleNode("*[local-name()='WixBalCondition' and @Condition='OpsshInstalledVersion <= WixBundleVersion']")
-if (!$search -or $search.UpgradeCode -cne $properties.UpgradeCode -or $search.Type -cne 'version' -or
-    !$downgrade -or $downgrade.Message -cne 'A newer version of opssh is already installed.') {
-    throw 'The EXE must refuse downgrade against a newer installed MSI.'
-}
-$chain = @($burn.Chain.ChildNodes)
-$registration = $burn.Registration
-if ($chain.Count -ne 1 -or $chain[0].LocalName -cne 'MsiPackage' -or $chain[0].Scope -cne 'perUser' -or
-    $chain[0].ProductCode -cne $properties.ProductCode -or $chain[0].Version -cne $Version -or
-    $chain[0].Permanent -cne 'yes' -or $chain[0].Cache -cne 'remove' -or
-    $registration.Scope -cne 'perUser' -or $registration.Version -cne $Version -or
-    $registration.Arp.DisableModify -cne 'yes' -or $registration.Arp.DisableRemove -cne 'yes' -or
-    $chain[0].SelectSingleNode("*[local-name()='MsiProperty' and @Id='ARPSYSTEMCOMPONENT']")) {
-    throw 'The Burn chain must delegate visible per-user maintenance to the MSI.'
-}
-$payload = @($burn.Payload)
-if ($payload.Count -ne 1 -or $payload[0].Packaging -cne 'embedded' -or $payload[0].DownloadUrl -or
-    $burn.Container.Attached -cne 'yes' -or $burn.Container.DownloadUrl) {
-    throw 'Unexpected external Burn payload.'
-}
-Write-Host 'Verified Windows x64 MSI scope, ICE38/ICE64, curated ZIP and MSI payload bytes, and embedded MSI identity.'
+Write-Host 'Verified Windows x64 MSI scope, ICE38/ICE64, Finish dialog bindings, and curated payload bytes.'

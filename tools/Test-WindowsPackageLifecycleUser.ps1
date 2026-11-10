@@ -48,41 +48,32 @@ function Stop-OwnedProcess([Diagnostics.Process]$Process) {
     }
 }
 
-function Invoke-Setup($Package, [string]$EntryPoint, [string]$Operation, [string]$Expected) {
+function Invoke-Setup($Package, [string]$Operation, [string]$Expected) {
     $log = Join-Path $logDirectory "$($steps.Count).log"
-    if ($EntryPoint -eq 'exe') {
-        $path = $Package.Exe
-        $arguments = @('-quiet', '-norestart', '-log', $log)
-    } else {
-        $path = $msiexec
-        $command = switch ($Operation) {
-            install { @('/i', $Package.Msi) }
-            repair { @('/fav', $Package.Msi) }
-            uninstall { @('/x', $Package.ProductCode) }
-        }
-        $arguments = @($command) + @('/qn', '/norestart', '/l*v', $log)
+    $command = switch ($Operation) {
+        install { @('/i', $Package.Msi) }
+        repair { @('/fav', $Package.Msi) }
+        uninstall { @('/x', $Package.ProductCode) }
     }
-    $process = Start-OwnedProcess $path $arguments
+    $arguments = @($command) + @('/qn', '/norestart', '/l*v', $log)
+    $process = Start-OwnedProcess $msiexec $arguments
     try {
         if (!$process.WaitForExit(180000)) { throw 'Installer exceeded its deadline.' }
         $code = $process.ExitCode
     } finally {
         Stop-OwnedProcess $process
     }
-    $step = [ordered]@{ phase = $script:stage; entryPoint = $EntryPoint; operation = $Operation; exitCode = $code }
+    $step = [ordered]@{ phase = $script:stage; entryPoint = 'msi'; operation = $Operation; exitCode = $code }
     $steps.Add($step)
     $win32Code = $code -band 0xffff
     if ($win32Code -eq 1625) {
         # Report only the effective values from Windows Installer, never its private log text.
-        $stem = $steps.Count - 1
-        $policyLogs = @(Get-ChildItem -LiteralPath $logDirectory -File -Filter "$stem*.log" |
-            Where-Object { $_.BaseName -eq "$stem" -or $_.BaseName.StartsWith("${stem}_") })
         $step.policy = [ordered]@{}
         foreach ($name in @('DisableMsi', 'DisableUserInstalls')) {
-            $step.policy[$name] = @($policyLogs | ForEach-Object {
-                Select-String -LiteralPath $_.FullName -Pattern "Machine policy value '$name' is ([0-9]{1,2})\s*$" |
-                    ForEach-Object { [int]$_.Matches[0].Groups[1].Value }
-            } | Sort-Object -Unique)
+            $step.policy[$name] = @(if (Test-Path -LiteralPath $log -PathType Leaf) {
+                Select-String -LiteralPath $log -Pattern "Machine policy value '$name' is ([0-9]{1,2})\s*$" |
+                    ForEach-Object { [int]$_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+            })
         }
     }
     if ($Expected -eq 'success') {
@@ -94,12 +85,10 @@ function Invoke-Setup($Package, [string]$EntryPoint, [string]$Operation, [string
         $expectedCode = $win32Code -eq 1603
     } else {
         $message = 'A newer version of opssh is already installed\.'
-        $expectedCode = $win32Code -in 1603,1638 -or ($EntryPoint -eq 'exe' -and $code -eq [int]0x81F40001)
+        $expectedCode = $win32Code -in 1603,1638
     }
-    # Burn's per-MSI logs share the chosen filename stem.
-    $logs = @(Get-ChildItem -LiteralPath $logDirectory -File -Filter "$($steps.Count - 1)*.log" |
-        Where-Object { $_.BaseName -eq ($steps.Count - 1).ToString() -or $_.BaseName.StartsWith("$($steps.Count - 1)_") })
-    if (!$expectedCode -or !$logs -or !(Select-String -LiteralPath $logs.FullName -Pattern $message -Quiet)) {
+    if (!$expectedCode -or !(Test-Path -LiteralPath $log -PathType Leaf) -or
+        !(Select-String -LiteralPath $log -Pattern $message -Quiet)) {
         throw 'Installer refusal did not establish the expected reason.'
     }
 }
@@ -111,19 +100,16 @@ function Read-Package($Details, [string]$Name) {
     }
     $folder = Join-Path $PSScriptRoot $Name
     $stem = "opssh-$($Details.version)-windows-x64"
-    $msi = Join-Path $folder "msi/$stem.msi"
-    $exe = Join-Path $folder "exe/$stem.exe"
+    $msi = Join-Path $folder "$stem.msi"
     $manifestPath = Join-Path $folder 'payload-manifest.json'
-    if ((Get-Digest $msi) -cne $Details.msiSha256 -or (Get-Digest $exe) -cne $Details.exeSha256 -or
-        (Get-Digest $manifestPath) -cne $Details.manifestSha256 -or
-        @(Get-ChildItem -LiteralPath (Split-Path -Parent $exe) -Force).Count -ne 1) {
-        throw 'Staged package inputs changed or the EXE is not isolated.'
+    if ((Get-Digest $msi) -cne $Details.msiSha256 -or (Get-Digest $manifestPath) -cne $Details.manifestSha256) {
+        throw 'Staged package inputs changed.'
     }
     $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
     if ($manifest.version -cne $Details.version -or $manifest.architecture -cne 'x64') {
         throw 'Staged payload manifest identity mismatch.'
     }
-    [PSCustomObject]@{ Msi = $msi; Exe = $exe; Version = $Details.version; ProductCode = $Details.productCode; Files = $manifest.files }
+    [PSCustomObject]@{ Msi = $msi; Version = $Details.version; ProductCode = $Details.productCode; Files = $manifest.files }
 }
 
 function Get-Registration([string]$Hive) {
@@ -236,7 +222,7 @@ function Assert-Installed($Package, $Other) {
         @(Get-MsiInstallations $Other).Count) {
         throw 'Expected one installed MSI of this version in the current user context.'
     }
-    $script:checkpoint = 'uninstall entries and Burn ownership'
+    $script:checkpoint = 'visible MSI uninstall entry'
     $registrations = @(Get-Registration 'HKCU:\'; Get-Registration 'HKLM:\')
     if ($registrations.Count -ne 1 -or $registrations[0].PSChildName -ine $Package.ProductCode -or
         $registrations[0].SystemComponent -eq 1 -or $registrations[0].WindowsInstaller -ne 1 -or
@@ -270,12 +256,12 @@ function Assert-Installed($Package, $Other) {
     Assert-ProtectedState
 }
 
-function Assert-RunningGuard([string]$Name, $Package, [string]$EntryPoint, [string]$Operation) {
+function Assert-RunningGuard([string]$Name, $Package, [string]$Operation) {
     $stub = Join-Path $PSScriptRoot "process-stubs/$Name.exe"
     $process = Start-OwnedProcess $stub @('-n', '600', '127.0.0.1')
     try {
         if ($process.HasExited -or $process.ProcessName -cne $Name) { throw 'The named process test fixture did not start.' }
-        Invoke-Setup $Package $EntryPoint $Operation 'guard'
+        Invoke-Setup $Package $Operation 'guard'
         if ($process.HasExited) { throw 'The installer stopped the running process.' }
     } finally {
         Stop-OwnedProcess $process
@@ -361,62 +347,53 @@ try {
     $startedCases = $true
 
     $stage = 'running tray blocks initial MSI'
-    Assert-RunningGuard 'opssh-tray' $previous 'msi' 'install'
+    Assert-RunningGuard 'opssh-tray' $previous 'install'
     Assert-Uninstalled
     Assert-ProtectedState
 
-    foreach ($scenario in @('msi-msi', 'exe-exe', 'msi-exe', 'exe-msi')) {
-        $entry, $upgrade = $scenario.Split('-')
-        $stage = "$scenario prior install"
-        Invoke-Setup $previous $entry 'install' 'success'
-        Assert-Installed $previous $candidate
-        if ($scenario -eq 'msi-msi' -and $DotnetPath -and $metadata.productionVersion -ceq $previous.Version) {
-            $stage = 'isolated installed production core smoke'
-            Assert-InstalledCore $previous $metadata.interop
-        }
-
-        if ($entry -eq $upgrade) {
-            $missing = Join-Path $installDirectory 'opssh-tray.pri'
-            Remove-Item -LiteralPath $missing
-            if ($scenario -eq 'msi-msi') {
-                $stage = 'running core blocks MSI repair'
-                Assert-RunningGuard 'opssh-core' $previous 'msi' 'repair'
-                if (Test-Path -LiteralPath $missing) { throw 'The refused repair modified the payload.' }
-                Assert-ProtectedState
-            }
-            $stage = "$scenario MSI repair"
-            Invoke-Setup $previous 'msi' 'repair' 'success'
-            Assert-Installed $previous $candidate
-        }
-        if ($scenario -eq 'exe-exe') {
-            $stage = 'running core blocks EXE upgrade'
-            Assert-RunningGuard 'opssh-core' $candidate 'exe' 'install'
-            Assert-Installed $previous $candidate
-        }
-
-        $stage = "$scenario major upgrade"
-        Invoke-Setup $candidate $upgrade 'install' 'success'
-        Assert-Installed $candidate $previous
-        if ($scenario -eq 'msi-msi' -and $DotnetPath -and $metadata.productionVersion -ceq $candidate.Version) {
-            $stage = 'isolated installed production core smoke'
-            Assert-InstalledCore $candidate $metadata.interop
-        }
-
-        $stage = "$scenario downgrade refusal"
-        Invoke-Setup $previous $entry 'install' 'downgrade'
-        Assert-Installed $candidate $previous
-
-        if ($scenario -eq 'msi-msi') {
-            $stage = 'running tray blocks MSI removal'
-            Assert-RunningGuard 'opssh-tray' $candidate 'msi' 'uninstall'
-            Assert-Installed $candidate $previous
-        }
-
-        $stage = "$scenario MSI-owned uninstall"
-        Invoke-Setup $candidate 'msi' 'uninstall' 'success'
-        Assert-Uninstalled
-        Assert-ProtectedState
+    $stage = 'prior MSI install'
+    Invoke-Setup $previous 'install' 'success'
+    Assert-Installed $previous $candidate
+    if ($DotnetPath -and $metadata.productionVersion -ceq $previous.Version) {
+        $stage = 'isolated installed production core smoke'
+        Assert-InstalledCore $previous $metadata.interop
     }
+
+    $missing = Join-Path $installDirectory 'opssh-tray.pri'
+    Remove-Item -LiteralPath $missing
+    $stage = 'running core blocks MSI repair'
+    Assert-RunningGuard 'opssh-core' $previous 'repair'
+    if (Test-Path -LiteralPath $missing) { throw 'The refused repair modified the payload.' }
+    Assert-ProtectedState
+
+    $stage = 'MSI repair'
+    Invoke-Setup $previous 'repair' 'success'
+    Assert-Installed $previous $candidate
+
+    $stage = 'running core blocks MSI upgrade'
+    Assert-RunningGuard 'opssh-core' $candidate 'install'
+    Assert-Installed $previous $candidate
+
+    $stage = 'MSI major upgrade'
+    Invoke-Setup $candidate 'install' 'success'
+    Assert-Installed $candidate $previous
+    if ($DotnetPath -and $metadata.productionVersion -ceq $candidate.Version) {
+        $stage = 'isolated installed production core smoke'
+        Assert-InstalledCore $candidate $metadata.interop
+    }
+
+    $stage = 'MSI downgrade refusal'
+    Invoke-Setup $previous 'install' 'downgrade'
+    Assert-Installed $candidate $previous
+
+    $stage = 'running tray blocks MSI removal'
+    Assert-RunningGuard 'opssh-tray' $candidate 'uninstall'
+    Assert-Installed $candidate $previous
+
+    $stage = 'MSI uninstall'
+    Invoke-Setup $candidate 'uninstall' 'success'
+    Assert-Uninstalled
+    Assert-ProtectedState
     $stage = 'passed'
 } catch {
     # Keep installer log paths and raw host errors inside the disposable job.
@@ -436,7 +413,7 @@ try {
                     throw 'The remaining product is not a verified per-user lifecycle MSI.'
                 }
                 $checkpoint = 'owned MSI cleanup transaction'
-                Invoke-Setup $package 'msi' 'uninstall' 'success'
+                Invoke-Setup $package 'uninstall' 'success'
                 $checkpoint = 'owned MSI cleanup inventory'
             }
             Assert-Uninstalled

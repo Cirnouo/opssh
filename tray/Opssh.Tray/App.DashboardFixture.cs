@@ -142,6 +142,7 @@ public sealed partial class App
             this.scenario = scenario;
             const string restoreScenario = "default-agent-restore-";
             defaultAgent = scenario.StartsWith(restoreScenario, StringComparison.Ordinal);
+            loginStartup = scenario.StartsWith("default-agent-", StringComparison.Ordinal);
             defaultOutcome = defaultAgent ? "default-agent-" + scenario[restoreScenario.Length..] : scenario;
             this.preferences = preferences;
             this.exit = exit;

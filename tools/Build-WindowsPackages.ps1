@@ -82,8 +82,6 @@ if (!$licenseRoot.PSIsContainer -or ($licenseRoot.Attributes -band [IO.FileAttri
     throw 'Use an ordinary licenses directory.'
 }
 $sourceFiles = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
-$runtimePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-$launcher = $null
 foreach ($root in @($releaseRoot, $licenseRoot)) {
     $isRelease = $root -eq $releaseRoot
     $included = 0
@@ -91,22 +89,22 @@ foreach ($root in @($releaseRoot, $licenseRoot)) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package inputs contain a reparse point.' }
         if ($item.PSIsContainer -or ($isRelease -and $item.Extension -ieq '.pdb')) { continue }
         $relativePath = [IO.Path]::GetRelativePath($root.FullName, $item.FullName).Replace('\', '/')
-        if ($isRelease -and $relativePath -ieq 'opssh-portable.exe') {
-            if ($launcher -or !$item.Length) { throw 'Expected one nonempty portable launcher.' }
-            $launcher = $item.FullName
-            continue
+        if ($isRelease -and $item.Name -ieq 'opssh-portable.exe') {
+            throw 'Build the MSI from a fresh Release directory without the retired launcher.'
         }
         if (!$isRelease) { $relativePath = "licenses/$relativePath" }
         if ($relativePath -cnotmatch '\A[A-Za-z0-9_. -]+(?:/[A-Za-z0-9_. -]+)*\z') {
             throw 'Package inputs contain a filename outside the supported naming conventions.'
         }
         if (!$sourceFiles.TryAdd($relativePath, $item.FullName)) { throw 'Duplicate package path.' }
-        if ($isRelease) { [void]$runtimePaths.Add($relativePath) }
         $included++
     }
     if (!$included) { throw 'Expected files in both Release and licenses.' }
 }
-if (!$launcher) { throw 'Release is missing a nonempty opssh-portable.exe.' }
+$wixSource = 'licenses/wix/wix-7.0.1-source.zip'
+if (!$sourceFiles.ContainsKey($wixSource) -or (Get-Item -LiteralPath $sourceFiles[$wixSource]).Length -eq 0) {
+    throw 'The legal payload is missing the WiX corresponding source archive.'
+}
 foreach ($name in @(
     'opssh-core.exe', 'opssh-tray.exe', 'opssh-tray.dll', 'opssh-tray.pri',
     'opssh-tray.deps.json', 'opssh-tray.runtimeconfig.json', 'Microsoft.UI.Xaml.dll', 'coreclr.dll', 'hostfxr.dll'
@@ -125,7 +123,7 @@ foreach ($name in @('LICENSE', 'THIRD-PARTY-NOTICES.md')) {
 
 $actualWixVersion = Invoke-Wix @('--version')
 if ($actualWixVersion -notmatch ('\A' + [regex]::Escape($wixVersion) + '(?:\+[^ ]+)?\z')) {
-    throw "Windows packages require WiX $wixVersion."
+    throw "The Windows MSI requires WiX $wixVersion."
 }
 
 $stem = "opssh-$Version-windows-x64"
@@ -194,29 +192,7 @@ try {
     $payloadSource = Join-Path $work 'Payload.wxs'
     $document.Save($payloadSource)
 
-    $license = [IO.File]::ReadAllText((Join-Path $payload 'LICENSE'))
-    $rtf = [Text.StringBuilder]::new('{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\f0\fs18 ')
-    foreach ($char in $license.Replace([string][char]13, '').ToCharArray()) {
-        switch ($char) {
-            ([char]10) { [void]$rtf.AppendLine('\par') }
-            ([char]9) { [void]$rtf.Append('\tab ') }
-            '\' { [void]$rtf.Append('\\') }
-            '{' { [void]$rtf.Append('\{') }
-            '}' { [void]$rtf.Append('\}') }
-            default {
-                if ([int]$char -lt 32 -or [int]$char -gt 126) {
-                    $signed = ([int]$char + 32768) % 65536 - 32768
-                    [void]$rtf.Append("\u$signed?")
-                } else {
-                    [void]$rtf.Append($char)
-                }
-            }
-        }
-    }
-    [IO.File]::WriteAllText((Join-Path $work 'License.rtf'), $rtf.Append('}').ToString(), [Text.Encoding]::ASCII)
-
-    $msiName = "$stem.msi"
-    $msi = Join-Path $packages $msiName
+    $msi = Join-Path $packages "$stem.msi"
     $wixBuild = @('build', '-acceptEula', 'wix7', '-arch', 'x64', '-pdbtype', 'none',
         '-d', "Version=$Version", '-d', "MsiUpgradeCode=$msiUpgradeCode", '-ext', "WixToolset.Util.wixext/$wixVersion")
     Push-Location -LiteralPath $repo
@@ -224,41 +200,16 @@ try {
         Invoke-Wix ($wixBuild + @(
             (Join-Path $repo 'installer/Package.wxs'), $payloadSource,
             '-b', "payload=$payload", '-d', ('ProductCode=' + (Get-Identity "product/$Version").ToString('B')),
+            '-d', ('TrayFileId=File_' + (Get-Identity 'file/opssh-tray.exe').ToString('N')),
             '-intermediateFolder', (Join-Path $work 'msi-obj'), '-o', $msi
-        ))
-        Invoke-Wix ($wixBuild + @(
-            (Join-Path $repo 'installer/Bundle.wxs'), '-ext', "WixToolset.BootstrapperApplications.wixext/$wixVersion",
-            '-b', "work=$work", '-b', "packages=$packages", '-d', "MsiName=$msiName",
-            '-intermediateFolder', (Join-Path $work 'bundle-obj'), '-o', (Join-Path $packages "$stem.exe")
         ))
     } finally {
         Pop-Location
     }
-    $stagedLauncher = Join-Path $work 'opssh-portable.exe'
-    [IO.File]::Copy($launcher, $stagedLauncher)
-    $zip = [IO.Compression.ZipFile]::Open((Join-Path $packages "$stem.zip"), [IO.Compression.ZipArchiveMode]::Create)
-    try {
-        $portableFiles = @(
-            $entry = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $stagedLauncher, 'opssh-tray.exe')
-            [ordered]@{
-                path = $entry.FullName
-                size = [IO.FileInfo]::new($stagedLauncher).Length
-                sha256 = (Get-FileHash -LiteralPath $stagedLauncher -Algorithm SHA256).Hash.ToLowerInvariant()
-            }
-            foreach ($file in $files) {
-                if ($file.path -ieq 'licenses/wix/wix-7.0.1-source.zip') { continue }
-                $path = if ($runtimePaths.Contains($file.path)) { "opssh-runtime/$($file.path)" } else { $file.path }
-                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, (Join-Path $payload $file.path), $path)
-                [ordered]@{ path = $path; size = $file.size; sha256 = $file.sha256 }
-            }
-        )
-    } finally {
-        $zip.Dispose()
-    }
-    $manifest = [ordered]@{ version = $Version; architecture = 'x64'; files = @($files); portableFiles = $portableFiles }
+    $manifest = [ordered]@{ version = $Version; architecture = 'x64'; files = @($files) }
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $packages 'payload-manifest.json') -Encoding utf8
     [IO.Directory]::Move($packages, $OutputDirectory)
-    Write-Host 'Built the Windows x64 MSI, offline EXE, and portable ZIP.'
+    Write-Host 'Built the Windows x64 MSI.'
 } finally {
     # This path was created above under the explicit output parent.
     if ([IO.Path]::GetDirectoryName($work) -cne $outputParent) { throw 'Unexpected packaging work directory.' }

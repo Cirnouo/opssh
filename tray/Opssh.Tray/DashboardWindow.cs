@@ -235,7 +235,8 @@ public sealed partial class DashboardWindow : Window
     {
         var previous = displayedState;
         displayedState = state;
-        pipe = state.Pipe;
+        if (!string.Equals(state.Pipe, OpenSshService.Pipe, StringComparison.OrdinalIgnoreCase))
+            pipe = state.Pipe;
         locked = state.Locked;
         UpdateCacheInputs(previous, state, resetSettings);
         UpdatePages(previous);
@@ -306,6 +307,7 @@ public sealed partial class DashboardWindow : Window
         if (closed || activeDialog is not null)
             return ContentDialogResult.None;
         dialog.XamlRoot = DashboardRoot.XamlRoot;
+        dialog.RequestedTheme = Shell.RequestedTheme;
         var width = Math.Clamp(DashboardRoot.ActualWidth - 24, 280, 420);
         dialog.Resources["ContentDialogMinWidth"] = width;
         dialog.Resources["ContentDialogMaxWidth"] = width;

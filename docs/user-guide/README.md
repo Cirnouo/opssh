@@ -2,7 +2,7 @@
 
 **English** · [简体中文](README.zh-Hans.md) · [Project overview](../../README.md)
 
-Use opssh to sign with SSH keys from 1Password Desktop in the built-in Windows x64 OpenSSH client. Start with [installation](#install), then [connect 1Password](#connect), [select the agent in PowerShell](#select-agent), and [approve your first request](#approve-signing).
+Use opssh to sign with SSH keys from 1Password Desktop in the built-in Windows x64 OpenSSH client. Start with [installation](#install), then [connect 1Password](#connect), [select the agent](#select-agent), and [approve your first request](#approve-signing).
 
 <a name="install"></a>
 
@@ -10,14 +10,11 @@ Use opssh to sign with SSH keys from 1Password Desktop in the built-in Windows x
 
 You need Windows x64 with the built-in OpenSSH client, PowerShell, and a signed-in 1Password desktop app with an SSH Key item. For your first connection, use an SSH host that already accepts the item's public key.
 
-When a stable release is available, choose a Windows x64 download. The installers and opssh binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
+When a stable release is available, download the Windows x64 MSI. It installs for the current user under `%LOCALAPPDATA%\Programs\opssh`. The installer and opssh binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
 
-| Download | Install and launch |
-| --- | --- |
-| MSI or offline installer EXE | Run either installer. It installs for the current user under `%LOCALAPPDATA%\Programs\opssh`. Open **opssh** from the Start menu. |
-| Portable ZIP | Extract the entire archive and run the top-level `opssh-tray.exe`. Keep the `opssh-runtime` folder beside it. |
+On the first interactive install, **Start opssh when I sign in to Windows** and **Set opssh as the default SSH agent** start checked. Clear startup to disable the agent choice, or choose **Skip** to finish without applying either setting. If Windows asks to change the OpenSSH service, confirm the change to finish setting the default agent. On an upgrade, repair, or quiet install, manage these settings from opssh. Open **opssh** from the Start menu.
 
-If opssh is running, right-click the tray icon and choose **Quit opssh** before installing, repairing, upgrading, or uninstalling. For an installed copy, use Windows **Installed apps** to manage the application. Uninstall removes the application files and Start menu shortcut. It keeps your settings and public key index under `%LOCALAPPDATA%\opssh`.
+Before uninstalling, turn off **Start at Windows sign-in** and confirm **Restore OpenSSH** if prompted. If opssh is running, right-click the tray icon and choose **Quit opssh** before installing, repairing, upgrading, or uninstalling. For an installed copy, use Windows **Installed apps** to manage the application. Uninstall removes the application files and Start menu shortcut. It keeps your settings and public key index under `%LOCALAPPDATA%\opssh`.
 
 For a source checkout, see [development and contributions](../../CONTRIBUTING.md).
 
@@ -35,6 +32,8 @@ opssh saves the selected account and its public index. The 1Password page shows 
 
 ## Select or restore the SSH agent
 
+When opssh is the default SSH agent, use Windows OpenSSH directly. For a per-session selection, follow these steps.
+
 1. In the PowerShell window where you want to use opssh, save the current agent selection.
 
    ```powershell
@@ -50,9 +49,9 @@ The command affects the current PowerShell process and processes it starts. To r
 $env:SSH_AUTH_SOCK = $previousSshAuthSock
 ```
 
-Turn on **Use as the system default SSH agent** in **Settings → SSH integration** to use the Windows default pipe. The dialog shows the steps as they run. Windows may ask for administrator approval to stop and disable the running automatic Windows OpenSSH agent. Quitting opssh leaves the default selection in place and releases the pipe. To restore the Windows service, turn off the switch and choose **Restore OpenSSH** before uninstalling opssh.
+With **Start at Windows sign-in** enabled, turn on **Use as the system default SSH agent** in **Settings → SSH integration**. The PowerShell card disappears when the default pipe is active. The dialog shows the steps as they run. Windows may ask for administrator approval to stop and disable the running automatic Windows OpenSSH agent. Quitting opssh leaves the default selection in place and releases the pipe. To restore the Windows service, turn off the switch and choose **Restore OpenSSH**. Turning off sign-in startup also asks to restore OpenSSH when needed.
 
-In **Settings → Startup**, **Wait for 1Password to start** shows a Windows notification when 1Password is ready. Open it, select an account, and choose **Continue in 1Password** to request authorization. Selecting your current account keeps its scope, keys, approvals, and activity. Disable **Start at Windows sign-in** if you are removing a portable copy.
+In **Settings → Startup**, **Wait for 1Password to start** shows a Windows notification when 1Password is ready. Open it, select an account, and choose **Continue in 1Password** to request authorization. Selecting your current account keeps its scope, keys, approvals, and activity.
 
 <a name="approve-signing"></a>
 
@@ -110,10 +109,10 @@ In **About**, choose **Check for updates** to look for a newer stable release. *
 
 | Symptom | What to do |
 | --- | --- |
-| The tray opens but the core is unavailable | Use **Restart core** from the tray if available. For a portable copy, check that you extracted the entire ZIP. |
+| The tray opens but the core is unavailable | Use **Restart core** from the tray if available. If the core still fails to start, repair the MSI installation. |
 | Connect, refresh, or key loading is denied or times out | Check the account, unlock 1Password Desktop, check SDK integration, and complete any prompt there. Retry the affected action. If reads keep timing out after those checks, quit and reopen opssh to restart the core. |
 | The expected key is missing or fails after rotation | Confirm it is an active SSH Key item, check the vault selection, then discover keys again. opssh supports Ed25519 and 2048–4096 bit RSA keys with SHA-2 signing. |
-| SSH uses another agent or cannot reach opssh | Check that the tray is running, then rerun the displayed command in the affected PowerShell session. Check whether the host's SSH configuration has an `IdentityAgent` override. |
+| SSH uses another agent or cannot reach opssh | Check that the tray is running, then use the PowerShell card if it is visible in SSH integration. Check whether the host's SSH configuration has an `IdentityAgent` override. |
 | SSH lists the key but cannot sign | Retry SSH and complete the signing approval and any separate 1Password prompt. |
 | SSH still rejects the login after signing | Check the username and the public key authorized by that host. |
 

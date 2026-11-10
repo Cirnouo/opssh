@@ -84,21 +84,21 @@ if ($encoding.GetByteCount($changes) -gt 65536 -or $changes.Contains([char]0) -o
     throw 'The extracted release notes exceed limits or contain reserved content.'
 }
 
-$assets = foreach ($extension in 'msi', 'exe', 'zip') {
-    $name = "opssh-$version-windows-x64.$extension"
-    $path = Join-Path $packagePath $name
-    if ([IO.File]::GetAttributes($path) -band ([IO.FileAttributes]::Directory -bor [IO.FileAttributes]::ReparsePoint)) {
-        throw 'Expected a regular validated package file.'
-    }
-    $stream = [IO.File]::OpenRead($path)
-    try {
-        if ($stream.Length -le 0 -or $stream.Length -gt 1GB) { throw 'Invalid validated package size.' }
-        $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
-        @{ name = $name; size = $stream.Length; sha256 = $digest }
-    } finally {
-        $stream.Dispose()
+$name = "opssh-$version-windows-x64.msi"
+foreach ($item in Get-ChildItem -LiteralPath $packagePath -Force) {
+    if ($item.Name -cnotin @($name, 'payload-manifest.json') -or $item.PSIsContainer -or
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Expected only the verified MSI and optional payload manifest in the package directory.'
     }
 }
-$manifest = [ordered]@{ schema = 1; tag = $Tag; tagObject = $TagObject; sourceCommit = $SourceCommit; assets = @($assets) }
+$stream = [IO.File]::OpenRead((Join-Path $packagePath $name))
+try {
+    if ($stream.Length -le 0 -or $stream.Length -gt 1GB) { throw 'Invalid validated MSI size.' }
+    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
+    $asset = @{ name = $name; size = $stream.Length; sha256 = $digest }
+} finally {
+    $stream.Dispose()
+}
+$manifest = [ordered]@{ schema = 1; tag = $Tag; tagObject = $TagObject; sourceCommit = $SourceCommit; assets = @($asset) }
 [IO.File]::WriteAllText($notesPath, $changes, $encoding)
 [IO.File]::WriteAllText($manifestPath, (ConvertTo-Json -InputObject $manifest -Depth 5), $encoding)

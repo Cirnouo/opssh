@@ -59,25 +59,23 @@ function Set-StagePermissions([string]$Path, [Security.Principal.SecurityIdentif
 function Copy-Package([string]$Source, [string]$PackageVersion, [string]$Name) {
     $stem = "opssh-$PackageVersion-windows-x64"
     $root = Join-Path $stage $Name
-    [void][IO.Directory]::CreateDirectory((Join-Path $root 'msi'))
-    [void][IO.Directory]::CreateDirectory((Join-Path $root 'exe'))
+    [void][IO.Directory]::CreateDirectory($root)
     $hashes = @{}
-    foreach ($item in @("$stem.msi", "$stem.exe", 'payload-manifest.json')) {
+    foreach ($item in @("$stem.msi", 'payload-manifest.json')) {
         $path = Join-Path $Source $item
         $sourceFile = Get-Item -LiteralPath $path
         if ($sourceFile.PSIsContainer -or ($sourceFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             throw 'Expected an ordinary source package file.'
         }
         $kind = [IO.Path]::GetExtension($item).TrimStart('.')
-        $relative = if ($kind -eq 'json') { $item } else { "$kind/$item" }
-        $destination = Join-Path $root $relative
+        $destination = Join-Path $root $item
         $hashes[$kind] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
         [IO.File]::Copy($sourceFile.FullName, $destination)
         if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -cne $hashes[$kind]) {
             throw 'Source package bytes changed during staging.'
         }
     }
-    $msi = Join-Path $root "msi/$stem.msi"
+    $msi = Join-Path $root "$stem.msi"
     $installer = New-Object -ComObject WindowsInstaller.Installer
     try {
         $database = $installer.OpenDatabase($msi, 0)
@@ -104,7 +102,7 @@ function Copy-Package([string]$Source, [string]$PackageVersion, [string]$Name) {
     } finally {
         [void][Runtime.InteropServices.Marshal]::ReleaseComObject($installer)
     }
-    [ordered]@{ version = $PackageVersion; productCode = $code; msiSha256 = $hashes.msi; exeSha256 = $hashes.exe; manifestSha256 = $hashes.json }
+    [ordered]@{ version = $PackageVersion; productCode = $code; msiSha256 = $hashes.msi; manifestSha256 = $hashes.json }
 }
 
 function Remove-TestUser($User) {
@@ -184,7 +182,7 @@ try {
         candidate = Copy-Package $PackageDirectory $Version 'candidate'
     }
     if ($metadata.previous.productCode -ceq $metadata.candidate.productCode) { throw 'Expected different product codes.' }
-    $expectedSteps = 22
+    $expectedSteps = 9
     if ($InteropDirectory) {
         $phase = 'stage the production core test driver'
         $interop = Join-Path $stage 'interop'
