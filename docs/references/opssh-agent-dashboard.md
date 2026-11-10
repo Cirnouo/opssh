@@ -1,4 +1,15 @@
-# Dashboard visual reference
+# Windows visual references
+
+## Proposals for review
+
+- [Install and uninstall wizard](opssh-install-uninstall-preview.html) — English and Simplified Chinese setup, license, scope, directory, progress and finish. Uninstall follows the Windows display language and preserves user data. Preview controls simulate token elevation, OpenSSH restoration and failure outcomes.
+- [Merged SSH workspace](opssh-merged-workspace-preview.html) — three alternatives with the 1Password section above the SSH key table. Compare Compact summary at 880 × 520 DIP, Stacked cards at 1000 × 560 DIP and Parallel cards at 1120 × 600 DIP. The size picker shows the minimum and regular window for each layout. Use the synthetic account, sync, key, authorization and language controls to review the interactions.
+
+The installer proposal follows the scope and directory conventions of [WiX](https://docs.firegiant.com/wix3/wixui/dialog_reference/wixui_advanced/) and the directory, progress and finish sequence of [PowerShell's MSI](https://github.com/PowerShell/PowerShell/blob/v7.5.0/assets/wix/Product.wxs). Language selection and localized operation logs extend that sequence. The workspace proposal retains the WSL Settings navigation shell and specifies a smaller upward entrance for user-initiated page changes.
+
+These proposals are pending approval. After selection, record the approved source digest, variant, minimum dimensions and capture scenarios here under the [Windows design workflow](../policies/repository-governance.md#windows-design-workflow).
+
+## Archived dashboard references
 
 These archived references describe the dashboard content and interactions. The current workspace shell uses the [WSL Settings navigation template](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml) with a shared Mica backdrop and the default WinUI Frame transition. Its title bar, navigation and breakpoint follow the [current behavior specification](../specs/windows-agent.md). The workspace uses the same Windows Community Toolkit SettingsControls package as [WSL Settings](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/packages.config).
 

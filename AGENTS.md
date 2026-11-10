@@ -11,6 +11,7 @@ Ordinary verification is offline. Use generated in-memory keys, controlled clock
 | Before | Canonical owner |
 | --- | --- |
 | Changing Go or WinUI implementation, IPC, settings or lifecycle | [Maintenance policy](docs/policies/maintenance.md), the [current behavior specification](docs/specs/windows-agent.md) and its linked decisions. |
+| Designing or implementing Windows UI or install, upgrade or uninstall flows | [Windows design workflow](docs/policies/repository-governance.md#windows-design-workflow). |
 | Choosing checks, committing or reporting verification | [Verification policy](docs/policies/verification.md). |
 | Testing with a live 1Password account or publishing provider evidence | [Desktop validation procedure](docs/references/1password-desktop-validation.md) and the [documentation policy](docs/policies/documentation.md). |
 | Editing READMEs, specs, references, evidence, guides or the changelog | [Documentation policy](docs/policies/documentation.md). |

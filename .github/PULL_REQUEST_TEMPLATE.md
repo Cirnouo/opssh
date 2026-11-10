@@ -14,4 +14,8 @@ List the actual commands and results, file or revision state, platform paths exe
 
 Link updated specifications, decisions and user guidance when applicable. See the [documentation policy](https://github.com/Cirnouo/opssh/blob/main/docs/policies/documentation.md).
 
+## Windows design
+
+For Windows UI or installer changes, link the upstream references and summarize reused controls and custom behavior. Link the repository Visualize proposal and its approval status. For implementation, include the approved variant and SHA-256, matched screenshots and any differences or unavailable checks. See the [Windows design workflow](https://github.com/Cirnouo/opssh/blob/main/docs/policies/repository-governance.md#windows-design-workflow).
+
 <!-- Use closing keywords for resolved issues. Keep the PR number suffix out of the title. The final squash subject retains the PR reference. See https://github.com/Cirnouo/opssh/blob/main/docs/policies/repository-governance.md. -->

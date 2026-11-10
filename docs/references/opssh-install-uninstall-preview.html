@@ -1,0 +1,1335 @@
+<div id="opssh-install-uninstall-preview">
+  <nav class="preview-switch" aria-label="Setup preview">
+    <span class="preview-label" data-caption></span>
+    <div class="preview-actions">
+      <button type="button" data-action="install-preview" aria-pressed="true"></button>
+      <button type="button" data-action="remove-preview" aria-pressed="false"></button>
+    </div>
+  </nav>
+  <section class="setup-window" aria-labelledby="opssh-setup-title">
+    <div class="titlebar">
+      <span class="terminal-mark" aria-hidden="true">&gt;_</span>
+      <span id="opssh-setup-title" data-title></span>
+      <button type="button" class="close-window" data-action="close" aria-label="Close">×</button>
+    </div>
+    <header class="wizard-banner">
+      <div class="banner-copy">
+        <h2 id="opssh-setup-step" data-heading></h2>
+        <p data-intro></p>
+      </div>
+      <span class="banner-art" aria-hidden="true"><span class="terminal-mark">&gt;_</span></span>
+    </header>
+    <div class="wizard-body" data-body></div>
+    <footer class="wizard-footer" data-footer></footer>
+    <div class="prompt-overlay" data-prompt hidden></div>
+    <div class="screen-reader" data-announcement role="status"></div>
+  </section>
+  <details class="simulation">
+    <summary data-simulation-caption></summary>
+    <div class="simulation-fields" data-simulation></div>
+  </details>
+  <template data-license>
+    <pre>
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.</pre>
+  </template>
+</div>
+
+<style>
+  #opssh-install-uninstall-preview {
+    --window: light-dark(#f8f8f8, #252525);
+    --body: light-dark(#fff, #292929);
+    --banner: light-dark(#f8fbff, #263240);
+    --field: light-dark(#fff, #303030);
+    --footer: light-dark(#f1f1f1, #222);
+    --ink: light-dark(#181818, #f4f4f4);
+    --secondary: light-dark(#4f565e, #c7cbd0);
+    --line: light-dark(#dedee1, #474747);
+    --edge: light-dark(#b3b5b9, #66686b);
+    --accent: light-dark(#005fb8, #73cfff);
+    --accent-tint: light-dark(#e7f3ff, #17354a);
+    --good: light-dark(#13682a, #a0db9d);
+    --warn: light-dark(#755000, #ffdb90);
+    --danger: light-dark(#a4262c, #ffacaf);
+    --danger-solid: light-dark(#a4262c, #7f2027);
+    --button-hover: light-dark(#eaeef2, #393b3e);
+    --mono: "Cascadia Mono", Consolas, monospace;
+    color: var(--ink);
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+    max-inline-size: 44rem;
+    margin-inline: auto;
+  }
+
+  #opssh-install-uninstall-preview * { box-sizing: border-box; }
+  #opssh-install-uninstall-preview [hidden] { display: none !important; }
+  #opssh-install-uninstall-preview :is(h2, h3, p, ul, ol, pre, blockquote) { margin: 0; }
+  #opssh-install-uninstall-preview .screen-reader {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #opssh-install-uninstall-preview :is(button, select, input) { font: inherit; color: inherit; }
+  #opssh-install-uninstall-preview :is(button, select, input[type="text"]) {
+    min-block-size: 31px;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: var(--field);
+  }
+  #opssh-install-uninstall-preview :is(button, select) { padding: 3px 10px; }
+  #opssh-install-uninstall-preview button:hover:not(:disabled) { background: var(--button-hover); }
+  #opssh-install-uninstall-preview button:disabled {
+    border-color: var(--line);
+    color: var(--secondary);
+    opacity: .72;
+  }
+  #opssh-install-uninstall-preview :is(input[type="checkbox"], input[type="radio"], progress) {
+    accent-color: var(--accent);
+  }
+  #opssh-install-uninstall-preview .preview-switch,
+  #opssh-install-uninstall-preview .preview-actions,
+  #opssh-install-uninstall-preview .wizard-footer,
+  #opssh-install-uninstall-preview .prompt-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #opssh-install-uninstall-preview .preview-switch {
+    justify-content: space-between;
+    padding-block-end: 10px;
+  }
+  #opssh-install-uninstall-preview .preview-label {
+    color: var(--secondary);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  #opssh-install-uninstall-preview .preview-actions button[aria-pressed="true"] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
+  #opssh-install-uninstall-preview .setup-window {
+    position: relative;
+    background: var(--body);
+    border: 1px solid var(--edge);
+    border-radius: 7px;
+    overflow: clip;
+    box-shadow: 0 3px 9px light-dark(#1722351c, #0005);
+  }
+  #opssh-install-uninstall-preview .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-inline-start: 12px;
+    min-block-size: 34px;
+    font-size: 12px;
+    background: var(--window);
+    border-block-end: 1px solid var(--line);
+  }
+  #opssh-install-uninstall-preview .terminal-mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: 16px;
+    block-size: 15px;
+    border-radius: 2px;
+    background: light-dark(#123b62, #94c9f9);
+    color: light-dark(#fff, #102c48);
+    font: 10px/1 var(--mono);
+  }
+  #opssh-install-uninstall-preview .close-window {
+    margin-inline-start: auto;
+    inline-size: 44px;
+    min-block-size: 33px;
+    align-self: stretch;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 19px;
+    line-height: 1;
+  }
+  #opssh-install-uninstall-preview .close-window:hover:not(:disabled) {
+    background: var(--danger-solid);
+    color: #fff;
+  }
+  #opssh-install-uninstall-preview .close-window:focus-visible { outline-offset: -2px; }
+  #opssh-install-uninstall-preview .wizard-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    min-block-size: 86px;
+    padding: 12px 20px;
+    gap: 12px;
+    background: var(--banner);
+    border-block-end: 1px solid var(--line);
+  }
+  #opssh-install-uninstall-preview .banner-copy {
+    display: grid;
+    gap: 4px;
+  }
+  #opssh-install-uninstall-preview h2 { font-size: 17px; font-weight: 600; }
+  #opssh-install-uninstall-preview h3 { font-size: 14px; font-weight: 600; }
+  #opssh-install-uninstall-preview .wizard-banner p { color: var(--secondary); }
+  #opssh-install-uninstall-preview .banner-art {
+    display: grid;
+    place-items: center;
+    inline-size: 88px;
+    block-size: 54px;
+    background: repeating-linear-gradient(130deg, transparent 0 7px, var(--accent-tint) 7px 8px);
+  }
+  #opssh-install-uninstall-preview .banner-art .terminal-mark {
+    inline-size: 38px;
+    block-size: 28px;
+    border-radius: 3px;
+    font-size: 16px;
+    transform: translateX(7px);
+  }
+  #opssh-install-uninstall-preview .wizard-body {
+    display: grid;
+    align-content: start;
+    min-block-size: 250px;
+    padding: 19px 20px 22px;
+    gap: 13px;
+    overflow-wrap: anywhere;
+  }
+  #opssh-install-uninstall-preview .wizard-body select { max-inline-size: 100%; }
+  #opssh-install-uninstall-preview .field {
+    display: grid;
+    justify-items: start;
+    gap: 5px;
+  }
+  #opssh-install-uninstall-preview .field > :is(input, select) { inline-size: 100%; }
+  #opssh-install-uninstall-preview .field input { padding-inline: 9px; }
+  #opssh-install-uninstall-preview .folder { font-family: var(--mono); }
+  #opssh-install-uninstall-preview .folder-actions { justify-self: start; }
+  #opssh-install-uninstall-preview .check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-block-size: 24px;
+  }
+  #opssh-install-uninstall-preview .check input { flex: none; margin: .27em 0 0; }
+  #opssh-install-uninstall-preview .choice-description {
+    display: block;
+    padding-block-start: 3px;
+  }
+  #opssh-install-uninstall-preview .secondary-text {
+    color: var(--secondary);
+    font-size: 12px;
+  }
+  #opssh-install-uninstall-preview .license-text {
+    padding: 10px 12px;
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--edge);
+    background: var(--field);
+  }
+  #opssh-install-uninstall-preview :is(.license-text, .simulation) summary { width: fit-content; }
+  #opssh-install-uninstall-preview .license-text pre {
+    white-space: pre-wrap;
+    font: 12px/1.55 var(--mono);
+    margin-block-start: 9px;
+    max-block-size: 12rem;
+    overflow: auto;
+  }
+  #opssh-install-uninstall-preview .wizard-footer {
+    justify-content: flex-end;
+    padding: 11px 14px;
+    background: var(--footer);
+    border-block-start: 1px solid var(--line);
+  }
+  #opssh-install-uninstall-preview :is(.wizard-footer, .prompt-actions) button { min-inline-size: 75px; }
+  #opssh-install-uninstall-preview .default-button:not(:disabled) {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  #opssh-install-uninstall-preview .shield {
+    display: inline-block;
+    inline-size: 14px;
+    block-size: 15px;
+    margin-inline-end: 5px;
+    vertical-align: -.19em;
+    clip-path: polygon(50% 0, 100% 15%, 95% 62%, 77% 84%, 50% 100%, 23% 84%, 5% 62%, 0 15%);
+    background: conic-gradient(#f5c446 0 25%, #2166b4 25% 50%, #f5c446 50% 75%, #2166b4 75% 100%);
+    forced-color-adjust: none;
+  }
+  #opssh-install-uninstall-preview .progress-state {
+    display: grid;
+    gap: 6px;
+  }
+  #opssh-install-uninstall-preview .progress-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #opssh-install-uninstall-preview progress { inline-size: 100%; block-size: 13px; }
+  #opssh-install-uninstall-preview .log {
+    list-style: none;
+    border: 1px solid var(--edge);
+    padding: 0 10px;
+    background: var(--field);
+    max-block-size: 10.5rem;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+  #opssh-install-uninstall-preview .log li {
+    display: grid;
+    grid-template-columns: 1.15em minmax(0, 1fr);
+    gap: 7px;
+    padding-block: 5px;
+    font-size: 12px;
+  }
+  #opssh-install-uninstall-preview .log li + li { border-block-start: 1px solid var(--line); }
+  #opssh-install-uninstall-preview .log-icon { font-weight: 600; }
+  #opssh-install-uninstall-preview [data-kind="good"] .log-icon { color: var(--good); }
+  #opssh-install-uninstall-preview [data-kind="warn"] .log-icon { color: var(--warn); }
+  #opssh-install-uninstall-preview [data-kind="error"] .log-icon,
+  #opssh-install-uninstall-preview .validation-error { color: var(--danger); }
+  #opssh-install-uninstall-preview .result-summary { display: grid; gap: 5px; }
+  #opssh-install-uninstall-preview .result-summary ul { padding-inline-start: 20px; }
+  #opssh-install-uninstall-preview .prompt-overlay {
+    position: absolute;
+    inset: 34px 0 0;
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    background: light-dark(#0e223e33, #0007);
+  }
+  #opssh-install-uninstall-preview .prompt-dialog {
+    display: grid;
+    gap: 12px;
+    inline-size: min(100%, 25rem);
+    padding: 17px;
+    background: var(--body);
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px light-dark(#17223533, #0008);
+  }
+  #opssh-install-uninstall-preview .prompt-actions { justify-content: flex-end; }
+  #opssh-install-uninstall-preview .simulation {
+    margin-block-start: 11px;
+    color: var(--secondary);
+    font-size: 12px;
+  }
+  #opssh-install-uninstall-preview .simulation-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+    gap: 8px 12px;
+    padding-block-start: 8px;
+  }
+  #opssh-install-uninstall-preview .simulation-fields select { color: var(--ink); }
+
+  @media (max-width: 420px) {
+    #opssh-install-uninstall-preview .banner-art { inline-size: 48px; }
+    #opssh-install-uninstall-preview .banner-art .terminal-mark { transform: none; }
+    #opssh-install-uninstall-preview :is(.wizard-banner, .wizard-body) { padding-inline: 13px; }
+    #opssh-install-uninstall-preview .wizard-footer { padding-inline: 8px; }
+  }
+  @media (pointer: coarse) {
+    #opssh-install-uninstall-preview :is(button, select, input[type="text"], summary, .check) { min-block-size: 44px; }
+    #opssh-install-uninstall-preview input[type="text"] { font-size: 16px; }
+  }
+  @media (forced-colors: active) {
+    #opssh-install-uninstall-preview .default-button:not(:disabled),
+    #opssh-install-uninstall-preview .preview-actions button[aria-pressed="true"] { border-color: Highlight; }
+    #opssh-install-uninstall-preview .terminal-mark { border: 1px solid CanvasText; }
+    #opssh-install-uninstall-preview .prompt-overlay { background: Canvas; }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById("opssh-install-uninstall-preview");
+  const view = Object.fromEntries(
+    ["caption", "title", "heading", "intro", "body", "footer", "prompt", "announcement", "simulation", "simulation-caption"]
+      .map(name => [name, root.querySelector(`[data-${name}]`)])
+  );
+  const license = root.querySelector("[data-license]");
+  const buttons = root.querySelector(".preview-actions");
+  const nav = root.querySelector(".preview-switch");
+  const simulationPanel = root.querySelector(".simulation");
+  const titlebar = root.querySelector(".titlebar");
+  const words = {
+    preview: ["Proposed Windows MSI flow", "Windows MSI 流程预览"],
+    previewNavigation: ["Setup preview", "安装程序预览"],
+    installPreview: ["Installer", "安装程序"],
+    removePreview: ["Uninstaller", "卸载程序"],
+    installTitle: ["opssh Setup", "opssh 安装程序"],
+    removeTitle: ["opssh Uninstall", "opssh 卸载程序"],
+    simulation: ["Simulated Windows environment", "模拟 Windows 环境"],
+    locale: ["Windows display language", "Windows 显示语言"],
+    browserLanguage: ["Use browser language", "使用浏览器语言"],
+    otherLanguage: ["French (English fallback)", "法语（回退到英语）"],
+    token: ["Process token", "进程权限"],
+    standard: ["Standard user", "标准用户"],
+    administrator: ["Administrator (unelevated)", "管理员（未提升权限）"],
+    elevated: ["Already elevated", "已提升权限"],
+    existingScope: ["Installed scope", "已安装范围"],
+    owner: ["Default SSH agent", "默认 SSH 代理"],
+    opssh: ["opssh", "opssh"],
+    openssh: ["Windows OpenSSH", "Windows OpenSSH"],
+    otherAgent: ["Another agent", "其他代理"],
+    service: ["Windows OpenSSH service", "Windows OpenSSH 服务"],
+    present: ["Installed", "已安装"],
+    absent: ["Absent", "未安装"],
+    outcome: ["Simulated outcome", "模拟结果"],
+    success: ["Success", "成功"],
+    installError: ["Installation error", "安装出错"],
+    restoreError: ["OpenSSH restoration fails", "恢复 OpenSSH 失败"],
+    removalError: ["Removal error", "卸载出错"],
+    rollbackError: ["Removal and rollback fail", "卸载和回滚均失败"],
+    uacResponse: ["UAC response", "UAC 响应"],
+    ask: ["Show consent prompt", "显示确认提示"],
+    deny: ["Cancel the request", "取消权限请求"],
+    pace: ["Progress timing", "进度播放方式"],
+    automatic: ["Automatic", "自动"],
+    manual: ["Step by step", "逐阶段"],
+    advance: ["Run next stage", "运行下一阶段"],
+    replay: ["Restart preview", "重新开始预览"],
+    close: ["Close", "关闭"],
+    next: ["Next >", "下一步 >"],
+    back: ["< Back", "< 上一步"],
+    cancel: ["Cancel", "取消"],
+    finish: ["Finish", "完成"],
+    install: ["Install", "安装"],
+    remove: ["Uninstall", "卸载"],
+    languageHeading: ["Setup language", "安装语言"],
+    languageIntro: ["Choose the language to use during installation.", "选择安装过程中使用的语言。"],
+    languageField: ["Language", "语言"],
+    languageHint: ["Setup starts with the Windows display language when it is supported.", "安装程序优先使用受支持的 Windows 显示语言。"],
+    licenseHeading: ["License agreement", "许可协议"],
+    licenseIntro: ["Review the license before continuing.", "继续前请阅读许可协议。"],
+    licenseName: ["Apache License, Version 2.0, January 2004", "Apache 许可证 2.0 版（2004 年 1 月）"],
+    licenseHint: ["Original English license text", "许可证英文原文"],
+    licenseFull: ["Read the full license", "阅读完整许可证"],
+    licenseAck: ["I accept the terms of the license agreement", "我接受许可协议中的条款"],
+    licensePreview: ["This acknowledgement is part of the simulation.", "此确认仅用于演示。"],
+    scopeHeading: ["Installation scope", "安装范围"],
+    scopeIntro: ["Choose who can use this copy of opssh.", "选择哪些用户可以使用此 opssh 安装。"],
+    user: ["Just me", "仅为我安装"],
+    machine: ["All users", "为所有用户安装"],
+    userHint: ["Install in your Windows profile.", "安装到你的 Windows 用户配置文件。"],
+    machineHint: ["Install for everyone on this computer.", "为此计算机上的所有用户安装。"],
+    directoryHeading: ["Destination folder", "目标文件夹"],
+    directoryIntro: ["Choose the folder where Setup will install opssh.", "选择安装 opssh 的文件夹。"],
+    directoryField: ["Install opssh in", "将 opssh 安装到"],
+    directoryReset: ["Use default folder", "使用默认文件夹"],
+    directoryError: ["Enter a local Windows folder, such as C:\\Apps\\opssh.", "请输入 Windows 本地文件夹，例如 C:\\Apps\\opssh。"],
+    protectedDirectory: ["Choose a writable local folder for a current-user installation.", "为当前用户安装时，请选择可写入的本地文件夹。"],
+    machineDirectory: ["For an all-users installation, choose a folder outside user profiles and Windows folders.", "为所有用户安装时，请选择用户配置文件和 Windows 目录以外的文件夹。"],
+    installReady: ["Setup will copy the app files and create the Start menu shortcut.", "安装程序将复制应用文件并创建开始菜单快捷方式。"],
+    removeHeading: ["Uninstall opssh?", "卸载 opssh？"],
+    removeIntro: ["Remove the application from this computer.", "从此计算机移除应用。"],
+    removeBody: ["The uninstall removes opssh program files, shortcuts, and its Windows registrations.", "卸载将移除 opssh 程序文件、快捷方式和 Windows 注册项。"],
+    dataKept: ["Your settings and user data will be kept.", "你的设置和用户数据将保留。"],
+    restoreNotice: ["opssh is the default SSH agent. Uninstall will release the default pipe and restore Windows OpenSSH if the service is installed.", "opssh 是默认 SSH 代理。卸载会释放默认管道；如果已安装 Windows OpenSSH 服务，则会恢复该服务。"],
+    otherNotice: ["The current default SSH agent will be left in place.", "当前默认 SSH 代理将继续使用。"],
+    privilege: ["This action requires administrator permission.", "此操作需要管理员权限。"],
+    installing: ["Installing opssh", "正在安装 opssh"],
+    removing: ["Uninstalling opssh", "正在卸载 opssh"],
+    progressIntro: ["Please wait while Windows Installer completes the operation.", "请等待 Windows Installer 完成操作。"],
+    ready: ["Preparing the operation", "正在准备操作"],
+    waiting: ["Waiting for administrator permission", "正在等待管理员权限"],
+    rollingBack: ["Rolling back changes", "正在回滚更改"],
+    log: ["Simulated action log", "模拟操作日志"],
+    logDetails: ["Show action log", "查看操作日志"],
+    statusGood: ["Completed", "已完成"],
+    statusSkipped: ["Skipped", "已跳过"],
+    statusWarn: ["Canceled", "已取消"],
+    statusError: ["Failed", "失败"],
+    statusInfo: ["Recorded", "已记录"],
+    installed: ["opssh is installed", "opssh 已安装"],
+    installedIntro: ["Choose what happens when you finish Setup.", "选择完成安装时要执行的操作。"],
+    login: ["Start opssh when I sign in to Windows", "登录 Windows 时启动 opssh"],
+    launch: ["Launch opssh now", "立即启动 opssh"],
+    finishEffect: ["These options take effect when you select Finish.", "点击“完成”后，这些选项才会生效。"],
+    removed: ["opssh was uninstalled", "opssh 已卸载"],
+    removedIntro: ["Windows Installer completed removal.", "Windows Installer 已完成卸载。"],
+    dataPreserved: ["Your settings and user data were kept.", "你的设置和用户数据已保留。"],
+    restoreDone: ["Windows OpenSSH is running and starts automatically.", "Windows OpenSSH 正在运行，且已设为自动启动。"],
+    restoreSkipped: ["The default pipe was released. The Windows OpenSSH service is not installed.", "默认管道已释放。此计算机未安装 Windows OpenSSH 服务。"],
+    installCanceled: ["Setup was canceled", "安装已取消"],
+    removeCanceled: ["Uninstall was canceled", "卸载已取消"],
+    installFailed: ["Setup could not install opssh", "无法安装 opssh"],
+    removeFailed: ["Uninstall could not remove opssh", "无法卸载 opssh"],
+    consentDenied: ["Administrator permission was canceled before any system changes.", "管理员权限请求已取消，系统尚未发生任何更改。"],
+    noChanges: ["The operation ended before any system changes.", "操作已结束，系统未发生更改。"],
+    installReverted: ["Setup rolled back the changes it made.", "安装程序已回滚本次更改。"],
+    removeReverted: ["Windows Installer restored the prior installation and SSH agent state.", "Windows Installer 已恢复先前的安装和 SSH 代理状态。"],
+    partialRollback: ["Rollback could not restore every change. Review the action log and repair the installation before trying again.", "部分更改无法回滚。请查看操作日志并修复安装，然后重试。"],
+    setupClosed: ["Setup closed", "安装程序已关闭"],
+    uninstallClosed: ["Uninstaller closed", "卸载程序已关闭"],
+    closedIntro: ["The preview session has ended.", "本次预览已结束。"],
+    startupApplied: ["Login startup registered for the interactive user.", "已为当前交互用户注册登录启动。"],
+    startupNotApplied: ["Login startup was skipped.", "已跳过登录启动注册。"],
+    launchApplied: ["opssh launched in the interactive user’s session.", "opssh 已在当前交互用户的会话中启动。"],
+    launchNotApplied: ["opssh was left closed.", "opssh 尚未启动。"],
+    completionDiscarded: ["Setup closed before applying the selected completion options.", "安装程序在应用所选的完成选项前已关闭。"],
+    uac: ["User Account Control", "用户帐户控制"],
+    uacInstall: ["Allow Windows Installer to install opssh on this device?", "是否允许 Windows Installer 在此设备上安装 opssh？"],
+    uacRemove: ["Allow Windows Installer to uninstall opssh from this device?", "是否允许 Windows Installer 从此设备卸载 opssh？"],
+    uacCredentials: ["Windows requires approval from a separate administrator account to continue.", "Windows 需要使用其他管理员账户批准此操作才能继续。"],
+    uacSimulateApproval: ["Simulate administrator approval", "模拟管理员批准"],
+    uacAccept: ["Yes", "是"],
+    uacCancel: ["No", "否"],
+    cancelInstallPrompt: ["Cancel Setup?", "取消安装？"],
+    cancelRemovePrompt: ["Cancel uninstall?", "取消卸载？"],
+    cancelPromptBody: ["Windows Installer will roll back any changes made during this operation.", "Windows Installer 将回滚本次操作所做的所有更改。"],
+    cancelBeforePromptBody: ["The wizard will close before making changes.", "向导将在执行任何更改之前关闭。"],
+    keepGoing: ["Continue", "继续"],
+    endOperation: ["Cancel operation", "取消操作"],
+    validateInstall: ["Validated the installer package, scope, and destination.", "已验证安装包、安装范围和目标文件夹。"],
+    validateRemove: ["Located the installed MSI and saved the existing configuration for rollback.", "已找到已安装的 MSI，并保存现有配置以供回滚。"],
+    elevationGranted: ["Windows granted administrator permission for this operation.", "Windows 已为此操作授予管理员权限。"],
+    elevationCanceled: ["The Windows administrator permission request was canceled.", "Windows 管理员权限请求已取消。"],
+    copyFiles: ["Copied the tray, core, and required runtime files to the destination.", "已将托盘、核心和所需运行时文件复制到目标文件夹。"],
+    installShortcut: ["Created the opssh shortcut in the Start menu.", "已在开始菜单中创建 opssh 快捷方式。"],
+    registerMsi: ["Registered opssh in Installed apps and committed the installation.", "已在“已安装的应用”中注册 opssh 并提交安装。"],
+    installFileError: ["Windows Installer could not finish copying the app files.", "Windows Installer 无法完成应用文件复制。"],
+    undoInstallFiles: ["Removed the partially installed program files.", "已移除部分安装的程序文件。"],
+    undoInstallShortcut: ["Removed the new Start menu shortcut.", "已移除新建的开始菜单快捷方式。"],
+    stopCore: ["Verified that the tray and core exited normally and the opssh core pipe was released.", "已确认托盘和核心正常退出，且 opssh 核心管道已释放。"],
+    releaseDefault: ["Released the default SSH agent pipe and removed the opssh default-agent registration.", "已释放默认 SSH 代理管道并移除 opssh 的默认代理注册。"],
+    restoreService: ["Set the Windows OpenSSH agent service to automatic and started it.", "已将 Windows OpenSSH 代理服务设为自动启动并启动该服务。"],
+    noService: ["The Windows OpenSSH service is absent. Skipped service restoration.", "未安装 Windows OpenSSH 服务，已跳过服务恢复。"],
+    noRestore: ["The default SSH agent is owned elsewhere. Skipped agent and service changes.", "默认 SSH 代理由其他程序拥有，已跳过代理和服务更改。"],
+    serviceError: ["Windows OpenSSH could not be restored.", "无法恢复 Windows OpenSSH。"],
+    removeStartup: ["Removed the opssh login startup registration.", "已移除 opssh 登录启动注册。"],
+    removeNotifications: ["Removed opssh notifications and their activation registration.", "已移除 opssh 通知和对应的激活注册。"],
+    removeShortcuts: ["Removed the opssh Start menu shortcut.", "已移除 opssh 开始菜单快捷方式。"],
+    removeFiles: ["Removed the installed opssh program files.", "已移除已安装的 opssh 程序文件。"],
+    removeMsi: ["Removed opssh from Installed apps and committed removal.", "已从“已安装的应用”中移除 opssh 并提交卸载。"],
+    keepData: ["Preserved the user settings, account configuration, and public key index.", "已保留用户设置、账户配置和公钥索引。"],
+    removeFileError: ["Windows Installer could not finish removing the app files.", "Windows Installer 无法完成应用文件移除。"],
+    undoRemoveFiles: ["Restored the installed program files.", "已恢复已安装的程序文件。"],
+    undoRemoveShortcuts: ["Restored the Start menu shortcut.", "已恢复开始菜单快捷方式。"],
+    undoRemoveNotifications: ["Restored the notification activation registration.", "已恢复通知激活注册。"],
+    undoRemoveStartup: ["Restored the previous login startup registration.", "已恢复先前的登录启动注册。"],
+    undoRestoreService: ["Restored the previous Windows OpenSSH service state.", "已恢复先前的 Windows OpenSSH 服务状态。"],
+    undoReleaseDefault: ["Restored the opssh default-agent selection.", "已恢复 opssh 默认代理选择。"],
+    undoStopCore: ["Returned the tray and core to their prior running state.", "已将托盘和核心恢复到先前的运行状态。"],
+    undoFileError: ["Could not restore every installed program file.", "无法恢复全部已安装的程序文件。"],
+    cancelLogged: ["A cancellation was requested.", "已请求取消操作。"]
+  };
+
+  const defaults = {
+    user: "%LOCALAPPDATA%\\Programs\\opssh",
+    machine: "%ProgramFiles%\\opssh"
+  };
+  const languageOptions = [["en", "English"], ["zh", "简体中文"]];
+  const environment = {
+    locale: "browser",
+    token: "standard",
+    existingScope: "user",
+    owner: "opssh",
+    service: "present",
+    installOutcome: "success",
+    removeOutcome: "success",
+    uacResponse: "ask",
+    pace: "automatic"
+  };
+  const installSteps = ["language", "license", "scope", "directory"];
+  const stageSymbols = { good: "✓", skipped: "–", warn: "!", error: "×", info: "·" };
+  const stageNames = { good: "statusGood", skipped: "statusSkipped", warn: "statusWarn", error: "statusError", info: "statusInfo" };
+  let state;
+  let timer;
+  let prompt = null;
+  let priorFocus;
+
+  function systemLanguage() {
+    if (environment.locale !== "browser") return environment.locale === "zh" ? "zh" : "en";
+    return /^zh(?:$|-(?:hans|cn|sg)(?:-|$))/i.test(navigator.language) ? "zh" : "en";
+  }
+
+  function label(key, lang = state.lang) {
+    return words[key][lang === "zh" ? 1 : 0];
+  }
+
+  function reset(mode, focus = false) {
+    clearTimeout(timer);
+    prompt = null;
+    state = {
+      mode,
+      lang: systemLanguage(),
+      step: mode === "install" ? "language" : "confirm",
+      accepted: false,
+      scope: "user",
+      paths: { ...defaults },
+      directoryError: "",
+      startup: true,
+      launch: false,
+      applied: null,
+      run: null
+    };
+    view.announcement.textContent = "";
+    render(focus ? '[data-body] select, [data-footer] .default-button' : "");
+  }
+
+  function busy() {
+    return state.step === "progress";
+  }
+
+  function canRestoreService() {
+    return environment.owner === "opssh" && environment.service === "present";
+  }
+
+  function needsElevation() {
+    if (environment.token === "elevated") return false;
+    if (state.mode === "remove") return environment.existingScope === "machine" || canRestoreService();
+    return state.scope === "machine";
+  }
+
+  function validFolder(value) {
+    return /^(?:[a-z]:|%(?:localappdata|userprofile|programfiles)%)(?:\\[^\\/:*?"<>|%\u0000-\u001f]+)+\\?$/i.test(value)
+      && !value.split("\\").some(part => /[ .]$/.test(part));
+  }
+
+  function folderError(value) {
+    if (!validFolder(value)) return "directoryError";
+    const protectedForUser = /^(?:%programfiles%|[a-z]:\\(?:Program Files(?: \(x86\))?|Windows|ProgramData))(?:\\|$)/i;
+    const unsafeForMachine = /^(?:%(?:localappdata|userprofile)%|[a-z]:\\(?:Users|Windows))(?:\\|$)/i;
+    if (state.scope === "user" && protectedForUser.test(value)) return "protectedDirectory";
+    if (state.scope === "machine" && unsafeForMachine.test(value)) return "machineDirectory";
+    return "";
+  }
+
+  function optionList(options, selected) {
+    return options.map(([value, name]) => `<option value="${value}"${value === selected ? " selected" : ""}>${name}</option>`).join("");
+  }
+
+  function makeButton(action, key, { primary = false, disabled = false, shield = false, lang = state.lang } = {}) {
+    return `<button type="button" data-action="${action}"${primary ? ' class="default-button"' : ""}${disabled ? " disabled" : ""}${shield ? ` aria-label="${label(key, lang)}. ${label("privilege", lang)}"` : ""}>${shield ? '<span class="shield" aria-hidden="true"></span>' : ""}${label(key, lang)}</button>`;
+  }
+
+  function checkbox(name, key, checked) {
+    return `<label class="check"><input type="checkbox" data-field="${name}"${checked ? " checked" : ""}><span>${label(key)}</span></label>`;
+  }
+
+  function scopeChoice(scope) {
+    const desc = scope === "user" ? "userHint" : "machineHint";
+    return `<label class="check">
+      <input type="radio" name="opssh-setup-scope" data-field="scope" value="${scope}"${state.scope === scope ? " checked" : ""}>
+      <span>${label(scope)}<span class="choice-description secondary-text">${label(desc)}</span></span>
+    </label>`;
+  }
+
+  function logRows() {
+    return state.run.log.map(({ key, kind }) => `<li data-kind="${kind}">
+      <span class="log-icon" aria-hidden="true">${stageSymbols[kind]}</span>
+      <span><span class="screen-reader">${label(stageNames[kind])}. </span>${label(key)}</span>
+    </li>`).join("");
+  }
+
+  function logList() {
+    return `<ol class="log" data-log aria-label="${label("log")}">${logRows()}</ol>`;
+  }
+
+  function logDetails() {
+    if (!state.run?.log.length) return "";
+    return `<details><summary>${label("logDetails")}</summary>${logList()}</details>`;
+  }
+
+  function renderProgress() {
+    return `<div class="progress-state">
+      <div class="progress-label"><span data-progress-text>${label(state.run.status)}</span><span data-progress-percent>${state.run.percent}%</span></div>
+      <progress value="${state.run.percent}" max="100" aria-labelledby="opssh-setup-step"></progress>
+    </div>
+    <h3>${label("log")}</h3>
+    ${logList()}`;
+  }
+
+  function renderBody() {
+    const install = state.mode === "install";
+    switch (state.step) {
+      case "language":
+        return ["languageHeading", "languageIntro", `<label class="field">
+          <span>${label("languageField")}</span>
+          <select data-field="language">${optionList(languageOptions, state.lang)}</select>
+        </label><p class="secondary-text">${label("languageHint")}</p>`];
+      case "license":
+        return ["licenseHeading", "licenseIntro", `<div class="license-text">
+          <h3>${label("licenseName")}</h3>
+          <blockquote class="license-excerpt" lang="en">“License” shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.</blockquote>
+          <details><summary>${label("licenseFull")}</summary><pre lang="en" data-license-text></pre></details>
+        </div>
+        ${checkbox("accepted", "licenseAck", state.accepted)}
+        <p class="secondary-text">${label("licensePreview")}</p>`];
+      case "scope":
+        return ["scopeHeading", "scopeIntro", scopeChoice("user") + scopeChoice("machine")];
+      case "directory":
+        return ["directoryHeading", "directoryIntro", `<label class="field">
+          <span>${label("directoryField")}</span>
+          <input type="text" class="folder" data-field="directory" maxlength="240" spellcheck="false" autocomplete="off"
+            aria-invalid="${Boolean(state.directoryError)}" aria-describedby="opssh-setup-directory-error">
+        </label>
+        <p id="opssh-setup-directory-error" class="validation-error" role="alert"${state.directoryError ? "" : " hidden"}>${state.directoryError ? label(state.directoryError) : ""}</p>
+        <div class="folder-actions">${makeButton("default-folder", "directoryReset")}</div>
+        <p>${label("installReady")}</p>`];
+      case "confirm":
+        return ["removeHeading", "removeIntro", `<p>${label("removeBody")}</p>
+          <p>${label(environment.owner === "opssh" ? "restoreNotice" : "otherNotice")}</p>
+          <p>${label("dataKept")}</p>`];
+      case "progress":
+        return [install ? "installing" : "removing", "progressIntro", renderProgress()];
+      case "installed":
+        return ["installed", "installedIntro", `${checkbox("startup", "login", state.startup)}
+          ${checkbox("launch", "launch", state.launch)}
+          <p class="secondary-text">${label("finishEffect")}</p>${logDetails()}`];
+      case "removed":
+        return ["removed", "removedIntro", `<div class="result-summary"><p>${label("dataPreserved")}</p>
+          <p>${label(state.run.owner === "opssh" ? (state.run.restoreService ? "restoreDone" : "restoreSkipped") : "otherNotice")}</p></div>
+          ${logDetails()}`];
+      case "result": {
+        const failed = state.run.result === "error";
+        const title = failed ? (install ? "installFailed" : "removeFailed") : (install ? "installCanceled" : "removeCanceled");
+        return [title, state.run.resultDetail, `${install ? "" : `<p>${label("dataPreserved")}</p>`}${logDetails()}`];
+      }
+      case "closed":
+        return [install ? "setupClosed" : "uninstallClosed", "closedIntro", state.applied
+          ? `<div class="result-summary"><p>${label(state.applied.startup ? "startupApplied" : "startupNotApplied")}</p>
+             <p>${label(state.applied.launch ? "launchApplied" : "launchNotApplied")}</p></div>`
+          : state.run?.result === "success" && install ? `<p>${label("completionDiscarded")}</p>` : ""];
+    }
+  }
+
+  function renderFooter() {
+    const index = installSteps.indexOf(state.step);
+    const cancel = makeButton("cancel", "cancel", { disabled: Boolean(state.run?.rollingBack) });
+    const advance = state.step === "directory"
+      ? makeButton("start", "install", { primary: true, shield: needsElevation() })
+      : makeButton("next", "next", { primary: true, disabled: state.step === "license" && !state.accepted });
+    if (index >= 0) return makeButton("back", "back", { disabled: index === 0 }) + advance + cancel;
+    if (state.step === "confirm") return makeButton("start", "remove", { primary: true, shield: needsElevation() }) + cancel;
+    if (state.step === "progress") return cancel;
+    if (state.step === "closed") return makeButton("replay", "replay", { primary: true });
+    return makeButton("finish", "finish", { primary: true });
+  }
+
+  function renderSimulation() {
+    const lang = systemLanguage();
+    const inFlight = busy() || Boolean(prompt);
+    const select = (field, key, options) => `<label class="field"><span>${label(key, lang)}</span>
+      <select data-environment="${field}"${inFlight ? " disabled" : ""}>
+        ${optionList(options, environment[field])}
+      </select></label>`;
+    const choices = (...keys) => keys.map(key => [key, label(key, lang)]);
+    const install = state.mode === "install";
+    view["simulation-caption"].textContent = label("simulation", lang);
+    view.simulation.innerHTML = select("locale", "locale", [
+      ["browser", label("browserLanguage", lang)], ...languageOptions, ["other", label("otherLanguage", lang)]
+    ]) + select("token", "token", choices("standard", "administrator", "elevated"))
+      + (install ? "" : select("existingScope", "existingScope", choices("user", "machine"))
+        + select("owner", "owner", choices("opssh", "openssh", "otherAgent"))
+        + select("service", "service", choices("present", "absent")))
+      + (install
+        ? select("installOutcome", "outcome", choices("success", "installError"))
+        : select("removeOutcome", "outcome", canRestoreService()
+          ? choices("success", "restoreError", "removalError", "rollbackError")
+          : choices("success", "removalError", "rollbackError")))
+      + select("uacResponse", "uacResponse", choices("ask", "deny"))
+      + select("pace", "pace", choices("automatic", "manual"))
+      + (busy() && environment.pace === "manual" ? `<div>${makeButton("advance", "advance", { disabled: Boolean(prompt) })}</div>` : "");
+    if (busy() && environment.pace === "manual") simulationPanel.open = true;
+  }
+
+  function render(focus = "") {
+    const lang = systemLanguage();
+    const isInstall = state.mode === "install";
+    const [heading, intro, content] = renderBody();
+    root.lang = state.lang === "zh" ? "zh-Hans" : "en";
+    nav.lang = simulationPanel.lang = lang === "zh" ? "zh-Hans" : "en";
+    nav.setAttribute("aria-label", label("previewNavigation", lang));
+    view.caption.textContent = label("preview", lang);
+    for (const [mode, button] of [["install", buttons.firstElementChild], ["remove", buttons.lastElementChild]]) {
+      button.textContent = label(mode === "install" ? "installPreview" : "removePreview", lang);
+      button.setAttribute("aria-pressed", String(mode === state.mode));
+      button.disabled = busy();
+    }
+    view.title.textContent = label(isInstall ? "installTitle" : "removeTitle");
+    titlebar.lastElementChild.setAttribute("aria-label", label("close"));
+    titlebar.lastElementChild.disabled = state.step === "closed" || Boolean(state.run?.rollingBack);
+    view.heading.textContent = label(heading);
+    view.intro.textContent = label(intro);
+    view.body.innerHTML = content;
+    view.footer.innerHTML = renderFooter();
+    if (state.step === "directory") root.querySelector('[data-field="directory"]').value = state.paths[state.scope];
+    if (state.step === "license") {
+      const fullText = root.querySelector("[data-license-text]");
+      fullText.textContent = license.content.querySelector("pre").textContent.trim();
+      fullText.parentElement.querySelector("summary").setAttribute("aria-label", `${label("licenseFull")}. ${label("licenseHint")}.`);
+    }
+    renderSimulation();
+    renderPrompt();
+    if (focus) root.querySelector(focus)?.focus();
+  }
+
+  function renderPrompt() {
+    view.prompt.hidden = !prompt;
+    for (const area of [nav, titlebar, view.heading.parentElement.parentElement, view.body, view.footer, simulationPanel]) {
+      area.inert = Boolean(prompt);
+    }
+    if (!prompt) {
+      view.prompt.replaceChildren();
+      return;
+    }
+    const install = state.mode === "install";
+    const uac = prompt === "uac";
+    const lang = uac ? systemLanguage() : state.lang;
+    const credentials = uac && environment.token === "standard";
+    const title = uac ? "uac" : (install ? "cancelInstallPrompt" : "cancelRemovePrompt");
+    const body = uac ? (install ? "uacInstall" : "uacRemove") : (busy() ? "cancelPromptBody" : "cancelBeforePromptBody");
+    const confirm = uac
+      ? makeButton("uac-allow", credentials ? "uacSimulateApproval" : "uacAccept", { lang })
+      : makeButton("confirm-cancel", "endOperation");
+    const dismiss = uac
+      ? makeButton("uac-deny", credentials ? "cancel" : "uacCancel", { primary: true, lang })
+      : makeButton("resume", "keepGoing", { primary: true });
+    view.prompt.innerHTML = `<div class="prompt-dialog" role="dialog" aria-modal="true" lang="${lang === "zh" ? "zh-Hans" : "en"}"
+      aria-labelledby="opssh-setup-prompt-title" aria-describedby="opssh-setup-prompt-body">
+      <h3 id="opssh-setup-prompt-title">${uac ? '<span class="shield" aria-hidden="true"></span>' : ""}${label(title, lang)}</h3>
+      <div id="opssh-setup-prompt-body">
+        <p>${label(body, lang)}</p>
+        ${credentials ? `<p>${label("uacCredentials", lang)}</p>` : ""}
+      </div>
+      <div class="prompt-actions">${confirm}${dismiss}</div>
+    </div>`;
+  }
+
+  function showPrompt(type) {
+    clearTimeout(timer);
+    priorFocus = document.activeElement;
+    prompt = type;
+    renderPrompt();
+    view.prompt.querySelector(".default-button").focus();
+  }
+
+  function dismissPrompt() {
+    prompt = null;
+    renderPrompt();
+    priorFocus?.focus();
+    priorFocus = null;
+  }
+
+  function installStages(outcome) {
+    return [
+      ["validateInstall", 10],
+      ["copyFiles", 48, "undoInstallFiles", outcome === "installError" ? "installFileError" : null],
+      ["installShortcut", 76, "undoInstallShortcut"],
+      ["registerMsi", 100]
+    ];
+  }
+
+  function removeStages(outcome) {
+    const wasDefault = environment.owner === "opssh";
+    const restoration = canRestoreService()
+      ? ["restoreService", 42, "undoRestoreService", outcome === "restoreError" ? "serviceError" : null]
+      : ["noService", 42, null, null, "skipped"];
+    const agent = wasDefault
+      ? [["releaseDefault", 32, "undoReleaseDefault"], restoration]
+      : [["noRestore", 42, null, null, "skipped"]];
+    return [
+      ["validateRemove", 10],
+      ["stopCore", 22, "undoStopCore"],
+      ...agent,
+      ["removeStartup", 53, "undoRemoveStartup"],
+      ["removeNotifications", 61, "undoRemoveNotifications"],
+      ["removeShortcuts", 70, "undoRemoveShortcuts"],
+      ["removeFiles", 82, "undoRemoveFiles", ["removalError", "rollbackError"].includes(outcome) ? "removeFileError" : null],
+      ["keepData", 92, null, null, "info"],
+      ["removeMsi", 100]
+    ];
+  }
+
+  function startOperation() {
+    const install = state.mode === "install";
+    if (install) {
+      state.directoryError = folderError(state.paths[state.scope].trim());
+      if (state.directoryError) {
+        render('[data-field="directory"]');
+        return;
+      }
+    }
+    const outcome = install ? environment.installOutcome : environment.removeOutcome;
+    state.run = {
+      stages: install ? installStages(outcome) : removeStages(outcome),
+      outcome,
+      owner: environment.owner,
+      restoreService: canRestoreService(),
+      needsElevation: needsElevation(),
+      askedForElevation: false,
+      index: 0,
+      percent: 0,
+      status: "ready",
+      log: [],
+      undo: [],
+      rollingBack: false,
+      rollbackFailed: false,
+      result: null,
+      resultDetail: null
+    };
+    state.step = "progress";
+    render(environment.pace === "manual" ? '[data-action="advance"]' : '[data-footer] button');
+    schedule();
+  }
+
+  function updateProgress() {
+    const run = state.run;
+    view.body.querySelector("[data-progress-text]").textContent = label(run.status);
+    view.body.querySelector("[data-progress-percent]").textContent = `${run.percent}%`;
+    view.body.querySelector("progress").value = run.percent;
+  }
+
+  function record(key, kind, percent = state.run.percent, status = key) {
+    const run = state.run;
+    run.log.push({ key, kind });
+    run.percent = percent;
+    run.status = status;
+    updateProgress();
+    const log = view.body.querySelector("[data-log]");
+    log.innerHTML = logRows();
+    log.scrollTop = log.scrollHeight;
+    view.announcement.textContent = label(key);
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    if (busy() && !prompt && environment.pace === "automatic") {
+      timer = setTimeout(advanceOperation, 550);
+    }
+  }
+
+  function finishResult(result, detail) {
+    clearTimeout(timer);
+    state.run.rollingBack = false;
+    state.run.result = result;
+    state.run.resultDetail = detail;
+    state.step = result === "success" ? (state.mode === "install" ? "installed" : "removed") : "result";
+    render('[data-footer] .default-button');
+    view.announcement.textContent = view.heading.textContent;
+  }
+
+  function startRollback(result) {
+    const run = state.run;
+    if (!run.undo.length) {
+      finishResult(result, "noChanges");
+      return;
+    }
+    run.rollingBack = true;
+    run.rollbackStages = run.undo.length;
+    run.result = result;
+    run.status = "rollingBack";
+    run.percent = 0;
+    updateProgress();
+    view.footer.querySelector("button").disabled = true;
+    titlebar.lastElementChild.disabled = true;
+    schedule();
+  }
+
+  function advanceRollback(run) {
+    const key = run.undo.shift();
+    if (!key) {
+      const detail = run.rollbackFailed ? "partialRollback" : state.mode === "install" ? "installReverted" : "removeReverted";
+      finishResult(run.result, detail);
+      return;
+    }
+    const percent = Math.round(100 * (1 - run.undo.length / run.rollbackStages));
+    if (key === "undoRemoveFiles" && run.outcome === "rollbackError") {
+      run.rollbackFailed = true;
+      record("undoFileError", "error", percent, "rollingBack");
+    } else {
+      record(key, "good", percent, "rollingBack");
+    }
+    schedule();
+  }
+
+  function answerElevation(allowed) {
+    if (prompt === "uac") dismissPrompt();
+    if (allowed) {
+      record("elevationGranted", "good", 16);
+      schedule();
+    } else {
+      record("elevationCanceled", "warn");
+      finishResult("canceled", "consentDenied");
+    }
+  }
+
+  function advanceOperation() {
+    if (!busy() || prompt) return;
+    const run = state.run;
+    if (run.rollingBack) {
+      advanceRollback(run);
+      return;
+    }
+    if (run.index === 1 && run.needsElevation && !run.askedForElevation) {
+      run.askedForElevation = true;
+      run.status = "waiting";
+      updateProgress();
+      if (environment.uacResponse === "deny") answerElevation(false);
+      else showPrompt("uac");
+      return;
+    }
+    if (run.index === run.stages.length) {
+      finishResult("success");
+      return;
+    }
+    const [key, percent, undo, error, kind = "good"] = run.stages[run.index++];
+    if (undo) run.undo.unshift(undo);
+    if (error) {
+      record(error, "error", percent);
+      startRollback("error");
+      return;
+    }
+    record(key, kind, percent);
+    if (percent === 100) {
+      view.footer.querySelector("button").disabled = true;
+      titlebar.lastElementChild.disabled = true;
+    }
+    schedule();
+  }
+
+  function requestCancel() {
+    if (state.step === "closed") return;
+    if (state.step === "installed" || state.step === "removed" || state.step === "result") {
+      state.step = "closed";
+      render('[data-action="replay"]');
+      return;
+    }
+    if (!state.run?.rollingBack && state.run?.percent !== 100) showPrompt("cancel");
+  }
+
+  function cancelOperation() {
+    dismissPrompt();
+    if (!busy()) {
+      state.run = { log: [], result: "canceled", resultDetail: "noChanges" };
+      finishResult("canceled", "noChanges");
+      return;
+    }
+    record("cancelLogged", "warn");
+    startRollback("canceled");
+  }
+
+  function clearFolderError() {
+    state.directoryError = "";
+    const field = view.body.querySelector('[data-field="directory"]');
+    field.setAttribute("aria-invalid", "false");
+    view.body.querySelector(".validation-error").hidden = true;
+  }
+
+  root.addEventListener("input", event => {
+    if (event.target.dataset.field !== "directory") return;
+    state.paths[state.scope] = event.target.value;
+    clearFolderError();
+  });
+
+  root.addEventListener("change", event => {
+    const control = event.target;
+    const setting = control.dataset.environment;
+    if (setting) {
+      environment[setting] = control.value;
+      if (!canRestoreService() && environment.removeOutcome === "restoreError") environment.removeOutcome = "success";
+      if (setting === "locale" && (state.mode === "remove" || state.step === "language")) state.lang = systemLanguage();
+      render(`[data-environment="${setting}"]`);
+      return;
+    }
+    switch (control.dataset.field) {
+      case "language":
+        state.lang = control.value;
+        render('[data-field="language"]');
+        break;
+      case "accepted":
+        state.accepted = control.checked;
+        view.footer.querySelector('[data-action="next"]').disabled = !state.accepted;
+        break;
+      case "scope":
+        state.scope = control.value;
+        state.directoryError = "";
+        break;
+      case "startup":
+        state.startup = control.checked;
+        break;
+      case "launch":
+        state.launch = control.checked;
+        break;
+    }
+  });
+
+  root.addEventListener("click", event => {
+    const action = event.target.closest("button")?.dataset.action;
+    switch (action) {
+      case "install-preview":
+      case "remove-preview": {
+        const mode = action === "install-preview" ? "install" : "remove";
+        if (state.mode !== mode) reset(mode, true);
+        break;
+      }
+      case "replay":
+        reset(state.mode, true);
+        break;
+      case "next":
+      case "back": {
+        const index = installSteps.indexOf(state.step);
+        state.step = installSteps[index + (action === "next" ? 1 : -1)];
+        render('[data-body] :is(select, input:checked, input:not([type="radio"])), [data-footer] .default-button:not(:disabled)');
+        view.announcement.textContent = view.heading.textContent;
+        break;
+      }
+      case "default-folder": {
+        state.paths[state.scope] = defaults[state.scope];
+        const field = view.body.querySelector('[data-field="directory"]');
+        field.value = state.paths[state.scope];
+        clearFolderError();
+        field.focus();
+        break;
+      }
+      case "start":
+        startOperation();
+        break;
+      case "advance":
+        advanceOperation();
+        break;
+      case "cancel":
+      case "close":
+        requestCancel();
+        break;
+      case "resume":
+        dismissPrompt();
+        schedule();
+        break;
+      case "confirm-cancel":
+        cancelOperation();
+        break;
+      case "uac-allow":
+      case "uac-deny":
+        answerElevation(action === "uac-allow");
+        break;
+      case "finish":
+        if (state.step === "installed") state.applied = { startup: state.startup, launch: state.launch };
+        state.step = "closed";
+        render('[data-action="replay"]');
+        view.announcement.textContent = view.body.textContent;
+        break;
+    }
+  });
+
+  root.addEventListener("keydown", event => {
+    if (event.key === "Enter" && event.target.dataset.field === "directory" && !event.isComposing) {
+      event.preventDefault();
+      startOperation();
+      return;
+    }
+    if (event.key !== "Escape" || event.target.matches("select") || !event.target.closest(".setup-window")) return;
+    event.preventDefault();
+    if (prompt === "uac") answerElevation(false);
+    else if (prompt === "cancel") {
+      dismissPrompt();
+      schedule();
+    } else requestCancel();
+  });
+
+  // Outside the embedded viewer, use the operating system’s color scheme.
+  if (getComputedStyle(root).colorScheme === "normal") root.style.colorScheme = "light dark";
+  reset("install");
+})();
+</script>

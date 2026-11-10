@@ -10,6 +10,14 @@
 6. Squash with `<PR title> (#<PR number>)` as the subject. Include the suffix if supplying an explicit CLI subject and verify the merged subject and PR association. Have a `gpt-6-luna` medium subagent follow CI for that exact new `main` SHA. Once it passes, fetch and fast-forward local `main` in its own checkout. Preserve any unrelated local work.
 7. After successful main CI, retain the managed topic worktree while it serves as the current or pending chat checkout. Archive it through Codex once eligible, then confirm the chat still shows the PR. If archiving clears the attachment, reattach the same PR through Codex and verify it again. If Codex defers archiving because the worktree is bound, retry through Codex only after that association ends.
 
+## Windows design workflow
+
+Before designing changes to Windows UI or install, upgrade or uninstall flows, consult official platform controls, the packaging framework and established projects with comparable flows. Reuse suitable controls or lifecycle primitives and record the upstream sources, what the change adopts and what requires a custom design.
+
+Create the interactive Visualize proposal directly in [the repository reference directory](../references/). Use synthetic data. Show that source for approval before implementing the corresponding native UI or installer flow. Record the approved source path, variant, SHA-256 and capture scenarios in the [visual reference index](../references/opssh-agent-dashboard.md). Preserve approved reference bytes and return to this approval step when changing the approved design.
+
+For implementation PRs, link the approved baseline and compare matched screenshots with the real implementation. Include visible subviews, menus, dropdowns and modal states affected by the change. Record differences and unavailable checks. Capture with the cua-driver MCP on an isolated Windows desktop without taking the user's foreground, including for windows opened by the workflow.
+
 ## Main rules and rollout
 
 The target ruleset for an authorized rollout to `main` requires PRs, squash-only merging, linear history and successful checks with strict up-to-date enforcement. It prevents branch deletion and non-fast-forward updates, has zero required approvals and grants no bypass, including to administrators. Keep review evidence in the contribution workflow.

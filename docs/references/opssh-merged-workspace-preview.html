@@ -1,0 +1,751 @@
+<div id="opssh-merged-workspace-preview" aria-label="opssh workspace layout review">
+  <div class="review-controls" role="group" aria-label="Review settings">
+    <label>Window size <select data-review="width"><option value="normal">Normal</option><option value="min">Minimum</option></select></label>
+    <label>Theme <select data-review="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <label>Language <select data-review="language"><option value="en">English</option><option value="zh-Hans">简体中文</option></select></label>
+    <label>Connection <select data-review="scenario"><option value="ready">Connected</option><option value="unbound">Signed out</option></select></label>
+    <label>Process <select data-review="elevation"><option value="standard">Standard</option><option value="elevated">Elevated</option></select></label>
+    <label>Agent switch <select data-review="outcome"><option value="success">Success</option><option value="service-absent">Service absent</option><option value="pipe-failure">Pipe unavailable</option><option value="service-pending">Service pending</option></select></label>
+  </div>
+  <div class="viz-carousel" aria-label="Merged workspace layouts">
+    <section data-variant="Compact summary" aria-label="Compact summary workspace">
+      <div class="size-readout"></div><div class="stage"><div class="window-frame"><div class="window"></div></div></div>
+    </section>
+    <section data-variant="Stacked cards" aria-label="Stacked cards workspace" hidden>
+      <div class="size-readout"></div><div class="stage"><div class="window-frame"><div class="window"></div></div></div>
+    </section>
+    <section data-variant="Parallel cards" aria-label="Parallel cards workspace" hidden>
+      <div class="size-readout"></div><div class="stage"><div class="window-frame"><div class="window"></div></div></div>
+    </section>
+  </div>
+</div>
+
+<style>
+  #opssh-merged-workspace-preview {
+    color-scheme: light dark;
+    --text: light-dark(#1b1b1b, #fff);
+    --quiet: light-dark(#535353, #d2d2d2);
+    --mica: light-dark(#f3f3f3, #202020);
+    --tint: light-dark(#e9edf3, #242a32);
+    --surface: light-dark(#fafafa, #2b2b2b);
+    --header: light-dark(#f5f5f5, #282828);
+    --stroke: light-dark(#dedede, #414141);
+    --hover: light-dark(#e8e8e8, #363636);
+    --control: light-dark(#fff, #333);
+    --control-edge: light-dark(#d4d4d4, #494949);
+    --control-base: light-dark(#bcbcbc, #515151);
+    --accent: light-dark(#005fb8, #60cdff);
+    --on-accent: light-dark(#fff, #082a3b);
+    --good: light-dark(#16732c, #83d694);
+    --warning: light-dark(#865600, #ffd479);
+    --error: light-dark(#ad2929, #ff9d9d);
+    --shadow: light-dark(#0002, #0005);
+    color: var(--text);
+    font: 14px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  #opssh-merged-workspace-preview[data-theme="light"],
+  #opssh-merged-workspace-preview .window[data-theme="light"] { color-scheme: light; }
+  #opssh-merged-workspace-preview[data-theme="dark"],
+  #opssh-merged-workspace-preview .window[data-theme="dark"] { color-scheme: dark; }
+  #opssh-merged-workspace-preview :is(.window, .review-controls),
+  #opssh-merged-workspace-preview :is(.window, .review-controls) *,
+  #opssh-merged-workspace-preview :is(.window, .review-controls) *::before,
+  #opssh-merged-workspace-preview :is(.window, .review-controls) *::after { box-sizing: border-box; }
+  #opssh-merged-workspace-preview .review-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-block: 4px 10px; }
+  #opssh-merged-workspace-preview .review-controls label { display: inline-flex; align-items: center; gap: 5px; color: var(--quiet); font-size: 12px; }
+  #opssh-merged-workspace-preview :is(.window, .review-controls) :is(button, select, input) { font: inherit; }
+  #opssh-merged-workspace-preview :is(.window, .review-controls) :is(button, select) { color: var(--text); }
+  #opssh-merged-workspace-preview :is(.window, .review-controls) :is(.button, select) {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 31px; padding: 4px 10px; border: 1px solid var(--control-edge);
+    border-bottom-color: var(--control-base); border-radius: 4px; background: var(--control);
+  }
+  #opssh-merged-workspace-preview :is(.window, .review-controls) select { padding-inline: 8px; }
+  #opssh-merged-workspace-preview .review-controls select { min-height: 28px; }
+  #opssh-merged-workspace-preview .button:enabled:hover { background: var(--hover); }
+  #opssh-merged-workspace-preview .button:disabled { opacity: .5; }
+  #opssh-merged-workspace-preview .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  #opssh-merged-workspace-preview .button.primary:enabled:hover { filter: brightness(.92); }
+  #opssh-merged-workspace-preview :is(.button, .nav-button) > :is(i, svg),
+  #opssh-merged-workspace-preview .setting-row > :is(i, svg),
+  #opssh-merged-workspace-preview .status > :is(i, svg) { flex: none; width: 16px; height: 16px; line-height: 16px; text-align: center; }
+  #opssh-merged-workspace-preview .size-readout { margin: 0 0 6px; color: var(--quiet); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+  #opssh-merged-workspace-preview .stage { display: flex; justify-content: center; align-items: flex-start; height: var(--stage-height, 520px); }
+  #opssh-merged-workspace-preview .window-frame { position: relative; width: var(--scaled-width); height: var(--scaled-height); }
+  #opssh-merged-workspace-preview .window {
+    position: absolute; inset: 0 auto auto 0; display: grid; grid-template-rows: 48px minmax(0, 1fr);
+    width: var(--window-width); height: var(--window-height); transform: scale(var(--scale)); transform-origin: top left;
+    overflow: hidden; isolation: isolate; border: 1px solid var(--stroke); border-radius: 8px;
+    background: radial-gradient(ellipse at 0 0, var(--tint), transparent 70%), var(--mica);
+    box-shadow: 0 4px 12px var(--shadow);
+  }
+  #opssh-merged-workspace-preview .titlebar { display: flex; align-items: center; padding: 0 0 0 16px; }
+  #opssh-merged-workspace-preview .window[data-compact="true"] .titlebar { padding-left: 0; }
+  #opssh-merged-workspace-preview .titlebar .app-name { margin-inline-start: 16px; font-size: 12px; }
+  #opssh-merged-workspace-preview .window[data-compact="true"] .titlebar .app-name { margin-inline-start: 12px; }
+  #opssh-merged-workspace-preview .brand { display: inline-grid; width: 16px; height: 16px; place-items: center; border-radius: 4px; color: var(--on-accent); background: var(--accent); }
+  #opssh-merged-workspace-preview .brand > :is(i, svg) { width: 12px; height: 12px; font: 600 10px/12px Consolas, monospace; }
+  #opssh-merged-workspace-preview .titlebar .pane-toggle { width: 42px; min-height: 36px; margin-inline: 3px; }
+  #opssh-merged-workspace-preview .caption { display: flex; align-self: flex-start; margin-inline-start: auto; color: var(--quiet); font-family: "Segoe UI Symbol", "Segoe UI", sans-serif; }
+  #opssh-merged-workspace-preview .caption span { display: grid; place-items: center; width: 46px; height: 32px; font-size: 13px; }
+  #opssh-merged-workspace-preview .shell { position: relative; display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 0; }
+  #opssh-merged-workspace-preview .window[data-compact="true"] .shell { grid-template-columns: 48px minmax(0, 1fr); }
+  #opssh-merged-workspace-preview .pane { z-index: 2; padding: 0 6px; display: grid; gap: 4px; align-content: start; }
+  #opssh-merged-workspace-preview .pane[data-overlay="true"] {
+    position: absolute; inset: 0 auto 0 0; width: 224px; background: var(--mica);
+    border-inline-end: 1px solid var(--stroke); border-start-end-radius: 8px; box-shadow: 3px 4px 10px var(--shadow);
+  }
+  #opssh-merged-workspace-preview .nav-button {
+    position: relative; display: inline-flex; align-items: center; gap: 14px; width: 100%; height: 36px; padding: 0 11px;
+    text-align: start; white-space: nowrap; border: 0; border-radius: 4px; background: transparent;
+  }
+  #opssh-merged-workspace-preview .nav-button:hover:enabled, #opssh-merged-workspace-preview .nav-button[aria-current="page"] { background: var(--hover); }
+  #opssh-merged-workspace-preview .nav-button:disabled { opacity: .5; }
+  #opssh-merged-workspace-preview .nav-button[aria-current="page"]::before { content: ""; position: absolute; inset-inline-start: 0; width: 3px; height: 16px; border-radius: 2px; background: var(--accent); }
+  #opssh-merged-workspace-preview .window[data-compact="true"] .pane:not([data-overlay="true"]) { padding-inline: 4px; }
+  #opssh-merged-workspace-preview .window[data-compact="true"] .pane:not([data-overlay="true"]) .nav-label { display: none; }
+  #opssh-merged-workspace-preview .pane-scrim { position: absolute; z-index: 1; inset: 0 0 0 48px; border: 0; background: transparent; }
+  #opssh-merged-workspace-preview .window[data-pane-open="true"] .page { grid-column: 2; }
+  #opssh-merged-workspace-preview .page { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 24px 23px 18px 16px; }
+  #opssh-merged-workspace-preview .page[data-enter="true"] .page-content { animation: opssh-workspace-enter 180ms cubic-bezier(.16, .75, .26, 1) both; }
+  @keyframes opssh-workspace-enter { from { transform: translateY(12px); } to { transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { #opssh-merged-workspace-preview .page[data-enter="true"] .page-content { animation: none; } }
+  #opssh-merged-workspace-preview .window :is(h1, h2, p) { margin: 0; }
+  #opssh-merged-workspace-preview h1 { font-size: 24px; font-weight: 600; line-height: 1.25; }
+  #opssh-merged-workspace-preview h2 { font-size: 16px; font-weight: 600; }
+  #opssh-merged-workspace-preview .quiet { color: var(--quiet); }
+  #opssh-merged-workspace-preview .small { font-size: 12px; }
+  #opssh-merged-workspace-preview .mono { font-family: "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #opssh-merged-workspace-preview .page-content, #opssh-merged-workspace-preview .provider { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  #opssh-merged-workspace-preview .provider-title { margin-bottom: -5px; }
+  #opssh-merged-workspace-preview .provider[data-layout="parallel"] { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 8px; }
+  #opssh-merged-workspace-preview .provider[data-layout="parallel"] .provider-title { grid-column: 1 / -1; margin-bottom: 0; }
+  #opssh-merged-workspace-preview .provider[data-layout="compact"] { gap: 7px; }
+  #opssh-merged-workspace-preview .provider[data-layout="compact"] .provider-title { margin-bottom: 0; }
+  #opssh-merged-workspace-preview :is(.group, .table-scroll, .empty) { background: var(--surface); border: 1px solid var(--stroke); border-radius: 6px; }
+  #opssh-merged-workspace-preview .setting-row {
+    display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 7px 11px;
+  }
+  #opssh-merged-workspace-preview .setting-row + .setting-row { border-top: 1px solid var(--stroke); }
+  #opssh-merged-workspace-preview .setting-row .description { display: grid; gap: 2px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  #opssh-merged-workspace-preview .stacked-account { display: grid; gap: 4px; }
+  #opssh-merged-workspace-preview .actions, #opssh-merged-workspace-preview .section-head,
+  #opssh-merged-workspace-preview .status { display: flex; align-items: center; gap: 7px; }
+  #opssh-merged-workspace-preview .section-head { flex-wrap: wrap; justify-content: space-between; }
+  #opssh-merged-workspace-preview .actions { flex-wrap: wrap; }
+  #opssh-merged-workspace-preview .status { gap: 4px; }
+  #opssh-merged-workspace-preview .status.good { color: var(--good); }
+  #opssh-merged-workspace-preview .status.warning { color: var(--warning); }
+  #opssh-merged-workspace-preview .status.error { color: var(--error); }
+  #opssh-merged-workspace-preview .vault-group .setting-row { min-height: 36px; padding-block: 3px; }
+  #opssh-merged-workspace-preview .vault-group .setting-row:first-child { min-height: 45px; }
+  #opssh-merged-workspace-preview .vault-group .setting-row .button { white-space: nowrap; }
+  #opssh-merged-workspace-preview .vault-list { border-top: 1px solid var(--stroke); }
+  #opssh-merged-workspace-preview .provider[data-layout="parallel"] .account-actions { justify-content: flex-start; padding: 7px 11px; border-top: 1px solid var(--stroke); }
+  #opssh-merged-workspace-preview .toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 29px; white-space: nowrap; }
+  #opssh-merged-workspace-preview .toggle input {
+    appearance: none; position: relative; width: 39px; height: 20px; margin: 0;
+    border: 1px solid var(--quiet); border-radius: 12px; background: transparent;
+  }
+  #opssh-merged-workspace-preview .toggle input::after { content: ""; position: absolute; width: 10px; height: 10px; inset: 4px auto auto 5px; border-radius: 50%; background: var(--quiet); }
+  #opssh-merged-workspace-preview .toggle input:checked { border-color: var(--accent); background: var(--accent); }
+  #opssh-merged-workspace-preview .toggle input:checked::after { inset-inline-start: 22px; background: var(--on-accent); }
+  #opssh-merged-workspace-preview .keys, #opssh-merged-workspace-preview .settings-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  #opssh-merged-workspace-preview .keys { margin-top: 3px; }
+  #opssh-merged-workspace-preview .sync-stamp { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--quiet); }
+  #opssh-merged-workspace-preview .table-scroll { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; }
+  #opssh-merged-workspace-preview table { width: 100%; border-collapse: collapse; text-align: start; }
+  #opssh-merged-workspace-preview .key-table { min-width: 920px; }
+  #opssh-merged-workspace-preview .activity-table { min-width: 940px; }
+  #opssh-merged-workspace-preview table :is(th, td) { padding: 7px 10px; vertical-align: middle; text-align: start; }
+  #opssh-merged-workspace-preview thead th { background: var(--header); color: var(--quiet); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  #opssh-merged-workspace-preview tbody tr { border-top: 1px solid var(--stroke); }
+  #opssh-merged-workspace-preview tbody th { font-weight: 400; }
+  #opssh-merged-workspace-preview .key-name { min-width: 240px; display: grid; gap: 2px; }
+  #opssh-merged-workspace-preview .key-name .mono { font-size: 11px; }
+  #opssh-merged-workspace-preview .key-actions { display: flex; gap: 5px; }
+  #opssh-merged-workspace-preview .key-table .button { min-height: 28px; padding-inline: 7px; white-space: nowrap; font-size: 12px; }
+  #opssh-merged-workspace-preview .grant-row > td { padding: 7px 10px 10px 24px; background: var(--header); }
+  #opssh-merged-workspace-preview .grant-row table :is(th, td) { padding-block: 5px; }
+  #opssh-merged-workspace-preview .empty { padding: 14px; color: var(--quiet); }
+  #opssh-merged-workspace-preview .login { min-height: calc(var(--window-height) - 92px); display: grid; justify-items: center; align-content: center; text-align: center; gap: 12px; }
+  #opssh-merged-workspace-preview .login .brand { width: 46px; height: 46px; border-radius: 10px; }
+  #opssh-merged-workspace-preview .login .brand > :is(i, svg) { width: 24px; height: 24px; font-size: 20px; line-height: 24px; }
+  #opssh-merged-workspace-preview .pending-language { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; border-top: 1px solid var(--stroke); background: var(--header); }
+  #opssh-merged-workspace-preview .window-content { display: contents; }
+  #opssh-merged-workspace-preview .info { position: absolute; z-index: 2; inset: auto 16px 12px auto; padding: 5px 10px; background: var(--surface); border: 1px solid var(--stroke); border-radius: 4px; box-shadow: 0 3px 8px var(--shadow); pointer-events: none; }
+  #opssh-merged-workspace-preview .info:empty { display: none; }
+  #opssh-merged-workspace-preview .modal-backdrop { position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; background: #0006; }
+  #opssh-merged-workspace-preview .dialog { width: min(448px, 90%); max-height: 94%; overflow: auto; background: var(--surface); border: 1px solid var(--stroke); border-radius: 8px; box-shadow: 0 12px 36px var(--shadow); }
+  #opssh-merged-workspace-preview .dialog-body { display: grid; gap: 10px; padding: 18px 20px 14px; }
+  #opssh-merged-workspace-preview .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--stroke); background: var(--header); }
+  #opssh-merged-workspace-preview .dialog-footer .button { min-width: 92px; }
+  #opssh-merged-workspace-preview .account-option { display: flex; align-items: center; gap: 9px; }
+  #opssh-merged-workspace-preview .account-option input { accent-color: var(--accent); }
+  #opssh-merged-workspace-preview .account-option span { display: grid; gap: 2px; }
+  #opssh-merged-workspace-preview .steps { list-style: none; display: grid; gap: 0; padding: 0; margin: 0; }
+  #opssh-merged-workspace-preview .steps li { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 27px; }
+  #opssh-merged-workspace-preview .copy-field { display: block; width: 100%; resize: vertical; color: var(--text); background: var(--control); border: 1px solid var(--stroke); padding: 8px; }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('opssh-merged-workspace-preview');
+  const variants = [
+    { layout: 'compact', width: 880, height: 520 },
+    { layout: 'stacked', width: 1000, height: 560 },
+    { layout: 'parallel', width: 1120, height: 600 }
+  ];
+  const routes = ['keys', 'activity', 'settings', 'about'];
+  const glyphs = {
+    terminal: '›_', key: '⚿', activity: '∿', settings: '⚙', info: 'ⓘ', menu: '≡',
+    'user-round': '♙', shield: '◇', vault: '▣', 'refresh-cw': '↻', 'chevron-down': '⌄',
+    'chevron-right': '›', 'circle-check': '✓', 'triangle-alert': '⚠', 'circle-x': '×',
+    copy: '▤', languages: '文', palette: '◐', power: '⏻', 'plug-zap': '⌁', 'badge-info': 'ⓘ'
+  };
+  const accounts = [
+    { id: 'personal', name: 'Sample Personal', email: 'personal@example.test', vaults: ['personal', 'engineering', 'archive'] },
+    { id: 'team', name: 'Sample Team', email: 'team@example.test', vaults: ['engineering', 'shared', 'archive'] }
+  ];
+  const keys = [
+    { id: 'github-auth', name: 'GitHub authentication', vault: 'personal',
+      blob: 'AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea',
+      fingerprint: 'SHA256:bbXpuKG6zhzdmnxq256TlqzFBzRl2f6OOg722cYNbU8' },
+    { id: 'build-host', name: 'Build host', vault: 'engineering',
+      blob: 'AAAAC3NzaC1lZDI1NTE5AAAAID1AF8PoQ4lakrcKp00bfrycmCzPLsSWjMDNVfEq9GYM',
+      fingerprint: 'SHA256:F34nin7tcaYH6WR5LSWSfj6weFBPfBpuyUUoPFP9YjA' },
+    { id: 'release-signing', name: 'Release signing', vault: 'engineering',
+      blob: 'AAAAC3NzaC1lZDI1NTE5AAAAIPxRzY5iGKGjjaR+0AIw8FgIFu0TujMDrF3rkRVIkIAl',
+      fingerprint: 'SHA256:s3Z2A+mldeflHo5TMMEUA7MlkMg96xvtqH9DGLHHZmE' }
+  ];
+  const firstGrant = { id: 'terminal', key: keys[0].id, process: 'WindowsTerminal.exe', pid: 4120, expires: '15:26:45' };
+  const sampleActivity = [
+    { process: 'ssh.exe', pid: 7428, key: keys[0].name, result: 'signed', time: '15:19:41' },
+    { process: 'git.exe', pid: 4200, key: keys[1].name, result: 'denied', time: '15:18:57' }
+  ];
+  const wording = {
+    keys: ['SSH keys', 'SSH 密钥'], activity: ['Activity', '活动'], settings: ['Settings', '设置'], about: ['About', '关于'],
+    navigation: ['Workspace navigation', '工作区导航'], togglePane: ['Toggle navigation', '切换导航栏'],
+    selectedAccount: ['Selected account', '已选账户'], switchAccount: ['Switch account', '切换账户'], removeAccount: ['Remove', '移除'],
+    desktopAccess: ['1Password access', '1Password 访问'], accessAllowed: ['Last request succeeded', '上次访问成功'],
+    vaultScope: ['Vaults allowed for discovery', '允许发现的保险库'], syncVaults: ['Sync vaults', '同步保险库'],
+    vaultsSynced: ['Vault list synced.', '已同步保险库列表。'], vaultUpdated: ['Vault scope saved.', '已保存保险库范围。'],
+    personal: ['Personal', '个人'], engineering: ['Engineering', '工程'], archive: ['Archive', '归档'], shared: ['Shared', '共享'],
+    on: ['On', '开'], off: ['Off', '关'], lastSuccess: ['Last successful sync', '上次成功同步'], never: ['Never', '从未'],
+    indexedKeys: ['Public key index', '公钥索引'], syncKeys: ['Sync SSH keys', '同步 SSH 密钥'], keysSynced: ['Public keys synced.', '已同步公钥。'],
+    selectVault: ['Allow a vault to sync its SSH public keys.', '允许一个保险库后即可同步其中的 SSH 公钥。'],
+    noKeys: ['Sync keys to discover SSH public keys in the allowed vaults.', '同步密钥以发现允许的保险库中的 SSH 公钥。'],
+    key: ['Key', '密钥'], privateKey: ['Private key state', '私钥加载状态'], approvals: ['Process approvals', '进程授权'],
+    actions: ['Actions', '操作'], loaded: ['Loaded', '已加载'], unloaded: ['Not loaded', '未加载'],
+    preload: ['Preload', '预加载'], evict: ['Evict', '清除缓存'], copy: ['Copy public key', '复制公钥'], copied: ['OpenSSH public key copied.', '已复制 OpenSSH 公钥。'],
+    copyHelp: ['Select and copy the OpenSSH public key.', '选择并复制 OpenSSH 公钥。'],
+    noApprovals: ['No process approvals for this key.', '此密钥暂无进程授权。'], revoke: ['Revoke', '撤销'],
+    process: ['Process', '进程'], expires: ['Expires (local)', '到期时间（本地）'], result: ['Result', '结果'], time: ['Time (local)', '时间（本地）'],
+    noActivity: ['No signing activity in this session.', '本次会话暂无签名活动。'], signed: ['Signed', '已签名'], denied: ['Denied', '已拒绝'],
+    connect: ['Connect 1Password', '连接 1Password'], connectHelp: ['Connect an account from 1Password Desktop to manage your SSH keys.', '连接 1Password 桌面应用中的账户以管理 SSH 密钥。'],
+    chooseAccount: ['Choose a 1Password account', '选择 1Password 账户'], chooseHelp: ['Select the account to authorize in 1Password Desktop.', '选择要在 1Password 桌面应用中授权的账户。'],
+    continue: ['Continue', '继续'], cancel: ['Cancel', '取消'], close: ['Close', '关闭'],
+    removeTitle: ['Remove this account?', '移除此账户？'], removeHelp: ['This clears its vault selection, key index, loaded keys, approvals and activity.', '这会清除此账户的保险库范围、密钥索引、已加载私钥、授权和活动。'],
+    appearance: ['Appearance', '外观'], theme: ['Theme', '主题'], language: ['Language', '语言'], system: ['System', '跟随系统'], light: ['Light', '浅色'], dark: ['Dark', '深色'],
+    reopen: ['Reopen', '重新打开'], pendingLanguage: ['Reopen the workspace to apply English.', '重新打开工作区以应用简体中文。'],
+    integration: ['SSH integration', 'SSH 集成'], startup: ['Start at sign-in', '登录时启动'], startupHelp: ['Start opssh when you sign in to Windows.', '登录 Windows 时启动 opssh。'],
+    defaultAgent: ['Windows default SSH agent', 'Windows 默认 SSH 代理'], separatePipe: ['opssh is using its dedicated pipe.', 'opssh 正在使用专用管道。'],
+    defaultPipe: ['opssh is using the Windows OpenSSH pipe.', 'opssh 正在使用 Windows OpenSSH 管道。'],
+    setDefault: ['Set as default', '设为默认'], restore: ['Restore OpenSSH', '还原 OpenSSH'], elevatedHelp: ['Administrator approval required', '需要管理员批准'],
+    setDefaultTitle: ['Make opssh the default SSH agent?', '将 opssh 设为默认 SSH 代理？'],
+    restoreTitle: ['Restore Windows OpenSSH?', '还原 Windows OpenSSH？'],
+    defaultHelp: ['opssh may stop and disable the Windows OpenSSH agent service before it takes over the default pipe.', 'opssh 可能会先停止并禁用 Windows OpenSSH 代理服务，再接管默认管道。'],
+    restoreHelp: ['opssh releases the default pipe so Windows OpenSSH can use it again.', 'opssh 会释放默认管道，以便 Windows OpenSSH 重新使用。'],
+    serviceStep: ['OpenSSH service', 'OpenSSH 服务'], pipeStep: ['Default agent pipe', '默认代理管道'], persistStep: ['Save selection', '保存选择'], recoveryStep: ['Recover service state', '恢复服务状态'], recordRecoveryStep: ['Save recovery state', '保存恢复状态'],
+    working: ['In progress', '进行中'], done: ['Completed', '已完成'], skipped: ['Skipped', '已跳过'], failed: ['Failed', '失败'], pending: ['Pending', '待定'],
+    switchSuccess: ['Default agent updated.', '已更新默认代理。'], switchFailed: ['The default agent pipe is unavailable.', '默认代理管道不可用。'],
+    switchPending: ['The service change is pending. Recovery state was saved.', '服务更改仍在等待。已保存恢复状态。'],
+    aboutHelp: ['A Windows SSH agent backed by 1Password Desktop.', '使用 1Password 桌面应用的 Windows SSH 代理。'],
+    license: ['License', '许可证']
+  };
+  const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  const translate = (language, key) => wording[key][language === 'zh-Hans' ? 1 : 0];
+  const icon = name => `<i data-lucide="${name}" aria-hidden="true">${glyphs[name] || ''}</i>`;
+  const stamp = value => `<time datetime="2026-11-10T${value}">2026-11-10 ${value}</time>`;
+  const systemLanguage = /^zh(?:$|-(?:hans|cn|sg)(?:-|$))/i.test(navigator.language) ? 'zh-Hans' : 'en';
+  const normalSize = { width: 1240, height: 700 };
+  const dimensions = (variant, width) => width === 'min' ? variant : normalSize;
+  const preview = {
+    width: root.dataset.previewWidth || 'normal',
+    theme: root.dataset.previewTheme || 'system',
+    language: root.dataset.previewLanguage || 'en',
+    scenario: root.dataset.previewScenario === 'first-run' ? 'unbound' : root.dataset.previewScenario || 'ready',
+    elevation: root.dataset.previewElevation || 'standard',
+    outcome: root.dataset.previewOutcome || 'success'
+  };
+  if (preview.scenario === 'elevated') {
+    preview.scenario = 'ready';
+    preview.elevation = 'elevated';
+  }
+  const previewControls = [...root.querySelectorAll('[data-review]')];
+  for (const control of previewControls) {
+    const value = preview[control.dataset.review];
+    if ([...control.options].some(option => option.value === value)) control.value = value;
+    else preview[control.dataset.review] = control.value;
+  }
+
+  function mount(section, variant) {
+    const windowElement = section.querySelector('.window');
+    const frame = section.querySelector('.window-frame');
+    const readout = section.querySelector('.size-readout');
+    windowElement.innerHTML = '<div class="window-content"></div><p class="info" role="status"></p>';
+    const windowContent = windowElement.querySelector('.window-content');
+    const feedback = windowElement.querySelector('.info');
+    const model = {
+      route: routes.includes(root.dataset.previewPage) ? root.dataset.previewPage : 'keys',
+      theme: 'system', language: preview.language, languagePreference: preview.language, pendingLanguage: null, pane: false, vaultExpanded: false,
+      modal: null, feedback: '', startup: true, defaultAgent: false, clock: 0, scroll: new Map()
+    };
+    const t = key => translate(model.language, key);
+    const a = key => escape(t(key));
+    const brand = glyph => `<span class="brand">${icon(glyph)}</span>`;
+    const requiresElevation = () => preview.elevation !== 'elevated' && preview.outcome !== 'service-absent';
+    let feedbackTimer;
+
+    function seedConnection() {
+      const bound = preview.scenario === 'ready';
+      model.account = bound ? accounts[0] : null;
+      model.scope = new Set(bound ? ['personal', 'engineering'] : []);
+      model.index = bound ? keys.slice() : [];
+      model.loaded = new Set(bound ? [keys[0].id] : []);
+      model.expanded = new Set();
+      model.grants = bound ? [firstGrant] : [];
+      model.activity = bound ? sampleActivity.slice() : [];
+      model.vaultAt = bound ? '15:17:12' : null;
+      model.keyAt = bound ? '15:18:04' : null;
+      model.accessAt = model.vaultAt;
+      model.vaultExpanded = false;
+      model.modal = null;
+      model.feedback = '';
+      if (!bound && model.route === 'activity') model.route = 'keys';
+    }
+    seedConnection();
+
+    function button(label, action, options = {}) {
+      const { glyph, primary, disabled, accessible, expanded, controls } = options;
+      return `<button type="button" class="button${primary ? ' primary' : ''}" data-action="${action}"${disabled ? ' disabled' : ''}${accessible ? ` aria-label="${escape(accessible)}"` : ''}${expanded === undefined ? '' : ` aria-expanded="${expanded}"`}${controls ? ` aria-controls="${controls}"` : ''}>${glyph ? icon(glyph) : ''}${escape(label)}</button>`;
+    }
+
+    function row(glyph, title, description, control = '') {
+      return `<div class="setting-row">${icon(glyph)}<div class="description"><strong>${escape(title)}</strong>${description}</div>${control}</div>`;
+    }
+
+    function toggle(label, action, checked, disabled = false) {
+      return `<label class="toggle"><span class="small quiet" aria-hidden="true">${a(checked ? 'on' : 'off')}</span><input type="checkbox" role="switch" data-change="${action}" aria-label="${escape(label)}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}></label>`;
+    }
+
+    function select(label, action, options, current) {
+      return `<select aria-label="${escape(label)}" data-change="${action}">${options.map(([value, caption]) => `<option value="${value}"${value === current ? ' selected' : ''}>${escape(caption)}</option>`).join('')}</select>`;
+    }
+
+    function status(label, tone) {
+      const name = { good: 'circle-check', warning: 'triangle-alert', error: 'circle-x' }[tone];
+      return `<span class="status ${tone || 'quiet'}">${name ? icon(name) : ''}<span>${escape(label)}</span></span>`;
+    }
+
+    const small = value => `<span class="quiet small">${value}</span>`;
+    const stampText = value => `<span class="sync-stamp">${a('lastSuccess')} · ${value ? stamp(value) : a('never')}</span>`;
+
+    function accountGroup() {
+      const { name, email } = model.account;
+      const actions = `<div class="actions account-actions">${button(t('switchAccount'), 'picker')}${button(t('removeAccount'), 'remove')}</div>`;
+      const accountDetails = small(`${escape(name)} · ${escape(email)}`);
+      const access = `${status(t('accessAllowed'), 'good')} ${small(stamp(model.accessAt))}`;
+      if (variant.layout === 'compact') {
+        return `<div class="group account-group">${row('user-round', t('selectedAccount'), `${accountDetails}${small(`${a('accessAllowed')} · ${stamp(model.accessAt)}`)}`, actions)}</div>`;
+      }
+      if (variant.layout === 'parallel') {
+        return `<div class="group account-group">${row('user-round', t('selectedAccount'), accountDetails)}${row('shield', t('desktopAccess'), access)}${actions}</div>`;
+      }
+      return `<div class="stacked-account"><div class="group">${row('user-round', t('selectedAccount'), accountDetails, actions)}</div><div class="group">${row('shield', t('desktopAccess'), access)}</div></div>`;
+    }
+
+    function vaultGroup() {
+      const compact = variant.layout === 'compact';
+      const listId = `workspace-${variant.layout}-vaults`;
+      const count = model.language === 'zh-Hans' ? `已允许 ${model.scope.size} / ${model.account.vaults.length} 个` : `${model.scope.size} of ${model.account.vaults.length} allowed`;
+      const disclosure = compact ? button(count, 'vaults', { glyph: model.vaultExpanded ? 'chevron-down' : 'chevron-right', expanded: model.vaultExpanded, controls: listId }) : '';
+      const rows = model.account.vaults.map(vault => row('vault', t(vault), '', toggle(t(vault), `vault:${vault}`, model.scope.has(vault)))).join('');
+      return `<div class="group vault-group">
+        ${row('vault', t('vaultScope'), stampText(model.vaultAt), `<div class="actions">${disclosure}${button(t('syncVaults'), 'sync-vaults', { glyph: 'refresh-cw' })}</div>`)}
+        <div class="vault-list" id="${listId}"${compact && !model.vaultExpanded ? ' hidden' : ''}>${rows}</div>
+      </div>`;
+    }
+
+    function approvalRow(grants, id) {
+      const rows = grants.map(grant => `<tr><th scope="row">${escape(grant.process)}</th><td class="mono">${grant.pid}</td><td>${stamp(grant.expires)}</td><td>${button(t('revoke'), `revoke:${grant.id}`)}</td></tr>`).join('');
+      return `<tr class="grant-row" id="${id}"><td colspan="4">${rows ? `<table aria-label="${a('approvals')}"><thead><tr><th scope="col">${a('process')}</th><th scope="col">PID</th><th scope="col">${a('expires')}</th><th scope="col">${a('actions')}</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="quiet">${a('noApprovals')}</p>`}</td></tr>`;
+    }
+
+    function keyTable() {
+      const rows = model.index.map(key => {
+        const loaded = model.loaded.has(key.id);
+        const grants = model.grants.filter(grant => grant.key === key.id);
+        const expanded = model.expanded.has(key.id);
+        const approvalId = `workspace-${variant.layout}-approval-${key.id}`;
+        const grantCount = model.language === 'zh-Hans' ? `${grants.length} 项` : String(grants.length);
+        const actions = `<div class="key-actions">${button(t(loaded ? 'evict' : 'preload'), `${loaded ? 'evict' : 'preload'}:${key.id}`)}${button(t('copy'), `copy:${key.id}`, { glyph: 'copy' })}</div>`;
+        const disclosure = button(grantCount, `approval:${key.id}`, { glyph: expanded ? 'chevron-down' : 'chevron-right', expanded,
+          controls: expanded ? approvalId : undefined, accessible: `${key.name} · ${t('approvals')} (${grantCount})` });
+        return `<tr><th scope="row"><div class="key-name"><strong>${escape(key.name)}</strong>${small(a(key.vault))}<code class="quiet mono">${key.fingerprint}</code></div></th>
+          <td>${status(t(loaded ? 'loaded' : 'unloaded'), loaded ? 'good' : '')}</td><td>${disclosure}</td><td>${actions}</td></tr>${expanded ? approvalRow(grants, approvalId) : ''}`;
+      }).join('');
+      return `<div class="table-scroll" role="region" aria-label="${a('indexedKeys')}"><table class="key-table"><thead><tr>${['key', 'privateKey', 'approvals', 'actions'].map(label => `<th scope="col">${a(label)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function workspace() {
+      if (!model.account) return `<div class="login">${brand('key')}<h1>${a('connect')}</h1><p class="quiet">${a('connectHelp')}</p>${button(t('connect'), 'picker', { primary: true })}</div>`;
+      return `<h1>${a('keys')}</h1>
+        <section class="provider" data-layout="${variant.layout}" aria-label="1Password"><h2 class="provider-title">1Password</h2>${accountGroup()}${vaultGroup()}</section>
+        <section class="keys" aria-label="${a('indexedKeys')}">
+          <div class="section-head"><div><h2>${a('indexedKeys')}</h2>${stampText(model.keyAt)}</div>${button(t('syncKeys'), 'sync-keys', { glyph: 'refresh-cw', primary: true, disabled: !model.scope.size })}</div>
+          ${model.index.length ? keyTable() : `<p class="empty">${a(model.scope.size ? 'noKeys' : 'selectVault')}</p>`}
+        </section>`;
+    }
+
+    function activity() {
+      const rows = model.activity.map(entry => `<tr><th scope="row">${escape(entry.process)}</th><td class="mono">${entry.pid}</td><td>${escape(entry.key)}</td><td>${status(t(entry.result), entry.result === 'signed' ? 'good' : 'warning')}</td><td>${stamp(entry.time)}</td></tr>`).join('');
+      const columns = ['process', 'PID', 'key', 'result', 'time'].map(label => `<th scope="col">${label === 'PID' ? label : a(label)}</th>`).join('');
+      return `<h1>${a('activity')}</h1>${rows ? `<div class="table-scroll" role="region" aria-label="${a('activity')}"><table class="activity-table"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table></div>` : `<p class="empty">${a('noActivity')}</p>`}`;
+    }
+
+    function settings() {
+      const needsElevation = requiresElevation();
+      const language = model.languagePreference;
+      const action = model.defaultAgent ? 'restore' : 'setDefault';
+      const pending = model.pendingLanguage;
+      const targetLanguage = pending ? `<div class="pending-language" lang="${language}"><span role="status">${escape(translate(pending, 'pendingLanguage'))}</span>${button(translate(pending, 'reopen'), 'reopen')}</div>` : '';
+      return `<h1>${a('settings')}</h1>
+        <section class="settings-group"><h2>${a('appearance')}</h2><div class="group">
+          ${row('palette', t('theme'), '', select(t('theme'), 'theme', ['system', 'light', 'dark'].map(value => [value, t(value)]), model.theme))}
+          ${row('languages', t('language'), '', select(t('language'), 'language', [['system', t('system')], ['en', 'English'], ['zh-Hans', '简体中文']], language))}${targetLanguage}
+        </div></section>
+        <section class="settings-group"><h2>${a('integration')}</h2><div class="group">
+          ${row('power', t('startup'), small(a('startupHelp')), toggle(t('startup'), 'startup', model.startup))}
+          ${row('plug-zap', t('defaultAgent'), small(a(model.defaultAgent ? 'defaultPipe' : 'separatePipe')), button(t(action), 'default-agent', { glyph: needsElevation ? 'shield' : '', disabled: !model.startup, accessible: needsElevation ? `${t(action)} · ${t('elevatedHelp')}` : '' }))}
+        </div></section>`;
+    }
+
+    function about() {
+      return `<h1>${a('about')}</h1><div class="group">${row('terminal', 'opssh', small(a('aboutHelp')))}${row('badge-info', t('license'), '', '<span>Apache License 2.0</span>')}</div>`;
+    }
+
+    function dialog(title, body, footer) {
+      const titleId = `workspace-${variant.layout}-dialog`;
+      return `<div class="modal-backdrop"><div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="${titleId}"><div class="dialog-body"><h2 id="${titleId}">${escape(title)}</h2>${body}</div><div class="dialog-footer">${footer}</div></div></div>`;
+    }
+
+    function renderDialog() {
+      const modal = model.modal;
+      if (!modal) return '';
+      const cancel = button(t('cancel'), 'dismiss');
+      const close = button(t('close'), 'dismiss');
+      if (modal.kind === 'picker') {
+        const choices = accounts.map(account => `<label class="account-option"><input type="radio" name="workspace-${variant.layout}-account" data-change="candidate" value="${account.id}"${modal.account === account ? ' checked' : ''}><span><strong>${escape(account.name)}</strong>${small(escape(account.email))}</span></label>`).join('');
+        return dialog(t('chooseAccount'), `<p class="quiet">${a('chooseHelp')}</p>${choices}`, `${cancel}${button(t('continue'), 'connect', { primary: true })}`);
+      }
+      if (modal.kind === 'remove') return dialog(t('removeTitle'), `<p class="quiet">${a('removeHelp')}</p>`, `${cancel}${button(t('removeAccount'), 'disconnect', { primary: true })}`);
+      if (modal.kind === 'copy') return dialog(t('copy'), `<p class="quiet">${a('copyHelp')}</p><textarea readonly rows="3" class="copy-field mono" aria-label="${a('copy')}">${escape(modal.value)}</textarea>`, close);
+      const title = t(modal.restore ? 'restoreTitle' : 'setDefaultTitle');
+      const help = `<p class="quiet">${a(modal.restore ? 'restoreHelp' : 'defaultHelp')}</p>`;
+      if (modal.phase === 'confirm') return dialog(title, help, `${cancel}${button(t('continue'), 'confirm-agent', { primary: true, glyph: requiresElevation() ? 'shield' : '' })}`);
+      const tones = { done: 'good', failed: 'error', pending: 'warning' };
+      const steps = modal.steps.map(step => `<li><span>${a(step.label)}</span>${status(t(step.state), tones[step.state])}</li>`).join('');
+      const result = modal.result ? `<p role="status">${a(modal.result)}</p>` : '';
+      return dialog(title, `${help}<ol class="steps" aria-live="polite">${steps}</ol>${result}`, modal.phase === 'finished' ? close : button(t('close'), 'dismiss', { disabled: true }));
+    }
+
+    function render({ enter = false, focusAction = '' } = {}) {
+      const before = windowElement.querySelector('.page');
+      if (before) model.scroll.set(before.dataset.route, [before.scrollTop, before.querySelector('.table-scroll')?.scrollLeft || 0]);
+      const active = document.activeElement;
+      const hadFocus = windowElement.contains(active);
+      const action = focusAction || (hadFocus ? active.dataset.action : '');
+      const change = hadFocus ? active.dataset.change : '';
+      const value = hadFocus ? active.value : '';
+      const size = dimensions(variant, preview.width);
+      const compact = size.width < 1007;
+      const overlay = compact && model.pane;
+      const modal = Boolean(model.modal);
+      const inert = modal ? ' inert' : '';
+      windowElement.lang = model.language;
+      windowElement.dataset.compact = compact;
+      windowElement.dataset.paneOpen = overlay;
+      windowElement.dataset.theme = model.theme;
+      const paneButton = compact ? `<button type="button" class="nav-button pane-toggle" data-action="pane" aria-expanded="${overlay}" aria-label="${a('togglePane')}">${icon('menu')}</button>` : '';
+      const nav = routes.map(route => `<button type="button" class="nav-button" data-action="nav:${route}" aria-label="${a(route)}"${compact && !overlay ? ` data-tooltip="${a(route)}"` : ''}${model.route === route ? ' aria-current="page"' : ''}${!model.account && route === 'activity' ? ' disabled' : ''}>${icon(({ keys: 'key', about: 'info' })[route] || route)}<span class="nav-label">${a(route)}</span></button>`).join('');
+      const page = { keys: workspace, activity, settings, about }[model.route]();
+      windowContent.innerHTML = `<header class="titlebar"${inert}>${paneButton}${brand('terminal')}<span class="app-name">opssh</span><span class="caption" aria-hidden="true"><span>−</span><span>□</span><span>×</span></span></header>
+        <div class="shell"${inert}>
+          <nav class="pane" data-overlay="${overlay}" aria-label="${a('navigation')}">${nav}</nav>
+          ${overlay ? '<div class="pane-scrim" data-action="pane" aria-hidden="true"></div>' : ''}
+          <main class="page" data-route="${model.route}" data-enter="${enter}"><div class="page-content">${page}</div></main>
+        </div>${renderDialog()}`;
+      globalThis.lucide?.createIcons?.({ attrs: { width: 16, height: 16 } });
+      if (feedback.textContent !== model.feedback) {
+        clearTimeout(feedbackTimer);
+        feedback.textContent = model.feedback;
+        if (model.feedback) feedbackTimer = setTimeout(() => {
+          model.feedback = '';
+          feedback.textContent = '';
+        }, 3200);
+      }
+      const current = windowElement.querySelector('.page');
+      const [top, left] = model.scroll.get(model.route) || [0, 0];
+      current.scrollTop = top;
+      const table = current.querySelector('.table-scroll');
+      if (table) table.scrollLeft = left;
+      const focusRoot = modal ? windowElement.querySelector('.dialog') : windowElement;
+      const sameAction = action && [...focusRoot.querySelectorAll('[data-action]')].find(node => node.dataset.action === action && node.matches('button:enabled'));
+      const sameChange = change && [...focusRoot.querySelectorAll('[data-change]')].find(node => node.dataset.change === change && (change !== 'candidate' || node.value === value));
+      const dialogFocus = modal && focusRoot.querySelector('.copy-field, input:checked, .primary:enabled, button:enabled');
+      const focus = sameAction || sameChange || dialogFocus || (modal ? focusRoot : null);
+      if (focus) focus.focus({ preventScroll: true });
+    }
+
+    function fit(availableWidth, stageHeight) {
+      const size = dimensions(variant, preview.width);
+      const scale = Math.min(1, availableWidth / size.width);
+      section.style.setProperty('--stage-height', `${stageHeight}px`);
+      frame.style.setProperty('--scaled-width', `${size.width * scale}px`);
+      frame.style.setProperty('--scaled-height', `${size.height * scale}px`);
+      windowElement.style.setProperty('--window-width', `${size.width}px`);
+      windowElement.style.setProperty('--window-height', `${size.height}px`);
+      windowElement.style.setProperty('--scale', scale);
+      readout.textContent = `${size.width} × ${size.height} DIP${scale < 1 ? ` · ${Math.round(scale * 100)}%` : ''}`;
+    }
+
+    function tick() {
+      model.clock += 1;
+      const minutes = 20 + Math.floor(model.clock / 60);
+      const pad = value => String(value).padStart(2, '0');
+      return `${pad(15 + Math.floor(minutes / 60))}:${pad(minutes % 60)}:${pad(model.clock % 60)}`;
+    }
+
+    function activateAccount(account) {
+      if (account !== model.account) {
+        model.account = account;
+        model.scope.clear();
+        model.index = [];
+        model.loaded.clear();
+        model.expanded.clear();
+        model.grants = [];
+        model.activity = [];
+        model.keyAt = null;
+        model.vaultExpanded = false;
+      }
+      model.vaultAt = account ? tick() : null;
+      model.accessAt = model.vaultAt;
+      model.modal = null;
+      model.feedback = '';
+    }
+
+    async function copyPublicKey(id) {
+      const key = keys.find(item => item.id === id);
+      const publicKey = `ssh-ed25519 ${key.blob} opssh-preview-${key.id}@example.test`;
+      const account = model.account;
+      const stillCurrent = () => model.account === account && model.route === 'keys' && model.index.includes(key) && !model.modal;
+      try {
+        await navigator.clipboard.writeText(publicKey);
+        if (!stillCurrent()) return;
+        model.feedback = t('copied');
+      } catch {
+        if (!stillCurrent()) return;
+        model.modal = { kind: 'copy', value: publicKey, from: `copy:${id}` };
+      }
+      render();
+      windowElement.querySelector('.copy-field')?.select();
+    }
+
+    function confirmAgent() {
+      const modal = model.modal;
+      const outcome = preview.outcome;
+      const steps = [
+        { label: 'serviceStep', final: { 'service-absent': 'skipped', 'service-pending': 'pending' }[outcome] || 'done' },
+        { label: 'pipeStep', final: { 'pipe-failure': 'failed', 'service-pending': 'skipped' }[outcome] || 'done' },
+        { label: 'persistStep', final: { 'pipe-failure': 'skipped', 'service-pending': 'skipped' }[outcome] || 'done' },
+        { label: outcome === 'service-pending' ? 'recordRecoveryStep' : 'recoveryStep', final: ['pipe-failure', 'service-pending'].includes(outcome) ? 'done' : 'skipped' }
+      ];
+      modal.phase = 'running';
+      modal.steps = [];
+      function start(index) {
+        const step = { ...steps[index], state: 'working' };
+        modal.steps.push(step);
+        render();
+        setTimeout(() => {
+          if (model.modal !== modal) return;
+          step.state = step.final;
+          if (index + 1 < steps.length) {
+            start(index + 1);
+            return;
+          }
+          const successful = outcome === 'success' || outcome === 'service-absent';
+          if (successful) {
+            model.defaultAgent = !modal.restore;
+            if (modal.turnOffStartup) model.startup = false;
+          }
+          modal.phase = 'finished';
+          modal.result = successful ? 'switchSuccess' : outcome === 'pipe-failure' ? 'switchFailed' : 'switchPending';
+          render();
+        }, 360);
+      }
+      start(0);
+    }
+
+    function dismiss() {
+      if (!model.modal || model.modal.phase === 'running') return;
+      const from = model.modal.from;
+      model.modal = null;
+      render({ focusAction: from });
+    }
+
+    windowElement.addEventListener('click', event => {
+      const control = event.target.closest('[data-action]');
+      if (!control || control.disabled) return;
+      const [action, value] = control.dataset.action.split(':');
+      switch (action) {
+        case 'nav': {
+          const enter = model.route !== value;
+          model.route = value;
+          model.pane = false;
+          if (enter) model.feedback = '';
+          render({ enter });
+          return;
+        }
+        case 'pane': model.pane = !model.pane; break;
+        case 'picker': model.modal = { kind: 'picker', account: accounts[0], from: 'picker' }; break;
+        case 'remove': model.modal = { kind: 'remove', from: 'remove' }; break;
+        case 'connect': activateAccount(model.modal.account); break;
+        case 'disconnect': activateAccount(null); break;
+        case 'dismiss': dismiss(); return;
+        case 'vaults': model.vaultExpanded = !model.vaultExpanded; break;
+        case 'sync-vaults':
+          model.vaultAt = tick();
+          model.accessAt = model.vaultAt;
+          model.feedback = t('vaultsSynced');
+          break;
+        case 'sync-keys':
+          model.index = keys.filter(key => model.scope.has(key.vault));
+          model.keyAt = tick();
+          model.feedback = t('keysSynced');
+          break;
+        case 'preload': model.loaded.add(value); break;
+        case 'evict': model.loaded.delete(value); break;
+        case 'copy': void copyPublicKey(value); return;
+        case 'approval':
+          if (model.expanded.has(value)) model.expanded.delete(value);
+          else model.expanded.add(value);
+          break;
+        case 'revoke': model.grants = model.grants.filter(grant => grant.id !== value); break;
+        case 'reopen':
+          model.language = model.pendingLanguage;
+          model.pendingLanguage = null;
+          model.pane = false;
+          model.feedback = '';
+          break;
+        case 'default-agent': model.modal = { kind: 'agent', restore: model.defaultAgent, phase: 'confirm', from: 'default-agent' }; break;
+        case 'confirm-agent': confirmAgent(); return;
+        default: return;
+      }
+      const focusAction = ['preload', 'evict'].includes(action) ? `${action === 'preload' ? 'evict' : 'preload'}:${value}` : '';
+      render({ focusAction });
+    });
+
+    windowElement.addEventListener('change', event => {
+      const control = event.target.closest('[data-change]');
+      if (!control) return;
+      const [action, value] = control.dataset.change.split(':');
+      switch (action) {
+        case 'theme': model.theme = control.value; break;
+        case 'language': {
+          model.languagePreference = control.value;
+          const target = control.value === 'system' ? systemLanguage : control.value;
+          model.pendingLanguage = target === model.language ? null : target;
+          break;
+        }
+        case 'startup':
+          if (!control.checked && model.defaultAgent) {
+            model.modal = { kind: 'agent', restore: true, turnOffStartup: true, phase: 'confirm', from: 'default-agent' };
+          } else {
+            model.startup = control.checked;
+          }
+          break;
+        case 'candidate': model.modal.account = accounts.find(account => account.id === control.value); return;
+        case 'vault': {
+          if (control.checked) model.scope.add(value);
+          else {
+            model.scope.delete(value);
+            const retired = model.index.filter(key => key.vault === value);
+            model.index = model.index.filter(key => key.vault !== value);
+            for (const key of retired) {
+              model.loaded.delete(key.id);
+              model.expanded.delete(key.id);
+            }
+            model.grants = model.grants.filter(grant => !retired.some(key => key.id === grant.key));
+          }
+          model.feedback = t('vaultUpdated');
+          break;
+        }
+        default: return;
+      }
+      render();
+    });
+
+    windowElement.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      if (model.modal) dismiss();
+      else if (model.pane) {
+        model.pane = false;
+        render({ focusAction: 'pane' });
+      } else return;
+      event.stopPropagation();
+    });
+
+    return {
+      fit,
+      render,
+      update(setting) {
+        if (setting === 'scenario') seedConnection();
+        if (setting === 'width') model.pane = false;
+        if (setting === 'theme') model.theme = 'system';
+        if (setting === 'language') {
+          model.language = model.languagePreference = preview.language;
+          model.pendingLanguage = null;
+          model.feedback = '';
+        }
+        render();
+      }
+    };
+  }
+
+  const sections = [...root.querySelectorAll('.viz-carousel > [data-variant]')];
+  const workspaces = sections.map((section, index) => mount(section, variants[index]));
+
+  function fitStages() {
+    const availableWidth = Math.max(1, root.clientWidth - 2);
+    const stageHeight = Math.max(...variants.map(variant => {
+      const size = dimensions(variant, preview.width);
+      return Math.ceil(size.height * Math.min(1, availableWidth / size.width));
+    }));
+    workspaces.forEach(workspace => workspace.fit(availableWidth, stageHeight));
+  }
+
+  root.dataset.theme = preview.theme;
+  workspaces.forEach(workspace => workspace.render());
+  fitStages();
+  new ResizeObserver(fitStages).observe(root);
+  root.addEventListener('change', event => {
+    const setting = event.target.dataset.review;
+    if (!setting) return;
+    preview[setting] = event.target.value;
+    root.dataset.theme = preview.theme;
+    workspaces.forEach(workspace => workspace.update(setting));
+    if (setting === 'width') fitStages();
+  });
+})();
+</script>
