@@ -1,5 +1,6 @@
 {
   "Dashboard.Navigation": "opssh navigation",
+  "Dashboard.ToggleNavigation": "Toggle navigation pane",
   "Dashboard.Keys": "SSH Keys",
   "Dashboard.Activity": "Activity",
   "Dashboard.AccountNavigation": "1Password",

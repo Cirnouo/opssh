@@ -1,5 +1,7 @@
 # Dashboard visual reference
 
+These archived references describe the dashboard content and interactions. The current workspace shell uses the [WSL Settings navigation template](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml) with a shared Mica Alt backdrop and native page transitions. Its title bar, navigation and breakpoint follow the [current behavior specification](../specs/windows-agent.md).
+
 [The key table, diagnostic settings and signature notification preview](opssh-key-approval-preview.html) preserves the approved Visualize bytes. Its SHA-256 is `764DE30A7E3E82E58CE930E85966CB23BAE2A9CB8A7C2CAE59E394E1D92B9A42`. Pass `-Revision KeyApproval` with `-Page keys` or `-Page settings` to render that reference.
 
 [The final review source](opssh-desktop-ux-review.html) preserves the approved Visualize bytes. Its SHA-256 is `28C0DD079609AC1F4B4A5F8497622AD381D92153A25F36CE8F02E09664AC1F98`. [The original dashboard source](opssh-agent-dashboard.html) remains available as a historical reference with SHA-256 `21202CB9F2EF713FCB63544E838B75B2F4F125CC654EE67BAEC7DC5F401FC216`.

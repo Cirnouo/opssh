@@ -25,7 +25,6 @@ public sealed partial class DashboardWindow
     private readonly Dictionary<string, (Button Load, Button Evict, Button Revoke, Border LoadStatus, TextBlock? Failure)> keyActions = new(StringComparer.Ordinal);
     private readonly HashSet<string> fetchingGrants = new(StringComparer.Ordinal);
     private StackPanel? keysBody;
-    private TextBlock? keysHeading;
     private TextBlock? keysCount;
     private TextBlock? keysNotice;
     private Button? discoverKeys;
@@ -74,8 +73,8 @@ public sealed partial class DashboardWindow
         var actionsRow = new KeysWrapPanel(7) { Children = { preloadKeys, evictKeys, revokeKeys } };
         keysBody = new StackPanel();
         void SurfaceSizeChanged(object sender, SizeChangedEventArgs args) => ResizeKeysTables();
-        PageSurface.SizeChanged += SurfaceSizeChanged;
-        Closed += (_, _) => PageSurface.SizeChanged -= SurfaceSizeChanged;
+        Shell.Routes.SizeChanged += SurfaceSizeChanged;
+        Closed += (_, _) => Shell.Routes.SizeChanged -= SurfaceSizeChanged;
         return new StackPanel { Spacing = 11, Children = { title, discoveryCard, keysNotice, keysCount, actionsRow, keysBody } };
     }
 
@@ -433,7 +432,7 @@ public sealed partial class DashboardWindow
         host.Child = Card(table.Content);
     }
 
-    private double KeysLayoutWidth => PageSurface.ActualWidth - PageSurface.BorderThickness.Left - PageSurface.BorderThickness.Right;
+    private double KeysLayoutWidth => Shell.Routes.ActualWidth;
 
     private void ResizeKeysTables()
     {
@@ -476,8 +475,6 @@ public sealed partial class DashboardWindow
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = Heading(Strings.Get(titleKey), keyPage ? 30 : 28, AutomationHeadingLevel.Level1);
-        if (keyPage)
-            keysHeading = heading;
         var title = new StackPanel { Spacing = keyPage ? 4 : 5, Children = { heading, Quiet(Strings.Get(descriptionKey)) } };
         actionsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Top };
         grid.Children.Add(title);
