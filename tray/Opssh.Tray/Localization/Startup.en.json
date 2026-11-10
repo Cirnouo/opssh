@@ -1,8 +1,6 @@
 {
   "Startup.ChooseMessage": "1Password is ready. Choose the account to authorize.",
-  "Startup.AuthorizeMessage": "1Password is ready. Request Desktop authorization for the selected account?",
   "Startup.Choose": "Choose account",
-  "Startup.Authorize": "Authorize",
   "Startup.Later": "Later",
   "Startup.ToastUnavailable": "Windows could not display the 1Password authorization notification.",
   "Startup.DefaultRecovery": "An OpenSSH service change was interrupted. Reconcile the OpenSSH service before retrying.",

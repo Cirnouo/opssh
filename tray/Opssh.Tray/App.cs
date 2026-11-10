@@ -59,7 +59,7 @@ public sealed partial class App : Application
         DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
         preferences = UiPreferences.Load();
-        requestedStartupAuthorization = FromStartupNotification();
+        offeredStartupNotification = FromStartupNotification();
         Strings.Use(preferences.ResolveLanguage());
         icon = new TrayIcon();
         icon.OpenRequested += OpenSettings;
@@ -128,7 +128,7 @@ public sealed partial class App : Application
 
     private void OpenSettings() => OpenSettings(null, maximize: false);
 
-    private void OpenSettings(RectInt32? appearanceBounds, bool maximize)
+    private void OpenSettings(RectInt32? appearanceBounds, bool maximize, bool refresh = true)
     {
         if (quitting)
             return;
@@ -137,7 +137,7 @@ public sealed partial class App : Application
             settings = new DashboardWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance,
                 () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates,
                 new DashboardActions(OnePasswordAccounts.ListAsync, SwitchAccountAsync, RequestDashboardAsync,
-                    LoginStartup.Read, SetLoginStartup, SetStartupPolicy, () => defaultAgentDesired, SetDefaultAgentAsync,
+                    LoginStartup.Read, SetLoginStartup, SetWaitForPassword, () => defaultAgentDesired, SetDefaultAgentAsync,
                     () => defaultAgentActive, RequestDiscoveryControlAsync));
             settings.Closed += SettingsClosed;
             settings.ShowReleaseCheck(releaseCheck);
@@ -170,7 +170,8 @@ public sealed partial class App : Application
         if (settings.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
             presenter.Restore();
         settings.Activate();
-        _ = RefreshSettingsAsync();
+        if (refresh)
+            _ = RefreshSettingsAsync();
     }
 
     private void SettingsClosed(object sender, WindowEventArgs args)

@@ -40,6 +40,7 @@ internal sealed class StartupNotification(Action<string> activated) : IDisposabl
 
                 var request = StartupNotificationAction.Create(action, DateTimeOffset.UtcNow);
                 var notification = new AppNotificationBuilder()
+                    .AddArgument("opsshStartup", request.Nonce).AddArgument("choice", "primary")
                     .AddText(title)
                     .AddText(message)
                     .AddButton(new AppNotificationButton(primary)

@@ -50,7 +50,9 @@ The command affects the current PowerShell process and processes it starts. To r
 $env:SSH_AUTH_SOCK = $previousSshAuthSock
 ```
 
-Turn on **Set as the default SSH agent** in **Settings → SSH integration** to use the Windows default pipe. The switch may ask for administrator approval to stop and disable the running automatic Windows OpenSSH agent. Quitting opssh leaves the default selection in place and releases the pipe. To restore the Windows service, turn off the switch and approve **Restore Windows OpenSSH** before uninstalling opssh. Disable the login startup entry from **Settings → Startup** if you are removing a portable copy.
+Turn on **Use as the system default SSH agent** in **Settings → SSH integration** to use the Windows default pipe. The dialog shows the steps as they run. Windows may ask for administrator approval to stop and disable the running automatic Windows OpenSSH agent. Quitting opssh leaves the default selection in place and releases the pipe. To restore the Windows service, turn off the switch and choose **Restore OpenSSH** before uninstalling opssh.
+
+In **Settings → Startup**, **Wait for 1Password to start** shows a Windows notification when 1Password is ready. Open it, select an account, and choose **Continue in 1Password** to request authorization. Selecting your current account keeps its scope, keys, approvals, and activity. Disable **Start at Windows sign-in** if you are removing a portable copy.
 
 <a name="approve-signing"></a>
 

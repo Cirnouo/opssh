@@ -19,7 +19,9 @@ public sealed partial class DashboardWindow
         var brand = new Grid { ColumnSpacing = 15, Margin = new Thickness(0, 8, 0, 8) };
         brand.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         brand.ColumnDefinitions.Add(new ColumnDefinition());
-        brand.Children.Add(Logo("\uE756", 48, 25));
+        var logo = Logo("\uE756", 48, 25);
+        logo.VerticalAlignment = VerticalAlignment.Center;
+        brand.Children.Add(logo);
         var product = new StackPanel
         {
             Spacing = 2,
@@ -33,7 +35,10 @@ public sealed partial class DashboardWindow
         checkForUpdates = DashboardButton(Strings.Get("Update.Check"), async () => await checkUpdates());
         updateStatus = Quiet(Strings.Get("Update.CheckDescription"), 12);
         AutomationProperties.SetLiveSetting(updateStatus, AutomationLiveSetting.Polite);
-        updateProgress = new ProgressRing { Height = 16, Width = 16, Visibility = Visibility.Collapsed };
+        updateProgress = new ProgressRing
+        {
+            Height = 16, Width = 16, Visibility = Visibility.Collapsed, VerticalAlignment = VerticalAlignment.Center
+        };
         AutomationProperties.SetName(updateProgress, Strings.Get("Update.Checking"));
         releaseLink = new HyperlinkButton
         {

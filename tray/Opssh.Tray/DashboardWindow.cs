@@ -15,9 +15,9 @@ internal sealed record DashboardActions(
     Func<string, object?, CancellationToken, Task<Result>> Request,
     Func<LoginStartupStatus> GetLoginStartup,
     Func<bool, bool> SetLoginStartup,
-    Func<bool, string, bool> SetStartupPolicy,
+    Func<bool, bool> SetWaitForPassword,
     Func<bool> GetDefaultAgent,
-    Func<bool, CancellationToken, Task<string?>> SetDefaultAgent,
+    Func<bool, Action<DefaultAgentStage>, CancellationToken, Task<string?>> SetDefaultAgent,
     Func<bool>? GetDefaultAgentActive = null,
     Func<string, object?, Task<Result>>? DiscoveryControl = null);
 
@@ -444,7 +444,7 @@ public sealed partial class DashboardWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         row.Children.Add(symbol ?? Icon(glyph));

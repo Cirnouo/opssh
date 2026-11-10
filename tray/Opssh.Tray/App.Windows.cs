@@ -8,9 +8,9 @@ public sealed partial class App
     private readonly DefaultAgent defaultAgent = DefaultAgent.ForCurrentUser();
     private CancellationTokenSource? startupWait;
     private StartupNotification? startupNotification;
-    private CoreSession? startupPromptSession;
-    private string? startupPromptAccount;
-    private bool requestedStartupAuthorization;
+    private (CoreSession Session, string Action)? startupPrompt;
+    private bool offeredStartupNotification;
+    private long startupIntentRevision;
     private bool defaultAgentActive;
     private bool defaultAgentDesired;
     private bool changingDefaultAgent;
@@ -24,9 +24,9 @@ public sealed partial class App
     private bool SetLoginStartup(bool enabled) => LoginStartup.Set(enabled) ==
         (enabled ? LoginStartupStatus.On : LoginStartupStatus.Off);
 
-    private bool SetStartupPolicy(bool wait, string action)
+    private bool SetWaitForPassword(bool wait)
     {
-        var next = preferences with { WaitForPassword = wait, StartupAction = action };
+        var next = preferences with { WaitForPassword = wait };
         if (!next.TrySave())
             return false;
         preferences = next;
@@ -34,7 +34,7 @@ public sealed partial class App
         return true;
     }
 
-    private async Task<string?> SetDefaultAgentAsync(bool enabled, CancellationToken token)
+    private async Task<string?> SetDefaultAgentAsync(bool enabled, Action<DefaultAgentStage> report, CancellationToken token)
     {
         var current = session;
         if (current is null || quitting || transitioning || changingDefaultAgent || (operationComplete is not null && !polling))
@@ -46,7 +46,7 @@ public sealed partial class App
             if (!created)
                 return "Error.Busy";
             return await defaultAgent.SetAsync(enabled,
-                (value, cancellation) => SetAgentPipeAsync(current, value, cancellation), token);
+                (value, cancellation) => SetAgentPipeAsync(current, value, cancellation), token, report);
         }
         catch (UnauthorizedAccessException)
         {
@@ -92,7 +92,7 @@ public sealed partial class App
     private void ConfigureStartupWait()
     {
         CancelStartupWait();
-        if (session is not { } current || quitting || !preferences.WaitForPassword || requestedStartupAuthorization)
+        if (session is not { } current || quitting || !preferences.WaitForPassword || offeredStartupNotification)
             return;
         var wait = new CancellationTokenSource();
         startupWait = wait;
@@ -104,8 +104,8 @@ public sealed partial class App
         var wait = startupWait;
         startupWait = null;
         wait?.Cancel();
-        startupPromptSession = null;
-        startupPromptAccount = null;
+        startupPrompt = null;
+        startupIntentRevision++;
         startupNotification?.Dismiss();
     }
 
@@ -116,26 +116,16 @@ public sealed partial class App
             await OnePasswordReadiness.WaitAsync(wait.Token);
             if (quitting || session != current || startupWait != wait)
                 return;
-            using var statusTimeout = CancellationTokenSource.CreateLinkedTokenSource(wait.Token);
-            statusTimeout.CancelAfter(TimeSpan.FromSeconds(45));
-            var response = await RequestNormalAsync(current, "status", null, statusTimeout.Token);
-            if (quitting || session != current || startupWait != wait || response.State is not { } status)
-                return;
-
-            requestedStartupAuthorization = true;
-            if (status.Account.Length != 0 && preferences.StartupAction == "request")
+            offeredStartupNotification = true;
+            var action = Guid.NewGuid().ToString("N");
+            startupPrompt = (current, action);
+            startupNotification ??= new StartupNotification(value => dispatcher.TryEnqueue(() => ActivateStartupPrompt(value)));
+            if (!startupNotification.Show("opssh", Strings.Get("Startup.ChooseMessage"),
+                Strings.Get("Startup.Choose"), Strings.Get("Startup.Later"), action))
             {
-                await RequestStartupAuthorizationAsync(current, status.Account, wait.Token);
-                return;
-            }
-            startupPromptSession = current;
-            startupPromptAccount = status.Account;
-            startupNotification ??= new StartupNotification(action => dispatcher.TryEnqueue(() => _ = StartupActionAsync(action)));
-            if (!startupNotification.Show("opssh", Strings.Get(status.Account.Length == 0
-                    ? "Startup.ChooseMessage" : "Startup.AuthorizeMessage"),
-                Strings.Get(status.Account.Length == 0 ? "Startup.Choose" : "Startup.Authorize"),
-                Strings.Get("Startup.Later"), "startup"))
+                startupPrompt = null;
                 ShowMessage("Startup.ToastUnavailable");
+            }
         }
         catch (Exception ex) when (IsControlFailure(ex)) { }
         finally
@@ -146,38 +136,17 @@ public sealed partial class App
         }
     }
 
-    private async Task StartupActionAsync(string action)
+    private void ActivateStartupPrompt(string action)
     {
-        var current = startupPromptSession;
-        var account = startupPromptAccount;
-        startupPromptSession = null;
-        startupPromptAccount = null;
-        if (action != "startup" || current is null || current != session || account is null || quitting)
+        if (startupPrompt is not { } prompt || prompt.Action != action)
             return;
-        if (account.Length == 0)
-        {
-            OpenSettings();
-            OpenStartupAccountPicker();
-        }
-        else
-        {
-            await RequestStartupAuthorizationAsync(current, account, CancellationToken.None);
-        }
+        startupPrompt = null;
+        var revision = startupIntentRevision;
+        if (StartupIntentIsCurrent(prompt.Session, revision))
+            _ = OpenStartupAccountPickerAsync(prompt.Session, revision);
     }
 
-    partial void OpenStartupAccountPicker();
-
-    private async Task RequestStartupAuthorizationAsync(CoreSession current, string account, CancellationToken cancellation)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        timeout.CancelAfter(TimeSpan.FromSeconds(40));
-        try
-        {
-            var deadline = DateTimeOffset.UtcNow.AddSeconds(40).ToUnixTimeMilliseconds();
-            var response = await RequestNormalAsync(current, "authorize-desktop", new { account, deadline }, timeout.Token);
-            if (current == session && !quitting && !response.Ok)
-                ShowMessage(CoreFeedback.ResultKey(response.ErrorCode, response.Error));
-        }
-        catch (Exception ex) when (IsControlFailure(ex)) { }
-    }
+    private bool StartupIntentIsCurrent(CoreSession owner, long revision) =>
+        revision == startupIntentRevision && owner == session && owner.IsConnected &&
+        preferences.WaitForPassword && !quitting && !transitioning;
 }

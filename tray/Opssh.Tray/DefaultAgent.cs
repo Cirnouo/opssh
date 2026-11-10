@@ -3,6 +3,21 @@ using System.Text.Json;
 
 namespace Opssh.Tray;
 
+internal enum DefaultAgentStage
+{
+    Checking,
+    StoppingOpenSsh,
+    DisablingOpenSsh,
+    ReservingPipe,
+    ReleasingPipe,
+    ConfiguringOpenSsh,
+    StartingOpenSsh,
+    OpenSshAbsent,
+    Saving,
+    RollingBack,
+    RollingBackAfterFailure
+}
+
 // Only the user-initiated switch can change SCM. Relaunch acquires the pipe
 // again and leaves any interrupted SCM transaction available for recovery.
 internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpan? serviceTimeout = null)
@@ -36,8 +51,9 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
     }
 
     internal async Task<string?> SetAsync(bool enabled, Func<bool, CancellationToken, Task<bool>> alias,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action<DefaultAgentStage>? report = null)
     {
+        report?.Invoke(DefaultAgentStage.Checking);
         var previous = Read();
         if (previous is null)
             return "Error.ConfigurationWrite";
@@ -52,19 +68,25 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
                 catch (OpenSshService.ServiceChangePending) { return "Startup.DefaultRecovery"; }
                 catch (Exception ex) when (IsFailure(ex)) { }
                 previous = previous with { MutatingService = false };
-                Save(previous);
+                if (!TrySaveRecovery(previous))
+                    return "Startup.DefaultRecovery";
                 pendingMutation = null;
             }
             if (previous.Before is not null)
             {
+                report?.Invoke(DefaultAgentStage.RollingBack);
                 if (!await RestoreAsync(previous, alias))
                     return "Startup.DefaultRecovery";
                 previous = previous with { Before = null };
-                Save(previous);
+                if (!TrySaveRecovery(previous))
+                    return "Startup.DefaultRecovery";
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (enabled == previous.Enabled)
+            {
+                report?.Invoke(enabled ? DefaultAgentStage.ReservingPipe : DefaultAgentStage.ReleasingPipe);
                 return await alias(enabled, cancellationToken) ? null : "Error.PipeUnavailable";
+            }
             var current = service.Read();
             var before = Snapshot.From(current);
             if (!before.Valid)
@@ -83,21 +105,30 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
                 {
                     if (current is { Automatic: true, Running: true })
                     {
+                        report?.Invoke(DefaultAgentStage.StoppingOpenSsh);
                         await ChangeServiceAsync(transaction, () => service.ChangeRunningAsync(false));
+                        report?.Invoke(DefaultAgentStage.DisablingOpenSsh);
                         await ChangeServiceAsync(transaction, () => service.ChangeStartupAsync(4, delayed: false));
                         if (service.Read() is not { Running: false, Start: 4 })
                             throw new IOException("OpenSSH did not stop and disable.");
                     }
+                    else if (!before.Exists)
+                        report?.Invoke(DefaultAgentStage.OpenSshAbsent);
+                    report?.Invoke(DefaultAgentStage.ReservingPipe);
                     if (!await alias(true, cancellationToken))
                         throw new IOException("The default pipe could not be reserved.");
                 }
                 else
                 {
+                    report?.Invoke(DefaultAgentStage.ReleasingPipe);
                     if (!await alias(false, cancellationToken))
                         throw new IOException("The default pipe could not be released.");
                     if (before.Exists)
-                        await RestoreServiceAsync(transaction, new Snapshot(true, 2, false, true));
+                        await RestoreServiceAsync(transaction, new Snapshot(true, 2, false, true), report);
+                    else
+                        report?.Invoke(DefaultAgentStage.OpenSshAbsent);
                 }
+                report?.Invoke(DefaultAgentStage.Saving);
                 Save(new Journal(1, enabled));
                 return null;
             }
@@ -108,9 +139,11 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
             }
             catch (Exception ex) when (IsFailure(ex))
             {
+                report?.Invoke(DefaultAgentStage.RollingBackAfterFailure);
                 if (!await RestoreAsync(transaction, alias))
                     return "Startup.DefaultRecovery";
-                Save(previous);
+                if (!TrySaveRecovery(previous))
+                    return "Startup.DefaultRecovery";
                 return ex is Win32Exception { NativeErrorCode: 1223 } or OperationCanceledException
                     ? "Error.Canceled" : "Startup.DefaultChangeFailed";
             }
@@ -159,7 +192,7 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
         catch (Exception ex) when (IsFailure(ex)) { return false; }
     }
 
-    private async Task RestoreServiceAsync(Journal transaction, Snapshot expected)
+    private async Task RestoreServiceAsync(Journal transaction, Snapshot expected, Action<DefaultAgentStage>? report = null)
     {
         var current = service.Read();
         if (current.Exists != expected.Exists)
@@ -169,11 +202,30 @@ internal sealed class DefaultAgent(IOpenSshService service, string path, TimeSpa
         if (current.Running && !expected.Running)
             await ChangeServiceAsync(transaction, () => service.ChangeRunningAsync(false));
         if (current.Start != expected.Start || current.Delayed != expected.Delayed)
+        {
+            report?.Invoke(DefaultAgentStage.ConfiguringOpenSsh);
             await ChangeServiceAsync(transaction, () => service.ChangeStartupAsync(expected.Start, expected.Delayed));
+        }
         if (!current.Running && expected.Running)
+        {
+            report?.Invoke(DefaultAgentStage.StartingOpenSsh);
             await ChangeServiceAsync(transaction, () => service.ChangeRunningAsync(true));
+        }
         if (Snapshot.From(service.Read()) != expected)
             throw new IOException("The OpenSSH service did not reach the requested state.");
+    }
+
+    private bool TrySaveRecovery(Journal journal)
+    {
+        try
+        {
+            Save(journal);
+            return true;
+        }
+        catch (Exception ex) when (IsFailure(ex))
+        {
+            return false;
+        }
     }
 
     private void Save(Journal journal)

@@ -50,7 +50,9 @@ opssh 保存已选账户和公钥索引。**1Password** 页显示上次请求的
 $env:SSH_AUTH_SOCK = $previousSshAuthSock
 ```
 
-也可以在 **设置 → SSH 集成** 中将 opssh 设为系统默认 SSH 代理。停止和禁用自动运行的 Windows OpenSSH 代理时可能需要管理员批准。退出 opssh 会释放管道，默认代理选择仍然保留。卸载前可关闭该开关并确认恢复 Windows OpenSSH 代理。移除便携版前可在 **设置 → 启动** 中关闭登录自启。
+也可以在 **设置 → SSH 集成** 中将 opssh 设为系统默认 SSH 代理。对话框会显示正在执行的步骤。停止和禁用自动运行的 Windows OpenSSH 代理时，Windows 可能会要求管理员批准。退出 opssh 会释放管道，默认代理选择仍然保留。卸载前可关闭该开关并选择 **恢复 OpenSSH**。
+
+在 **设置 → 启动** 中开启 **等待 1Password 启动**，1Password 就绪时会收到 Windows 通知。点击通知、选择账户，然后选择 **在 1Password 中继续** 来请求授权。选择当前账户会保留其保险库范围、密钥、授权和活动。移除便携版前可关闭 **登录 Windows 时启动**。
 
 <a name="approve-signing"></a>
 
