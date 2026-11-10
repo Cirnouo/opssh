@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using Opssh.Tray;
 
 internal static class AppearanceChecks
@@ -48,6 +49,27 @@ internal static class AppearanceChecks
             Require(legacy.ResolveLanguage(simplified) == "en", "explicit English overrides the system language");
             Require(new UiPreferences("zh-Hans", "system").ResolveLanguage(englishCulture) == "zh-Hans",
                 "explicit Simplified Chinese overrides the system language");
+
+            File.WriteAllText(path, """{"version":1,"language":"en","theme":"light","autoCheckUpdates":false}""");
+            Require(UiPreferences.Load(path) == new UiPreferences("en", "light", false),
+                "version one preserves appearance and updates and defaults to no startup notification");
+
+            foreach (var legacyAction in new[] { "notify", "request" })
+            {
+                File.WriteAllText(path,
+                    $$"""{"version":2,"language":"zh-Hans","theme":"dark","autoCheckUpdates":false,"waitForPassword":true,"startupAction":"{{legacyAction}}"}""");
+                var migrated = UiPreferences.Load(path);
+                Require(migrated == new UiPreferences("zh-Hans", "dark", false) { WaitForPassword = true },
+                    "version two preserves startup opt-in, appearance and updates");
+                Require(migrated.TrySave(path), "save migrated preferences");
+                using var document = JsonDocument.Parse(File.ReadAllText(path));
+                Require(document.RootElement.GetProperty("version").GetInt32() == 3 &&
+                    !document.RootElement.TryGetProperty("startupAction", out _) &&
+                    UiPreferences.Load(path) == migrated, "version three persists only the notification opt-in");
+            }
+
+            File.WriteAllText(path, """{"version":4,"language":"en","theme":"dark","waitForPassword":true}""");
+            Require(UiPreferences.Load(path) == defaults, "fallback for an unsupported future version");
 
             var preference = new UiPreferences("system", "dark", false);
             Require(preference.TrySave(path), "save system language, dark theme and disabled update checks");

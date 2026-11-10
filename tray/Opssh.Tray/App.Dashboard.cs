@@ -72,18 +72,52 @@ public sealed partial class App
         finally { normalRequests.Release(); }
     }
 
-    partial void OpenStartupAccountPicker() => _ = OpenStartupAccountPickerAsync();
-
-    private async Task OpenStartupAccountPickerAsync()
+    private async Task OpenStartupAccountPickerAsync(CoreSession startupSession, long intentRevision)
     {
+        OpenSettings(null, maximize: false, refresh: false);
         var current = settings;
-        if (current is null || quitting)
+        if (current is null)
             return;
-        await (operationComplete?.Task ?? Task.CompletedTask);
-        if (current == settings && !quitting)
+
+        bool IsCurrent() => current == settings && StartupIntentIsCurrent(startupSession, intentRevision);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        try
         {
-            current.SelectPage("account");
-            await current.ShowAccountPickerAsync();
+            while (IsCurrent())
+            {
+                await Task.WhenAll(operationComplete?.Task ?? Task.CompletedTask, urgentComplete?.Task ?? Task.CompletedTask)
+                    .WaitAsync(timeout.Token);
+                if (!IsCurrent())
+                    return;
+
+                var revision = stateRevision;
+                // A normal dashboard request may own the slot without an
+                // operationComplete task. Wait for the slot instead of polling.
+                var result = await RequestNormalAsync(startupSession, "status", null, timeout.Token);
+                if (!IsCurrent())
+                    return;
+                if (revision != stateRevision || urgentOperation is not null || operationComplete is not null && !polling)
+                    continue;
+                if (!result.Ok || result.State is not { } latest)
+                {
+                    ShowMessage(CoreFeedback.ResultKey(result.ErrorCode, result.Error));
+                    return;
+                }
+
+                state = latest;
+                locked = latest.Locked;
+                defaultAgentActive = latest.DefaultAgent;
+                current.ShowState(latest, resetSettings: false);
+                icon.SetTip(latest.Locked ? "Tray.Locked" : "Tray.Connected");
+                current.SelectPage("account");
+                await current.ShowAccountPickerAsync(authorizeCurrent: true);
+                return;
+            }
+        }
+        catch (Exception ex) when (IsControlFailure(ex))
+        {
+            if (IsCurrent())
+                ShowMessage("Error.ControlRequestFailed");
         }
     }
 }

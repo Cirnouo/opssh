@@ -102,7 +102,7 @@
   "Settings.ProviderOfflineFixture": "离线测试数据",
   "Settings.ProviderUnverified": "尚未验证访问权限",
   "Settings.Seconds": "秒",
-  "Settings.CacheOff": "关闭",
+  "Settings.CacheOff": "不缓存",
   "Settings.CacheFixed": "固定时长",
   "Settings.CacheIdle": "空闲超时",
   "Settings.CacheUntilExit": "直到 opssh 退出",

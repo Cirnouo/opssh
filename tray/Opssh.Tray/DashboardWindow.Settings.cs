@@ -15,9 +15,7 @@ public sealed partial class DashboardWindow
     private const int DefaultApprovalSeconds = 600;
     private ToggleSwitch loginStartup = null!;
     private ToggleSwitch waitForPassword = null!;
-    private ComboBox startupAction = null!;
     private ToggleSwitch defaultAgent = null!;
-    private TextBlock startupAccount = null!;
     private TextBlock loginStartupDescription = null!;
     private TextBlock shellCommand = null!;
     private Button copyCommand = null!;
@@ -32,9 +30,6 @@ public sealed partial class DashboardWindow
         loginStartup = Switch(Strings.Get("Dashboard.StartWithWindows"), false);
         loginStartupDescription = Quiet(Strings.Get("Dashboard.StartWithWindowsDescription"), 12);
         waitForPassword = Switch(Strings.Get("Dashboard.WaitForPassword"), preferences.WaitForPassword);
-        startupAction = Choice(Strings.Get("Dashboard.StartupAction"), preferences.StartupAction,
-            ("notify", Strings.Get("Dashboard.StartupNotify")), ("request", Strings.Get("Dashboard.StartupRequest")));
-        startupAccount = Quiet("", 12);
 
         loginStartup.Toggled += (_, _) =>
         {
@@ -45,34 +40,24 @@ public sealed partial class DashboardWindow
             RefreshSystemSettings();
         };
         var savedWait = preferences.WaitForPassword;
-        var savedAction = preferences.StartupAction;
-        void ChangeStartupPolicy()
+        waitForPassword.Toggled += (_, _) =>
         {
             if (updatingSettings)
                 return;
-            var nextAction = ChoiceId(startupAction) ?? savedAction;
-            if (actions.SetStartupPolicy(waitForPassword.IsOn, nextAction))
-            {
+            if (actions.SetWaitForPassword(waitForPassword.IsOn))
                 savedWait = waitForPassword.IsOn;
-                savedAction = nextAction;
-            }
             else
             {
                 updatingSettings = true;
                 waitForPassword.IsOn = savedWait;
-                SelectChoice(startupAction, savedAction);
                 updatingSettings = false;
                 ShowMessage(Strings.Get("Dashboard.StartupSaveFailed"), InfoBarSeverity.Warning);
             }
-            startupAction.IsEnabled = waitForPassword.IsOn;
-        }
-        waitForPassword.Toggled += (_, _) => ChangeStartupPolicy();
-        startupAction.SelectionChanged += (_, _) => ChangeStartupPolicy();
+        };
 
         page.Children.Add(Section(Strings.Get("Dashboard.Startup"), Rows(
             SettingRow("\uE7E8", Strings.Get("Dashboard.StartWithWindows"), loginStartupDescription, loginStartup),
-            SettingRow("\uE916", Strings.Get("Dashboard.WaitForPassword"), Strings.Get("Dashboard.WaitForPasswordDescription"), waitForPassword),
-            SettingRow("\uE7F4", Strings.Get("Dashboard.StartupAction"), startupAccount, startupAction))));
+            SettingRow("\uE916", Strings.Get("Dashboard.WaitForPassword"), Strings.Get("Dashboard.WaitForPasswordDescription"), waitForPassword))));
 
         defaultAgent = Switch(Strings.Get("Dashboard.DefaultAgent"), false);
         defaultAgent.Toggled += async (_, _) =>
@@ -148,10 +133,6 @@ public sealed partial class DashboardWindow
         if (closed)
             return;
         updatingSettings = true;
-        startupAction.IsEnabled = waitForPassword.IsOn;
-        startupAccount.Text = HasAccount
-            ? Strings.Get("Dashboard.StartupAccount", DisplayedAccountName(displayedState!))
-            : Strings.Get("Dashboard.StartupNoAccount");
         defaultAgent.IsEnabled = !changingIntegration;
         var command = PowerShellCommand();
         shellCommand.Text = command ?? "—";
@@ -160,38 +141,6 @@ public sealed partial class DashboardWindow
         keyCacheEditor.Mode.IsEnabled = approvalCacheEditor.Mode.IsEnabled = cacheEnabled;
         keyCacheEditor.Duration.IsEnabled = approvalCacheEditor.Duration.IsEnabled = cacheEnabled;
         updatingSettings = false;
-    }
-
-    private async Task ChangeDefaultAgentAsync(bool enable)
-    {
-        if (closed || changingIntegration)
-            return;
-        changingIntegration = true;
-        RefreshSystemSettings();
-        UpdateSettingsAvailability();
-        try
-        {
-            var result = await ShowDialogAsync(new ContentDialog
-            {
-                Title = Strings.Get(enable ? "Dashboard.EnableDefaultTitle" : "Dashboard.DisableDefaultTitle"),
-                Content = Ui.Text(Strings.Get(enable ? "Dashboard.EnableDefaultDescription" : "Dashboard.DisableDefaultDescription")),
-                PrimaryButtonText = Strings.Get(enable ? "Dashboard.EnableDefaultAction" : "Dashboard.DisableDefaultAction"),
-                CloseButtonText = Strings.Get("Dashboard.Cancel"),
-                DefaultButton = ContentDialogButton.Close
-            });
-            if (closed || result != ContentDialogResult.Primary)
-                return;
-            var key = await actions.SetDefaultAgent(enable, windowLifetime.Token);
-            if (!closed)
-                ShowMessage(Strings.Get(key ?? "App.Done"), key is null ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
-        }
-        catch (OperationCanceledException) when (closed) { }
-        finally
-        {
-            changingIntegration = false;
-            RefreshSystemSettings();
-            UpdateSettingsAvailability();
-        }
     }
 
     private string? PowerShellCommand()

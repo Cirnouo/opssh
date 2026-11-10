@@ -20,7 +20,8 @@ public sealed partial class App
         }
         string[] options = flag < 0 ? [] : commandLine[(flag + 1)..];
         var scenario = options.ElementAtOrDefault(0) ?? "ready";
-        var page = options.ElementAtOrDefault(1) ?? (scenario == "discover" ? "keys" : "account");
+        var page = options.ElementAtOrDefault(1) ?? (scenario.StartsWith("default-agent-", StringComparison.Ordinal)
+            ? "settings" : scenario == "discover" ? "keys" : "account");
         var theme = options.ElementAtOrDefault(2) is "light" or "dark" ? options[2] : "system";
         var language = options.ElementAtOrDefault(3) is "en" or "zh-Hans" ? options[3] : "system";
 
@@ -34,7 +35,6 @@ public sealed partial class App
     private sealed class DashboardFixture
     {
         private const string DedicatedPipe = @"\\.\pipe\opssh-agent-0123456789abcdef";
-        private const string DefaultPipe = @"\\.\pipe\openssh-ssh-agent";
         private static readonly DateTimeOffset Now = new(new DateTime(2026, 11, 10, 15, 20, 0, DateTimeKind.Local));
         private static readonly DesktopAccount[] Accounts =
         [
@@ -76,7 +76,8 @@ public sealed partial class App
             this.scenario = scenario;
             this.preferences = preferences;
             this.exit = exit;
-            var ready = scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs";
+            var ready = scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs" ||
+                scenario.StartsWith("default-agent-", StringComparison.Ordinal);
             var account = ready || scenario is "new-account" or "no-access" or "startup" ? Accounts[1] : null;
             failVaultSave = scenario == "vault-save";
             state = new CoreState(DedicatedPipe, false, account?.Id ?? "", [], new CachePolicy("fixed", 300),
@@ -108,8 +109,8 @@ public sealed partial class App
             var actions = new DashboardActions(ListAccountsAsync, SwitchAccountAsync, RequestAsync,
                 () => loginStartup ? LoginStartupStatus.On : LoginStartupStatus.Off,
                 enabled => { loginStartup = enabled; return true; },
-                (wait, action) => { preferences = preferences with { WaitForPassword = wait, StartupAction = action }; return true; },
-                () => defaultAgent, SetDefaultAgentAsync, DiscoveryControl: DiscoveryControlAsync);
+                wait => { preferences = preferences with { WaitForPassword = wait }; return true; },
+                () => defaultAgent, SetDefaultAgentAsync, () => defaultAgent, DiscoveryControlAsync);
             var next = new DashboardWindow(SendAsync, (command, body) => SendAsync(command, body, false),
                 () => Task.CompletedTask, preferences, ApplyAppearance, CheckUpdatesAsync,
                 enabled => { preferences = preferences with { AutoCheckUpdates = enabled }; return true; }, actions);
@@ -198,13 +199,46 @@ public sealed partial class App
             };
         }
 
-        private Task<string?> SetDefaultAgentAsync(bool enabled, CancellationToken token)
+        private async Task<string?> SetDefaultAgentAsync(bool enabled, Action<DefaultAgentStage> report, CancellationToken token)
         {
-            token.ThrowIfCancellationRequested();
+            await StepAsync(DefaultAgentStage.Checking);
+            var absent = scenario == "default-agent-service-absent";
+            if (enabled && !await ChangeServiceAsync(DefaultAgentStage.StoppingOpenSsh, DefaultAgentStage.DisablingOpenSsh))
+                return "Startup.DefaultRecovery";
+            await StepAsync(enabled ? DefaultAgentStage.ReservingPipe : DefaultAgentStage.ReleasingPipe);
+            if (scenario == "default-agent-pipe-failure")
+            {
+                await StepAsync(DefaultAgentStage.RollingBackAfterFailure);
+                return "Startup.DefaultChangeFailed";
+            }
+            if (!enabled && !await ChangeServiceAsync(DefaultAgentStage.ConfiguringOpenSsh, DefaultAgentStage.StartingOpenSsh))
+                return "Startup.DefaultRecovery";
+            await StepAsync(DefaultAgentStage.Saving);
             defaultAgent = enabled;
-            state = state with { Pipe = enabled ? DefaultPipe : DedicatedPipe };
+            state = state with { DefaultAgent = enabled };
             window.ShowState(state, resetSettings: false);
-            return Task.FromResult<string?>(null);
+            return null;
+
+            async Task<bool> ChangeServiceAsync(DefaultAgentStage first, DefaultAgentStage second)
+            {
+                if (absent)
+                {
+                    report(DefaultAgentStage.OpenSshAbsent);
+                    return true;
+                }
+                await StepAsync(first);
+                if (scenario == "default-agent-service-pending")
+                    return false;
+                await StepAsync(second);
+                return true;
+            }
+
+            async Task StepAsync(DefaultAgentStage stage)
+            {
+                token.ThrowIfCancellationRequested();
+                report(stage);
+                await Task.Delay(TimeSpan.FromMilliseconds(750), token);
+            }
         }
 
         private async Task CheckUpdatesAsync()

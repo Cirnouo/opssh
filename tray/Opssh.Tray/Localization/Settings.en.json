@@ -102,7 +102,7 @@
   "Settings.ProviderOfflineFixture": "Offline test fixture",
   "Settings.ProviderUnverified": "Access has not been verified",
   "Settings.Seconds": "Seconds",
-  "Settings.CacheOff": "Off",
+  "Settings.CacheOff": "Do not cache",
   "Settings.CacheFixed": "Fixed duration",
   "Settings.CacheIdle": "Idle timeout",
   "Settings.CacheUntilExit": "Until opssh exits",
