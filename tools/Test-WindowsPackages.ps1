@@ -54,30 +54,43 @@ function Get-MsiRows([string]$Table, [int]$Fields) {
     }
 }
 
-$files = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
-foreach ($entry in $manifest.files) {
-    if (!$files.TryAdd($entry.path, $entry)) { throw 'Duplicate manifest path.' }
+function Assert-Manifest($Entries, [hashtable]$Expected, [string]$Format) {
+    $entriesByPath = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+    foreach ($entry in $Entries) {
+        if (!$entriesByPath.TryAdd($entry.path, $entry)) { throw "Duplicate $Format manifest path." }
+    }
+    if ($Expected.Count -ne $entriesByPath.Count) { throw "$Format manifest file count differs from the curated Release." }
+    foreach ($path in $Expected.Keys) {
+        if (!$entriesByPath.ContainsKey($path)) { throw "Missing curated $Format file $path." }
+        Assert-File $Expected[$path] $entriesByPath[$path]
+    }
+    return ,$entriesByPath
 }
+
 $expected = @{}
+$expectedPortable = @{ 'opssh-tray.exe' = (Join-Path $ReleaseDirectory 'opssh-portable.exe') }
 foreach ($file in Get-ChildItem -LiteralPath $ReleaseDirectory -Recurse -Force -File) {
-    if ($file.Extension -ine '.pdb') {
-        $name = [IO.Path]::GetRelativePath($ReleaseDirectory, $file.FullName).Replace('\', '/')
+    $name = [IO.Path]::GetRelativePath($ReleaseDirectory, $file.FullName).Replace('\', '/')
+    if ($file.Extension -ine '.pdb' -and $name -ine 'opssh-portable.exe') {
         $expected.Add($name, $file.FullName)
+        $expectedPortable.Add("opssh-runtime/$name", $file.FullName)
     }
 }
 foreach ($name in @('LICENSE', 'THIRD-PARTY-NOTICES.md')) {
-    $expected.Add($name, (Join-Path $LegalDirectory $name))
+    $source = Join-Path $LegalDirectory $name
+    $expected.Add($name, $source)
+    $expectedPortable.Add($name, $source)
 }
 $licenses = (Get-Item -LiteralPath (Join-Path $LegalDirectory 'licenses')).FullName
 foreach ($file in Get-ChildItem -LiteralPath $licenses -Recurse -Force -File) {
     $path = [IO.Path]::GetRelativePath($licenses, $file.FullName).Replace('\', '/')
     $expected.Add("licenses/$path", $file.FullName)
+    if ($path -ine 'wix/wix-7.0.1-source.zip') {
+        $expectedPortable.Add("licenses/$path", $file.FullName)
+    }
 }
-if ($expected.Count -ne $files.Count) { throw 'Manifest file count differs from the curated Release.' }
-foreach ($path in $expected.Keys) {
-    if (!$files.ContainsKey($path)) { throw "Missing curated Release file $path." }
-    Assert-File $expected[$path] $files[$path]
-}
+$files = Assert-Manifest $manifest.files $expected 'MSI'
+$portableFiles = Assert-Manifest $manifest.portableFiles $expectedPortable 'ZIP'
 foreach ($file in @($msi, $bundle)) {
     if ((Get-AuthenticodeSignature -LiteralPath $file).Status -ne 'NotSigned') {
         throw 'Expected an unsigned Windows installer.'
@@ -103,12 +116,34 @@ $wixWork = Join-Path $VerificationDirectory 'wix'
 New-Item -ItemType Directory -Path $VerificationDirectory,$wixWork | Out-Null
 [IO.Compression.ZipFile]::ExtractToDirectory($zip, $zipFiles)
 $extracted = @(Get-ChildItem -LiteralPath $zipFiles -Recurse -Force -File)
-if ($extracted.Count -ne $files.Count) { throw 'ZIP file count differs from the payload manifest.' }
+if ($extracted.Count -ne $portableFiles.Count) { throw 'ZIP file count differs from the payload manifest.' }
 foreach ($file in $extracted) {
     $path = [IO.Path]::GetRelativePath($zipFiles, $file.FullName).Replace('\', '/')
-    if (!$files.ContainsKey($path)) { throw "Unexpected ZIP file $path." }
-    Assert-File $file.FullName $files[$path]
+    if (!$portableFiles.ContainsKey($path)) { throw "Unexpected ZIP file $path." }
+    Assert-File $file.FullName $portableFiles[$path]
 }
+$zipRoot = @('opssh-tray.exe', 'opssh-runtime', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'licenses')
+if (Compare-Object $zipRoot @(Get-ChildItem -LiteralPath $zipFiles -Force -Name) -CaseSensitive) {
+    throw 'The portable ZIP root must expose only the launcher, the runtime directory and the legal files.'
+}
+$launcher = Join-Path $zipFiles 'opssh-tray.exe'
+if ((Get-AuthenticodeSignature -LiteralPath $launcher).Status -ne 'NotSigned') {
+    throw 'Expected an unsigned Windows launcher.'
+}
+$stream = [IO.File]::OpenRead($launcher)
+try {
+    $pe = [Reflection.PortableExecutable.PEReader]::new($stream)
+    try {
+        if ($pe.PEHeaders.CoffHeader.Machine -ne 'Amd64' -or $pe.PEHeaders.PEHeader.Subsystem -ne 'WindowsGui') {
+            throw 'Expected a native x64 Windows GUI launcher.'
+        }
+    } finally {
+        $pe.Dispose()
+    }
+} finally {
+    $stream.Dispose()
+}
+& (Join-Path $PSScriptRoot 'Test-PortableLauncher.ps1') -LauncherPath $launcher -OutputDirectory (Join-Path $VerificationDirectory 'portable smoke')
 
 Invoke-Wix @('msi', 'validate', '-acceptEula', 'wix7', '-ice', 'ICE38', '-ice', 'ICE64',
     '-intermediateFolder', $wixWork, $msi)

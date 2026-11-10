@@ -12,7 +12,7 @@ internal static class LoginStartup
 
     internal static LoginStartupStatus Read()
     {
-        var command = Command(Environment.ProcessPath);
+        var command = CommandForProcess(Environment.ProcessPath);
         if (command is null)
             return LoginStartupStatus.Unavailable;
 
@@ -29,7 +29,7 @@ internal static class LoginStartup
 
     internal static LoginStartupStatus Set(bool enabled)
     {
-        var command = Command(Environment.ProcessPath);
+        var command = CommandForProcess(Environment.ProcessPath);
         if (command is null)
             return LoginStartupStatus.Unavailable;
 
@@ -70,6 +70,22 @@ internal static class LoginStartup
         return value is string text && string.Equals(text, command, StringComparison.OrdinalIgnoreCase)
             ? LoginStartupStatus.On
             : LoginStartupStatus.Conflict;
+    }
+
+    internal static string? CommandForProcess(string? path)
+    {
+        if (path is not null && Path.IsPathFullyQualified(path) &&
+            Path.GetFileName(path).Equals("opssh-tray.exe", StringComparison.OrdinalIgnoreCase) &&
+            Path.GetDirectoryName(path) is { } runtime &&
+            Path.GetFileName(runtime).Equals("opssh-runtime", StringComparison.OrdinalIgnoreCase) &&
+            Path.GetDirectoryName(runtime) is { } root)
+        {
+            var launcher = Path.Combine(root, "opssh-tray.exe");
+            if (File.Exists(launcher) && Command(launcher) is { } command)
+                return command;
+        }
+
+        return Command(path);
     }
 
     internal static string? Command(string? path) =>

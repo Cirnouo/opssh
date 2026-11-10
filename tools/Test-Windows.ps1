@@ -102,7 +102,10 @@ try {
     Invoke-Checked 'tray-publish' dotnet @('publish',$tray,'--no-restore','-c','Release','-p:DebugType=none','-p:DebugSymbols=false','-o',$releaseDir)
     Invoke-Checked 'core-build' go @('build','-mod=readonly','-trimpath',$linkerFlags,'-o',(Join-Path $releaseDir 'opssh-core.exe'),'./cmd/opssh-core')
 
-    foreach ($name in @('opssh-core.exe','opssh-tray.exe','opssh-tray.dll','opssh-tray.pri','Microsoft.UI.Xaml.dll')) {
+    Invoke-Checked 'portable-launcher-build' go @('build','-mod=readonly','-trimpath','-ldflags=-H windowsgui -s -w',
+        '-o',(Join-Path $releaseDir 'opssh-portable.exe'),'./cmd/opssh-portable')
+
+    foreach ($name in @('opssh-core.exe','opssh-portable.exe','opssh-tray.exe','opssh-tray.dll','opssh-tray.pri','Microsoft.UI.Xaml.dll')) {
         $item = Get-Item -LiteralPath (Join-Path $releaseDir $name)
         if ($item.Length -eq 0) { throw "Empty release component: $name" }
     }

@@ -15,7 +15,7 @@ When a stable release is available, choose a Windows x64 download. The installer
 | Download | Install and launch |
 | --- | --- |
 | MSI or offline installer EXE | Run either installer. It installs for the current user under `%LOCALAPPDATA%\Programs\opssh`. Open **opssh** from the Start menu. |
-| Portable ZIP | Extract the archive to a folder and run `opssh-tray.exe` there. Keep the extracted files together. |
+| Portable ZIP | Extract the entire archive and run the top-level `opssh-tray.exe`. Keep the `opssh-runtime` folder beside it. |
 
 If opssh is running, right-click the tray icon and choose **Quit opssh** before installing, repairing, upgrading, or uninstalling. For an installed copy, use Windows **Installed apps** to manage the application. Uninstall removes the application files and Start menu shortcut. It keeps your settings and public key index under `%LOCALAPPDATA%\opssh`.
 

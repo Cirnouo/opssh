@@ -82,6 +82,8 @@ if (!$licenseRoot.PSIsContainer -or ($licenseRoot.Attributes -band [IO.FileAttri
     throw 'Use an ordinary licenses directory.'
 }
 $sourceFiles = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+$runtimePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$launcher = $null
 foreach ($root in @($releaseRoot, $licenseRoot)) {
     $isRelease = $root -eq $releaseRoot
     $included = 0
@@ -89,15 +91,22 @@ foreach ($root in @($releaseRoot, $licenseRoot)) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package inputs contain a reparse point.' }
         if ($item.PSIsContainer -or ($isRelease -and $item.Extension -ieq '.pdb')) { continue }
         $relativePath = [IO.Path]::GetRelativePath($root.FullName, $item.FullName).Replace('\', '/')
+        if ($isRelease -and $relativePath -ieq 'opssh-portable.exe') {
+            if ($launcher -or !$item.Length) { throw 'Expected one nonempty portable launcher.' }
+            $launcher = $item.FullName
+            continue
+        }
         if (!$isRelease) { $relativePath = "licenses/$relativePath" }
         if ($relativePath -cnotmatch '\A[A-Za-z0-9_. -]+(?:/[A-Za-z0-9_. -]+)*\z') {
             throw 'Package inputs contain a filename outside the supported naming conventions.'
         }
         if (!$sourceFiles.TryAdd($relativePath, $item.FullName)) { throw 'Duplicate package path.' }
+        if ($isRelease) { [void]$runtimePaths.Add($relativePath) }
         $included++
     }
     if (!$included) { throw 'Expected files in both Release and licenses.' }
 }
+if (!$launcher) { throw 'Release is missing a nonempty opssh-portable.exe.' }
 foreach ($name in @(
     'opssh-core.exe', 'opssh-tray.exe', 'opssh-tray.dll', 'opssh-tray.pri',
     'opssh-tray.deps.json', 'opssh-tray.runtimeconfig.json', 'Microsoft.UI.Xaml.dll', 'coreclr.dll', 'hostfxr.dll'
@@ -182,8 +191,6 @@ try {
 
     $trayVersion = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $payload 'opssh-tray.dll')).Version
     if ($trayVersion -ne [version]"$Version.0") { throw 'The Release tray assembly version differs from the package version.' }
-    $manifest = [ordered]@{ version = $Version; architecture = 'x64'; files = @($files) }
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $packages 'payload-manifest.json') -Encoding utf8
     $payloadSource = Join-Path $work 'Payload.wxs'
     $document.Save($payloadSource)
 
@@ -227,7 +234,29 @@ try {
     } finally {
         Pop-Location
     }
-    [IO.Compression.ZipFile]::CreateFromDirectory($payload, (Join-Path $packages "$stem.zip"))
+    $stagedLauncher = Join-Path $work 'opssh-portable.exe'
+    [IO.File]::Copy($launcher, $stagedLauncher)
+    $zip = [IO.Compression.ZipFile]::Open((Join-Path $packages "$stem.zip"), [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $portableFiles = @(
+            $entry = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $stagedLauncher, 'opssh-tray.exe')
+            [ordered]@{
+                path = $entry.FullName
+                size = [IO.FileInfo]::new($stagedLauncher).Length
+                sha256 = (Get-FileHash -LiteralPath $stagedLauncher -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            foreach ($file in $files) {
+                if ($file.path -ieq 'licenses/wix/wix-7.0.1-source.zip') { continue }
+                $path = if ($runtimePaths.Contains($file.path)) { "opssh-runtime/$($file.path)" } else { $file.path }
+                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, (Join-Path $payload $file.path), $path)
+                [ordered]@{ path = $path; size = $file.size; sha256 = $file.sha256 }
+            }
+        )
+    } finally {
+        $zip.Dispose()
+    }
+    $manifest = [ordered]@{ version = $Version; architecture = 'x64'; files = @($files); portableFiles = $portableFiles }
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $packages 'payload-manifest.json') -Encoding utf8
     [IO.Directory]::Move($packages, $OutputDirectory)
     Write-Host 'Built the Windows x64 MSI, offline EXE, and portable ZIP.'
 } finally {
