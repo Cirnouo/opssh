@@ -94,7 +94,7 @@ The **Activity** page displays recent signing outcomes in this opssh session. Se
 
 ## Inspect diagnostic logs
 
-Open **Settings → Logs** to turn on local diagnostics. Logging starts off and uses **INFO** by default. The log records operating phases, durations, and outcomes, with private keys, account details, process details and SSH inputs excluded. Use **Open directory** to open the log folder directly in Windows File Explorer. The folder can contain the current log and up to two rotated files. Each file is capped at 1 MiB. **Clear logs** removes the existing files after confirmation. Turn logging off to stop new entries.
+Open **Settings → Logs** to turn on local diagnostics. Logging starts off and uses **INFO** by default. Signing and preload completions can show the steps the request reached, with a duration and outcome for each. For a timed-out signing request, check whether the last step was approval or waiting for private key material. The log excludes private keys, account details, process details and SSH inputs. Use **Open directory** to open the log folder directly in Windows File Explorer. The folder can contain the current log and up to two rotated files. Each file is capped at 1 MiB. **Clear logs** removes the existing files after confirmation. Turn logging off to stop new entries.
 
 <a name="appearance-and-updates"></a>
 

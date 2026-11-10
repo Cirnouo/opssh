@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -16,6 +17,7 @@ type Event struct {
 	Time      time.Time `json:"time"`
 	Result    string    `json:"result"`
 	ElapsedMs int64     `json:"elapsedMs"`
+	Steps     []Step    `json:"steps,omitempty"`
 }
 
 type Batch struct {
@@ -32,9 +34,11 @@ type Ring struct {
 }
 
 type Attempt struct {
-	epoch uint64
 	start time.Time
+	trace *Trace
 }
+
+func (a Attempt) Trace() *Trace { return a.trace }
 
 // Sync updates consent and returns a bounded, retryable snapshot.
 func (r *Ring) Sync(enabled bool, epoch, after uint64) (Batch, bool) {
@@ -62,7 +66,9 @@ func (r *Ring) Sync(enabled bool, epoch, after uint64) (Batch, bool) {
 		start = max(start, r.sequence-capacity+1)
 	}
 	for seq := start; seq <= r.sequence && len(batch.Events) < batchSize; seq++ {
-		batch.Events = append(batch.Events, r.events[(seq-1)%capacity])
+		event := r.events[(seq-1)%capacity]
+		event.Steps = slices.Clone(event.Steps)
+		batch.Events = append(batch.Events, event)
 	}
 	return batch, true
 }
@@ -76,15 +82,15 @@ func (r *Ring) Begin() Attempt {
 	if !r.enabled {
 		return Attempt{}
 	}
-	return Attempt{epoch: r.epoch, start: time.Now()}
+	return Attempt{start: time.Now(), trace: &Trace{epoch: r.epoch}}
 }
 
 func (r *Ring) Finish(attempt Attempt, result string) {
-	if r == nil || attempt.epoch == 0 || !r.mu.TryLock() {
+	if r == nil || attempt.trace == nil || !r.mu.TryLock() {
 		return
 	}
 	defer r.mu.Unlock()
-	if attempt.epoch != r.epoch || !r.enabled {
+	if attempt.trace.epoch != r.epoch || !r.enabled {
 		return
 	}
 	switch result {
@@ -96,6 +102,6 @@ func (r *Ring) Finish(attempt Attempt, result string) {
 	r.sequence++
 	r.events[(r.sequence-1)%capacity] = Event{
 		Sequence: r.sequence, Time: now.UTC(), Result: result,
-		ElapsedMs: min(now.Sub(attempt.start), maxElapsed).Milliseconds(),
+		ElapsedMs: min(now.Sub(attempt.start), maxElapsed).Milliseconds(), Steps: attempt.trace.Steps(),
 	}
 }

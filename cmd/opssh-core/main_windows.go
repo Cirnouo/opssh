@@ -268,15 +268,19 @@ func (h sshHandler) List() []agentwire.Identity {
 
 func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32, publish func(*ssh.Signature) error) (result error) {
 	diagnostic := h.events.Begin()
+	trace := diagnostic.Trace()
+	peerStart := trace.Start()
 	attempt := h.history.Begin()
 	client, err := h.conn.Peer()
-	if err != nil {
+	if err == nil {
+		defer client.Close()
+	}
+	if err != nil || len(client.Chain) == 0 {
+		trace.Add(diagnostics.Peer, "unverified", peerStart)
+		h.events.Finish(diagnostic, activityResult(engine.ErrPeerGone))
 		return engine.ErrPeerGone
 	}
-	defer client.Close()
-	if len(client.Chain) == 0 {
-		return engine.ErrPeerGone
-	}
+	trace.Add(diagnostics.Peer, "verified", peerStart)
 	entry := activity.Entry{App: client.Chain[0].Path, PID: client.Chain[0].PID}
 	attempt.Capture(func() (activity.Source, bool) { return client.RetainRequester() })
 	defer func() {
@@ -294,7 +298,7 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 	for _, p := range client.Chain {
 		peer.Chain = append(peer.Chain, engine.Process{Instance: engine.Instance{PID: p.PID, Created: p.Created}, Path: p.Path})
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(diagnostics.WithTrace(ctx, trace))
 	stopped := make(chan struct{})
 	go watchRequester(ctx, cancel, peer, stopped)
 	defer func() { cancel(); <-stopped }()

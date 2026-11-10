@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"opssh/internal/config"
 	"opssh/internal/control"
 	"opssh/internal/desktop"
+	"opssh/internal/engine"
 )
 
 type preloadVault struct {
@@ -93,22 +95,35 @@ func TestPreloadCommandsRetainPartialSuccessAndReportSafeResults(t *testing.T) {
 	if !result.OK || len(app.engine.List()) != len(ids) || len(calls) != 0 {
 		t.Fatal("public discovery failed or read private material")
 	}
-	inspect := func(result control.Result, selected, loaded, alreadyLoaded, failed, skipped int, code string) {
+	if _, ok := app.diagnostics.Sync(true, 1, 0); !ok {
+		t.Fatal("could not enable diagnostics for the fixture")
+	}
+	inspect := func(result control.Result, selected, loaded, alreadyLoaded, failed, skipped int, code string, steps ...string) {
 		t.Helper()
 		body, err := json.Marshal(result)
 		if err != nil || strings.Contains(string(body), opaqueError) {
 			t.Fatal("private result exposed unsanitized provider data")
 		}
 		var wire struct {
-			Data map[string]int `json:"data"`
+			Data struct {
+				engine.PreloadReport
+				Steps      json.RawMessage `json:"steps"`
+				StepsEpoch uint64          `json:"stepsEpoch"`
+			} `json:"data"`
 		}
-		want := map[string]int{"selected": selected, "loaded": loaded, "alreadyLoaded": alreadyLoaded, "failed": failed, "skipped": skipped}
-		if json.Unmarshal(body, &wire) != nil || !maps.Equal(wire.Data, want) || result.OK != (code == "") || result.ErrorCode != code {
-			t.Errorf("unexpected preload result: ok=%v, code=%q, data=%v", result.OK, result.ErrorCode, result.Data)
+		want := engine.PreloadReport{Selected: selected, Loaded: loaded, AlreadyLoaded: alreadyLoaded, Failed: failed, Skipped: skipped}
+		if json.Unmarshal(body, &wire) != nil || wire.Data.PreloadReport != want || result.OK != (code == "") || result.ErrorCode != code {
+			t.Errorf("unexpected preload result: ok=%v, code=%q, counts=%+v", result.OK, result.ErrorCode, wire.Data.PreloadReport)
+		}
+		if len(steps) != 0 {
+			if wire.Data.StepsEpoch != 1 {
+				t.Error("preload steps did not identify the diagnostic consent epoch")
+			}
+			checkDiagnosticSteps(t, wire.Data.Steps, steps...)
 		}
 	}
 	result = app.command(t.Context(), control.Event("preload-all", "batch", nil))
-	inspect(result, 3, 1, 0, 2, 0, "preload-partial")
+	inspect(result, 3, 1, 0, 2, 0, "preload-partial", "request/accepted", "key-cache/miss", "provider-read/session-expired")
 	state := result.State.(appState)
 	if len(state.Keys) != 3 || !state.Keys[0].Loaded || state.Keys[1].Error != "desktop-session-expired" ||
 		state.Keys[2].Error != "private-lookup" {
@@ -120,12 +135,14 @@ func TestPreloadCommandsRetainPartialSuccessAndReportSafeResults(t *testing.T) {
 		}
 	}
 	result = app.command(t.Context(), control.Event("preload", "single", map[string]string{"keyId": vaultID + "/" + ids[0]}))
-	inspect(result, 1, 0, 1, 0, 0, "")
+	inspect(result, 1, 0, 1, 0, 0, "", "request/accepted", "key-cache/hit")
 	if calls[ids[0]] != 1 {
 		t.Error("preloading a loaded key read its private field again")
 	}
 	result = app.command(t.Context(), control.Event("preload", "expired", map[string]string{"keyId": vaultID + "/" + ids[1]}))
-	inspect(result, 1, 0, 0, 1, 0, "desktop-session-expired")
+	inspect(result, 1, 0, 0, 1, 0, "desktop-session-expired", "request/accepted", "key-cache/miss", "provider-read/session-expired")
+	result = app.command(t.Context(), control.Event("preload", "opaque", map[string]string{"keyId": vaultID + "/" + ids[2]}))
+	inspect(result, 1, 0, 0, 1, 0, "private-lookup", "request/accepted", "key-cache/miss", "provider-read/unavailable")
 	batchCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	cancelBatch = cancel
@@ -142,7 +159,32 @@ func TestPreloadCommandsRetainPartialSuccessAndReportSafeResults(t *testing.T) {
 	}
 	result = app.command(t.Context(), control.Event("preload-all", "cache-off", nil))
 	inspect(result, 0, 0, 0, 0, 0, "cache-off")
-	if calls[ids[0]] != 1 || calls[ids[1]] != 3 || calls[ids[2]] != 1 {
+	if calls[ids[0]] != 1 || calls[ids[1]] != 3 || calls[ids[2]] != 2 {
 		t.Error("rejected preload accessed the private field")
+	}
+}
+
+func checkDiagnosticSteps(t *testing.T, body json.RawMessage, want ...string) {
+	t.Helper()
+	var steps []struct {
+		Stage     string `json:"stage"`
+		Outcome   string `json:"outcome"`
+		ElapsedMs *int64 `json:"elapsedMs"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&steps); err != nil {
+		t.Errorf("diagnostic steps are absent or contain unexpected fields, want %v", want)
+		return
+	}
+	got := make([]string, 0, len(steps))
+	for _, step := range steps {
+		if step.ElapsedMs == nil || *step.ElapsedMs < 0 || *step.ElapsedMs > 86_400_000 {
+			t.Error("diagnostic step did not contain a bounded duration")
+		}
+		got = append(got, step.Stage+"/"+step.Outcome)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("diagnostic steps did not match %v", want)
 	}
 }

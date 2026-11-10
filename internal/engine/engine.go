@@ -30,6 +30,7 @@ var (
 	ErrProviderDenied   = errors.New("key provider access denied")
 	ErrProviderBusy     = errors.New("key provider is busy")
 	ErrPrivateMissing   = errors.New("private key field is missing")
+	ErrPrivateEmpty     = errors.New("private key field is empty")
 	ErrPrivateInvalid   = errors.New("private key field is invalid")
 	ErrKeyMismatch      = errors.New("private key does not match the index")
 	ErrBusy             = errors.New("engine is busy")

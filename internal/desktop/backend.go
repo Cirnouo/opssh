@@ -22,6 +22,7 @@ var (
 	ErrAccessDenied   = errors.New("desktop access denied")
 	ErrPublic         = errors.New("public key is unavailable or unsupported")
 	ErrPrivateMissing = errors.New("private key field is missing")
+	ErrPrivateEmpty   = errors.New("private key field is empty")
 	ErrPrivateInvalid = errors.New("private key field is invalid")
 )
 
@@ -126,7 +127,7 @@ func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, erro
 		}
 		// A single-reference ResolveAll preserves structured field errors that
 		// Secrets.Resolve returns only as text.
-		ref := "op://" + vault + "/" + item + "/private key?ssh-format=openssh"
+		ref := "op://" + vault + "/" + item + "/private_key?ssh-format=openssh"
 		response, err := bulk.ResolveAll(ctx, []string{ref})
 		if err != nil {
 			return nil, SDKError(err)
@@ -160,7 +161,7 @@ func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, erro
 		}
 		switch size := len(value.Content.Secret); {
 		case size == 0:
-			return nil, ErrPrivateMissing
+			return nil, ErrPrivateEmpty
 		case size > 64*1024:
 			return nil, ErrPrivateInvalid
 		default:
@@ -239,7 +240,7 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 		case errors.Is(out.err, context.Canceled):
 			setStatus("canceled")
 		case out.err == nil, errors.Is(out.err, ErrScopeTooBroad), errors.Is(out.err, ErrScanLimit),
-			errors.Is(out.err, ErrPrivateMissing), errors.Is(out.err, ErrPrivateInvalid):
+			errors.Is(out.err, ErrPrivateMissing), errors.Is(out.err, ErrPrivateEmpty), errors.Is(out.err, ErrPrivateInvalid):
 			setStatus("last-success")
 		default:
 			setStatus("unavailable")

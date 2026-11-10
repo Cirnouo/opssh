@@ -107,8 +107,15 @@ internal static class GoInterop
         }
         var diagnostics = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 1, after = 0 }, token);
         Require(DiagnosticEvent.TryReadCoreBatch(diagnostics, 1, 0, out var logs, out var lastSequence) &&
-            lastSequence == 1 && logs is [{ Source: "core", Phase: "sign", Result: "published" }] &&
-            diagnostics.Data!.Value.GetProperty("events")[0].EnumerateObject().Count() == 4,
+            lastSequence == 1 && logs is [{ Source: "core", Phase: "sign", Result: "published", Steps:
+            [
+                { Stage: "peer", Outcome: "verified" },
+                { Stage: "request", Outcome: "accepted" },
+                { Stage: "approval", Outcome: "allowed" },
+                { Stage: "key-cache", Outcome: "hit" },
+                { Stage: "crypto", Outcome: "signed" },
+                { Stage: "publish", Outcome: "published" }
+            ] }] && diagnostics.Data!.Value.GetProperty("events")[0].EnumerateObject().Count() == 5,
             "the core reports a bounded event without signing or requester metadata");
         var cleared = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 2, after = 0 }, token);
         Require(DiagnosticEvent.TryReadCoreBatch(cleared, 2, 0, out var remainingLogs, out _) && remainingLogs.Count == 0,

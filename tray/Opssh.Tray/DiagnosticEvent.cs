@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Opssh.Tray;
 
 internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, string Phase, string Result, long ElapsedMs,
-    DiagnosticPreloadCounts? Counts = null)
+    DiagnosticPreloadCounts? Counts = null, DiagnosticStep[]? Steps = null)
 {
     public string Level => Phase is "preload" or "preload-all" ? PreloadLevel(Result) ?? "ERROR" : Result switch
     {
@@ -15,6 +15,9 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
     };
 
     internal bool IsValid => Time != default && ElapsedMs is >= 0 and <= 86_400_000 &&
+        (Steps is null || ((Source == "core" && Phase == "sign") ||
+            (Source == "tray" && Phase is ("preload" or "preload-all") && Result is not ("started" or "timeout" or "disconnected" or "control-failed"))) &&
+            DiagnosticStep.Valid(Steps, Phase == "sign")) &&
         ((Source, Phase, Result) switch
         {
             ("core", "sign", "published" or "denied" or "timeout" or "canceled" or "failed" or "unavailable") => Counts is null,
@@ -79,7 +82,8 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
                 !row.TryGetProperty("elapsedMs", out var elapsed) || elapsed.ValueKind != JsonValueKind.Number ||
                 !elapsed.TryGetInt64(out var duration))
                 return false;
-            var entry = new DiagnosticEvent(date.ToUniversalTime(), "core", "sign", label, duration);
+            var entry = new DiagnosticEvent(date.ToUniversalTime(), "core", "sign", label, duration,
+                Steps: DiagnosticStep.Read(row, signing: true));
             if (!entry.IsValid)
                 return false;
             entries.Add(entry);
@@ -87,6 +91,68 @@ internal sealed record DiagnosticEvent(DateTimeOffset Time, string Source, strin
         }
         return true;
     }
+}
+
+internal sealed record DiagnosticStep(string Stage, string Outcome, long ElapsedMs)
+{
+    private int Order(bool signing) => Stage switch
+    {
+        "peer" when signing && Outcome is ("verified" or "unverified") => 1,
+        "request" when Outcome is "accepted" or "invalid" or "unknown-key" or "unsupported-flags" or "locked" or
+            "stale" or "busy" or "canceled" or "cache-off" => 2,
+        "approval" when signing && Outcome is ("cached" or "allowed" or "denied" or "unavailable" or "timeout" or
+            "busy" or "canceled" or "stale") => 3,
+        "key-cache" when Outcome is "hit" or "miss" or "joined" or "busy" or "stale" or "canceled" => 4,
+        "material-wait" when Outcome is "ready" or "failed" or "timeout" or "canceled" or "stale" => 5,
+        "provider-read" when Outcome is "resolved" or "field-not-found" or "empty" or "invalid" or "session-expired" or
+            "denied" or "busy" or "unavailable" or "timeout" or "canceled" => 5,
+        "private-parse" when Outcome is "parsed" or "invalid" => 6,
+        "public-match" when Outcome is "matched" or "mismatch" => 7,
+        "crypto" when signing && Outcome is ("signed" or "invalid" or "stale" or "canceled") => 8,
+        "publish" when signing && Outcome is ("published" or "failed" or "stale" or "canceled") => 9,
+        _ => 0
+    };
+
+    internal static bool Valid(DiagnosticStep[] steps, bool signing)
+    {
+        if (steps.Length is < 1 or > 9)
+            return false;
+        var previous = 0;
+        foreach (var step in steps)
+        {
+            var order = step.Order(signing);
+            if (order <= previous || step.ElapsedMs is < 0 or > 86_400_000)
+                return false;
+            previous = order;
+        }
+        return true;
+    }
+
+    internal static DiagnosticStep[]? Read(JsonElement body, bool signing)
+    {
+        if (!body.TryGetProperty("steps", out var array) || array.ValueKind != JsonValueKind.Array || array.GetArrayLength() is < 1 or > 9)
+            return null;
+        var steps = new DiagnosticStep[array.GetArrayLength()];
+        var index = 0;
+        foreach (var row in array.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object || row.EnumerateObject().Count() != 3 ||
+                !row.TryGetProperty("stage", out var stage) || stage.ValueKind != JsonValueKind.String ||
+                stage.GetString() is not { Length: > 0 and <= 13 } name ||
+                !row.TryGetProperty("outcome", out var outcome) || outcome.ValueKind != JsonValueKind.String ||
+                outcome.GetString() is not { Length: > 0 and <= 17 } label ||
+                !row.TryGetProperty("elapsedMs", out var elapsed) || elapsed.ValueKind != JsonValueKind.Number ||
+                !elapsed.TryGetInt64(out var duration))
+                return null;
+            steps[index++] = new DiagnosticStep(name, label, duration);
+        }
+        return Valid(steps, signing) ? steps : null;
+    }
+
+    internal static DiagnosticStep[]? ReadPreload(JsonElement? data, long epoch) =>
+        data is { ValueKind: JsonValueKind.Object } body && body.TryGetProperty("stepsEpoch", out var generation) &&
+        generation.ValueKind == JsonValueKind.Number && generation.TryGetInt64(out var actual) && actual == epoch
+            ? Read(body, signing: false) : null;
 }
 
 internal sealed record DiagnosticPreloadCounts(int Selected, int Loaded, int AlreadyLoaded, int Failed, int Skipped)
@@ -126,18 +192,18 @@ internal sealed class PreloadDiagnostic(string phase, CoreSession session, long 
     internal DiagnosticEvent Started() => new(DateTimeOffset.UtcNow, "tray", phase, "started", 0);
 
     internal DiagnosticEvent? Complete(Result reply) => Finish(DiagnosticEvent.PreloadReplyOutcome(reply),
-        DiagnosticPreloadCounts.Read(reply.Data, phase == "preload" ? 1 : 64));
+        DiagnosticPreloadCounts.Read(reply.Data, phase == "preload" ? 1 : 64), DiagnosticStep.ReadPreload(reply.Data, Epoch));
 
     internal DiagnosticEvent? Fail(Exception? error = null) => Finish(!Session.IsConnected ? "disconnected" :
         error is OperationCanceledException ? "timeout" : "control-failed", null);
 
-    private DiagnosticEvent? Finish(string outcome, DiagnosticPreloadCounts? counts)
+    private DiagnosticEvent? Finish(string outcome, DiagnosticPreloadCounts? counts, DiagnosticStep[]? steps = null)
     {
         if (finished)
             return null;
         finished = true;
         var elapsed = Math.Min((long)Stopwatch.GetElapsedTime(start).TotalMilliseconds, 86_400_000);
-        return new DiagnosticEvent(DateTimeOffset.UtcNow, "tray", phase, outcome, elapsed, counts);
+        return new DiagnosticEvent(DateTimeOffset.UtcNow, "tray", phase, outcome, elapsed, counts, steps);
     }
 }
 

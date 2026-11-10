@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"opssh/internal/activity"
+	"opssh/internal/diagnostics"
 	"opssh/internal/engine"
 	"opssh/internal/winipc"
 )
@@ -86,8 +88,12 @@ func TestWindowsOpenSSHListsAndSignsWithRequestApproval(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	history := activity.New()
 	defer history.Close()
+	var events diagnostics.Ring
+	if _, ok := events.Sync(true, 1, 0); !ok {
+		t.Fatal("could not enable diagnostics for the fixture")
+	}
 	done := make(chan struct{})
-	go func() { defer close(done); acceptSSH(ctx, listener, agent, history, nil) }()
+	go func() { defer close(done); acceptSSH(ctx, listener, agent, history, &events) }()
 	defer func() { cancel(); listener.Close(); <-done }()
 	env := make([]string, 0)
 	for _, v := range os.Environ() {
@@ -167,4 +173,28 @@ func TestWindowsOpenSSHListsAndSignsWithRequestApproval(t *testing.T) {
 	if prompts, loads := promptCount.Load(), store.loads.Load(); prompts != 2 || loads != 1 {
 		t.Fatalf("each ssh-keygen request must be approved and reuse the loaded key: prompts=%d loads=%d", prompts, loads)
 	}
+	// The handler records diagnostics before publishing its activity row. Read
+	// only after both rows exist, so polling cannot contend with Finish.
+	batch, ok := events.Sync(true, 1, 0)
+	if !ok || len(batch.Events) != 2 {
+		t.Fatal("opssh diagnostics did not record both published OpenSSH signatures")
+	}
+	body, err := json.Marshal(batch)
+	if err != nil || bytes.Contains(body, []byte("offline message")) || bytes.Contains(body, []byte("ssh-keygen")) ||
+		bytes.Contains(body, []byte(ssh.FingerprintSHA256(public))) || bytes.Contains(body, []byte("Offline")) {
+		t.Fatal("sign diagnostics exposed request or identity data")
+	}
+	var wire struct {
+		Events []struct {
+			Result string          `json:"result"`
+			Steps  json.RawMessage `json:"steps"`
+		} `json:"events"`
+	}
+	if json.Unmarshal(body, &wire) != nil || len(wire.Events) != 2 || wire.Events[0].Result != "published" || wire.Events[1].Result != "published" {
+		t.Fatal("sign diagnostics lost a published result")
+	}
+	checkDiagnosticSteps(t, wire.Events[0].Steps, "peer/verified", "request/accepted", "approval/allowed", "key-cache/miss",
+		"provider-read/resolved", "private-parse/parsed", "public-match/matched", "crypto/signed", "publish/published")
+	checkDiagnosticSteps(t, wire.Events[1].Steps, "peer/verified", "request/accepted", "approval/allowed", "key-cache/hit",
+		"crypto/signed", "publish/published")
 }

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"opssh/internal/diagnostics"
 )
 
 type keyMaterial struct {
@@ -38,6 +40,7 @@ type loadFlight struct {
 	transient bool
 	material  *keyMaterial
 	err       error
+	trace     *diagnostics.Trace
 }
 
 type loadWaiter struct {
@@ -73,8 +76,11 @@ func (report *PreloadReport) record(alreadyLoaded bool, err error) {
 }
 
 func (e *Engine) Preload(ctx context.Context, keyID string) (PreloadReport, error) {
+	trace := diagnostics.FromContext(ctx)
+	requestStart := trace.Start()
 	report := PreloadReport{Selected: 1}
 	if !reserve(e.requests) {
+		trace.Add(diagnostics.Request, "busy", requestStart)
 		report.record(false, ErrBusy)
 		return report, ErrBusy
 	}
@@ -83,12 +89,14 @@ func (e *Engine) Preload(ctx context.Context, keyID string) (PreloadReport, erro
 	entry := e.state[keyID]
 	if err := e.keyErrorLocked(entry); err != nil {
 		e.mu.Unlock()
+		trace.Add(diagnostics.Request, requestOutcome(err), requestStart)
 		report.record(false, err)
 		return report, err
 	}
 	snapshot := materialSnapshot{entry: entry, revision: entry.materialRevision}
 	e.mu.Unlock()
-	alreadyLoaded, err := e.preload(ctx, snapshot)
+	trace.Add(diagnostics.Request, "accepted", requestStart)
+	alreadyLoaded, err := e.preload(ctx, snapshot, trace)
 	report.record(alreadyLoaded, err)
 	return report, err
 }
@@ -97,13 +105,17 @@ func (e *Engine) Preload(ctx context.Context, keyID string) (PreloadReport, erro
 // every revision before the first load prevents a batch from restoring
 // material evicted while an earlier key was loading.
 func (e *Engine) PreloadAll(ctx context.Context) (PreloadReport, error) {
+	trace := diagnostics.FromContext(ctx)
+	requestStart := trace.Start()
 	if !reserve(e.requests) {
+		trace.Add(diagnostics.Request, "busy", requestStart)
 		return PreloadReport{}, ErrBusy
 	}
 	defer func() { <-e.requests }()
 	e.mu.Lock()
 	if err := e.indexErrorLocked(); err != nil {
 		e.mu.Unlock()
+		trace.Add(diagnostics.Request, requestOutcome(err), requestStart)
 		return PreloadReport{}, err
 	}
 	keys := make([]materialSnapshot, 0, len(e.keys.entries))
@@ -112,6 +124,7 @@ func (e *Engine) PreloadAll(ctx context.Context) (PreloadReport, error) {
 		keys = append(keys, materialSnapshot{entry: entry, revision: entry.materialRevision})
 	}
 	e.mu.Unlock()
+	trace.Add(diagnostics.Request, "accepted", requestStart)
 	report := PreloadReport{Selected: len(keys)}
 	var firstErr error
 	for i, snapshot := range keys {
@@ -120,10 +133,15 @@ func (e *Engine) PreloadAll(ctx context.Context) (PreloadReport, error) {
 			report.Interrupted = true
 			return report, err
 		}
-		alreadyLoaded, err := e.preload(ctx, snapshot)
+		var keyTrace *diagnostics.Trace
+		if firstErr == nil {
+			keyTrace = trace.Fork()
+		}
+		alreadyLoaded, err := e.preload(ctx, snapshot, keyTrace)
 		report.record(alreadyLoaded, err)
 		if err != nil && firstErr == nil {
 			firstErr = err
+			trace.Merge(keyTrace)
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -133,23 +151,26 @@ func (e *Engine) PreloadAll(ctx context.Context) (PreloadReport, error) {
 	return report, firstErr
 }
 
-func (e *Engine) preload(ctx context.Context, snapshot materialSnapshot) (alreadyLoaded bool, err error) {
-	material, waiter, err := e.getMaterial(ctx, snapshot.entry, nil, snapshot.revision)
+func (e *Engine) preload(ctx context.Context, snapshot materialSnapshot, trace *diagnostics.Trace) (alreadyLoaded bool, err error) {
+	material, waiter, err := e.getMaterial(ctx, snapshot.entry, nil, snapshot.revision, trace)
 	if waiter != nil {
 		e.releaseFlight(waiter, err)
 	}
 	return material != nil && waiter == nil, err
 }
 
-func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version context.Context, revision uint64) (*keyMaterial, *loadWaiter, error) {
+func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version context.Context, revision uint64, trace *diagnostics.Trace) (*keyMaterial, *loadWaiter, error) {
+	cacheStart := trace.Start()
 	e.mu.Lock()
 	if err := e.checkMaterialLocked(ctx, entry, version, revision); err != nil {
 		e.mu.Unlock()
+		trace.Add(diagnostics.KeyCache, interruptedOutcome(err), cacheStart)
 		return nil, nil, err
 	}
 	entry.pruneLocked(e.now())
 	if material := entry.material; material != nil {
 		e.mu.Unlock()
+		trace.Add(diagnostics.KeyCache, "hit", cacheStart)
 		return material, nil, nil
 	}
 	flight := entry.flight
@@ -157,16 +178,21 @@ func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version conte
 		if !reserve(e.loads) {
 			entry.loadError = LoadErrorCode(ErrBusy)
 			e.mu.Unlock()
+			trace.Add(diagnostics.KeyCache, "busy", cacheStart)
 			return nil, nil, ErrBusy
 		}
 		loadCtx, cancel := context.WithTimeout(context.Background(), e.loadTimeout)
 		flight = &loadFlight{entry: entry, key: entry.key, ctx: loadCtx, cancel: cancel, done: make(chan struct{}), waiters: make(map[*loadWaiter]struct{})}
 		e.flights[flight] = struct{}{}
 		entry.flight = flight
-		go e.load(flight)
+		trace.Add(diagnostics.KeyCache, "miss", cacheStart)
+		go e.load(flight, trace.Fork())
+	} else {
+		trace.Add(diagnostics.KeyCache, "joined", cacheStart)
 	}
 	waiter := &loadWaiter{flight: flight, ctx: ctx, version: version, revision: revision}
 	flight.waiters[waiter] = struct{}{}
+	waitStart := trace.Start()
 	e.mu.Unlock()
 
 	select {
@@ -178,10 +204,14 @@ func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version conte
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := e.checkMaterialLocked(ctx, entry, version, revision); err != nil {
+		trace.Add(diagnostics.MaterialWait, waitOutcome(err), waitStart)
 		return nil, waiter, err
 	}
 	if !flight.completed {
 		e.finishFlightLocked(flight, nil, ErrLoadTimeout)
+	}
+	if !trace.Merge(flight.trace) {
+		trace.Add(diagnostics.MaterialWait, waitOutcome(flight.err), waitStart)
 	}
 	return flight.material, waiter, flight.err
 }
@@ -196,12 +226,12 @@ func (e *Engine) checkMaterialLocked(ctx context.Context, entry *keyEntry, versi
 	return ctx.Err()
 }
 
-func (e *Engine) load(flight *loadFlight) {
+func (e *Engine) load(flight *loadFlight, trace *diagnostics.Trace) {
 	defer func() { <-e.loads }()
 	if flight.ctx.Err() != nil {
 		return
 	}
-	material, err := e.fetch(flight.ctx, flight.key)
+	material, err := e.fetch(flight.ctx, flight.key, trace)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if flight.completed || e.discardInactiveFlightLocked(flight) {
@@ -215,6 +245,8 @@ func (e *Engine) load(flight *loadFlight) {
 			material.dispose()
 		}
 		material, err = nil, ErrLoadTimeout
+	} else {
+		flight.trace = trace
 	}
 	e.finishFlightLocked(flight, material, err)
 }
@@ -239,27 +271,23 @@ func (e *Engine) discardInactiveFlightLocked(flight *loadFlight) bool {
 	return true
 }
 
-func (e *Engine) fetch(ctx context.Context, key Key) (*keyMaterial, error) {
+func (e *Engine) fetch(ctx context.Context, key Key, trace *diagnostics.Trace) (*keyMaterial, error) {
+	started := trace.Start()
 	if e.provider == nil {
+		trace.Add(diagnostics.ProviderRead, "unavailable", started)
 		return nil, ErrProvider
 	}
 	private, err := e.provider.Load(ctx, cloneKey(key))
 	defer clear(private)
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+	if canceled := ctx.Err(); canceled != nil {
+		err = canceled
 	}
+	err, outcome := providerResult(err)
+	trace.Add(diagnostics.ProviderRead, outcome, started)
 	if err != nil {
-		// Keep only known categories. Provider errors can contain key material
-		// and other values that must not cross the engine boundary.
-		for _, allowed := range []error{ErrProviderExpired, ErrProviderDenied, ErrProviderBusy,
-			ErrPrivateMissing, ErrPrivateInvalid, context.Canceled, context.DeadlineExceeded} {
-			if errors.Is(err, allowed) {
-				return nil, allowed
-			}
-		}
-		return nil, ErrProvider
+		return nil, err
 	}
-	return parsePrivateKey(private, key.Public)
+	return parsePrivateKey(private, key.Public, trace)
 }
 
 func (e *Engine) finishFlightLocked(flight *loadFlight, material *keyMaterial, err error) {
@@ -336,7 +364,7 @@ func LoadErrorCode(err error) string {
 		return "desktop-access-denied"
 	case ErrProviderBusy:
 		return "desktop-busy"
-	case ErrPrivateMissing:
+	case ErrPrivateMissing, ErrPrivateEmpty:
 		return "private-field-missing"
 	case ErrPrivateInvalid:
 		return "private-field-invalid"
@@ -397,7 +425,13 @@ func signatureAlgorithm(algorithm string, flags uint32) (string, error) {
 	return "", ErrUnsupportedFlags
 }
 
-func parsePrivateKey(pemBytes, expectedPublic []byte) (*keyMaterial, error) {
+func parsePrivateKey(pemBytes, expectedPublic []byte, trace *diagnostics.Trace) (_ *keyMaterial, resultErr error) {
+	parseStart := trace.Start()
+	defer func() {
+		if resultErr == ErrInvalidKey {
+			trace.Add(diagnostics.PrivateParse, "invalid", parseStart)
+		}
+	}()
 	if len(pemBytes) == 0 || len(pemBytes) > maxPrivateKey {
 		return nil, ErrInvalidKey
 	}
@@ -436,9 +470,13 @@ func parsePrivateKey(pemBytes, expectedPublic []byte) (*keyMaterial, error) {
 	if !ok {
 		return nil, ErrInvalidKey
 	}
+	trace.Add(diagnostics.PrivateParse, "parsed", parseStart)
+	matchStart := trace.Start()
 	if !bytes.Equal(signer.PublicKey().Marshal(), expectedPublic) {
+		trace.Add(diagnostics.PublicMatch, "mismatch", matchStart)
 		return nil, ErrKeyMismatch
 	}
+	trace.Add(diagnostics.PublicMatch, "matched", matchStart)
 	keep = true
 	return &keyMaterial{signer: algorithmSigner, wipe: wipe}, nil
 }
