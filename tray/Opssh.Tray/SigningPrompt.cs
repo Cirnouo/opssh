@@ -5,7 +5,7 @@ namespace Opssh.Tray;
 
 internal sealed class SigningPrompt(Approval approval)
 {
-    private static readonly IReadOnlyList<string> cachedScopes = Array.AsReadOnly(new[] { "all", "app", "once", "deny" });
+    private static readonly IReadOnlyList<string> cachedScopes = Array.AsReadOnly(new[] { "app", "once", "deny" });
     private static readonly IReadOnlyList<string> uncachedScopes = Array.AsReadOnly(new[] { "once", "deny" });
     private bool consumed;
 

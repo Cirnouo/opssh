@@ -168,7 +168,6 @@ public sealed partial class App
             if (!keyApprovalPreview)
                 grants.AddRange([
                     new("workstation", SampleId(1), "warp.exe", 10432, "app", Now.AddMinutes(8)),
-                    new("workstation", SampleId(2), "", 0, "all", Now.AddMinutes(6)),
                     new("build", SampleId(3), "Code.exe", 13108, "app", Now.AddMinutes(4))
                 ]);
             activity = SampleActivity();

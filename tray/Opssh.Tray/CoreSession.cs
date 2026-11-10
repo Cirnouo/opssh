@@ -214,9 +214,8 @@ internal sealed class CoreSession : IDisposable
                     approvals.Remove(approval.Id);
                     return false;
                 }
-                if (scope is not ("deny" or "once" or "app" or "all" or "unavailable") ||
-                    ((scope is "app" or "all") && !approval.CacheAllowed) ||
-                    (scope == "app" && candidate != approval.AppCandidate))
+                if (scope is not ("deny" or "once" or "app" or "unavailable") ||
+                    (scope == "app" && (!approval.CacheAllowed || candidate != approval.AppCandidate)))
                     return false;
                 approvals.Remove(approval.Id);
             }

@@ -32,7 +32,7 @@ func (k *generatedKey) Load(context.Context, engine.Key) ([]byte, error) {
 	return bytes.Clone(k.data), nil
 }
 
-func TestWindowsOpenSSHListsAndSignsWithSameLogonApproval(t *testing.T) {
+func TestWindowsOpenSSHListsAndSignsWithRequestApproval(t *testing.T) {
 	systemSSH := filepath.Join(os.Getenv("SystemRoot"), "System32", "OpenSSH")
 	client := filepath.Join(systemSSH, "ssh.exe")
 	sshAdd := filepath.Join(systemSSH, "ssh-add.exe")
@@ -68,7 +68,7 @@ func TestWindowsOpenSSHListsAndSignsWithSameLogonApproval(t *testing.T) {
 			t.Errorf("approval candidate %d is outside the verified chain", p.AppCandidate)
 			return engine.Approval{}, engine.ErrDenied
 		}
-		return engine.Approval{Scope: "all"}, nil
+		return engine.Approval{Scope: "once"}, nil
 	}
 	agent, err := engine.New(opts)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestWindowsOpenSSHListsAndSignsWithSameLogonApproval(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	if prompts, loads := promptCount.Load(), store.loads.Load(); prompts != 1 || loads != 1 {
-		t.Fatalf("new ssh-keygen instance did not reuse same-logon approval and loaded key: prompts=%d loads=%d", prompts, loads)
+	if prompts, loads := promptCount.Load(), store.loads.Load(); prompts != 2 || loads != 1 {
+		t.Fatalf("each ssh-keygen request must be approved and reuse the loaded key: prompts=%d loads=%d", prompts, loads)
 	}
 }

@@ -219,7 +219,7 @@ func (c *Channel) decide(msg Message) {
 		return
 	}
 	switch decision.Scope {
-	case "once", "app", "all", "deny", "unavailable":
+	case "once", "app", "deny", "unavailable":
 	default:
 		return
 	}

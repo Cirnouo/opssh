@@ -7,7 +7,6 @@
   "App.RestartingAccount": "正在重启以使用新账户…",
   "App.Starting": "正在启动核心…",
   "App.Stopped": "核心已停止",
-  "Approval.AllowAll": "为所有应用授权",
   "Approval.AllowApp": "授权此应用",
   "Approval.AllowOnce": "仅授权请求",
   "Approval.Application": "{0} · PID {1}",

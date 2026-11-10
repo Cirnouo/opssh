@@ -80,21 +80,22 @@ func TestUnrelatedAndReplayDecisionsCannotGrantNewRequest(t *testing.T) {
 	if got := <-second; got.Scope != "app" || got.Candidate != 1 {
 		t.Fatalf("decision: %+v", got)
 	}
-	for _, scope := range []string{"all", "unavailable"} {
-		out := prompt()
-		request, err := Read(gui)
-		if err != nil || request.Type != "approval" {
-			t.Fatalf("%v %v", request, err)
-		}
-		if err := Write(gui, Event("decision", request.ID, Decision{Scope: scope})); err != nil {
-			t.Fatal(err)
-		}
-		if end, err := Read(gui); err != nil || end.Type != "approval-ended" || end.ID != request.ID {
-			t.Fatalf("%v %v", end, err)
-		}
-		if got := <-out; got.Scope != scope || got.Candidate != 0 {
-			t.Fatalf("decision: %+v", got)
-		}
+	out := prompt()
+	request, err := Read(gui)
+	if err != nil || request.Type != "approval" {
+		t.Fatalf("%v %v", request, err)
+	}
+	if err := Write(gui, Event("decision", request.ID, Decision{Scope: "all"})); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(gui, Event("decision", request.ID, Decision{Scope: "unavailable"})); err != nil {
+		t.Fatal(err)
+	}
+	if end, err := Read(gui); err != nil || end.Type != "approval-ended" || end.ID != request.ID {
+		t.Fatalf("%v %v", end, err)
+	}
+	if got := <-out; got.Scope != "unavailable" || got.Candidate != 0 {
+		t.Fatalf("legacy all-apps decision consumed the pending request: %+v", got)
 	}
 }
 

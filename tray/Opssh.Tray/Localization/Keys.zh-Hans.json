@@ -40,10 +40,8 @@
   "Keys.NoGrants": "此密钥暂无签名授权。",
   "Keys.LoadingGrants": "正在读取签名授权…",
   "Keys.Process": "应用",
-  "Keys.AllApps": "所有应用",
   "Keys.Pid": "PID",
   "Keys.Expires": "到期时间（本地）",
   "Keys.RevokeGrant": "撤销此授权",
-  "Keys.UntilAppExit": "直到应用退出",
-  "Keys.UntilExit": "直到 opssh 退出"
+  "Keys.UntilAppExit": "直到应用退出"
 }

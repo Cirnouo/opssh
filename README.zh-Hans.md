@@ -4,7 +4,7 @@
 
 opssh 是面向 Windows x64 系统 OpenSSH 客户端的 SSH 代理。它使用 1Password 桌面应用中的 SSH 密钥在内存中签名。Windows 通知会显示应用、PID 和密钥指纹，供你决定是否批准签名。
 
-- 可批准单次签名，也可允许所示应用或同一 Windows 登录会话中经过验证的所有应用复用该密钥。
+- 可批准单次签名，也可允许所示应用复用该密钥。
 - 可选择哪些 1Password 保险库和 SSH Key 条目中的密钥可供 SSH 使用。
 - 可在需要的 PowerShell 会话中选择 opssh，同时运行 Windows 系统代理。
 

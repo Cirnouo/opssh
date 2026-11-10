@@ -76,7 +76,7 @@
   "Settings.LoadedPrivateKeys": "Loaded private keys",
   "Settings.LoadedPrivateKeysDescription": "Clear private key material from the local cache.",
   "Settings.ProcessApprovals": "Signing approvals",
-  "Settings.ProcessApprovalsDescription": "Clear approvals granted to individual apps or all apps.",
+  "Settings.ProcessApprovalsDescription": "Clear approvals granted to apps.",
   "Settings.KeyApprovals": "Approvals for one key",
   "Settings.KeyApprovalsDescription": "Revoke approvals for the key selected on the 1Password & keys page.",
   "Settings.GoToKeys": "Go to keys",

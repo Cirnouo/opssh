@@ -20,4 +20,4 @@ Use a 1040 × 642 DIP window for the standard comparison. For the key layout use
 
 ## Signing notification fixture
 
-Use `--dashboard-fixture signing-toast keys dark zh-Hans` to show the four actions, or `signing-toast-once` with the approval cache off. Both use a synthetic key and the fixture process identity. Run native notification checks on an isolated Windows desktop because Windows owns the banner and notification center. Use the archived KeyApproval renderer for the reference toast.
+Use `--dashboard-fixture signing-toast keys dark zh-Hans` to show the app approval, request-only approval and denial actions, or `signing-toast-once` with the approval cache off. Both use a synthetic key and the fixture process identity. Run native notification checks on an isolated Windows desktop because Windows owns the banner and notification center. The archived KeyApproval renderer preserves the earlier four-action toast design.
