@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Opssh.Tray">
     <Window.SystemBackdrop>
-        <MicaBackdrop Kind="BaseAlt" />
+        <MicaBackdrop />
     </Window.SystemBackdrop>
     <local:DashboardShell x:Name="Shell" />
 </Window>

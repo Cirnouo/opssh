@@ -650,14 +650,14 @@ public sealed partial class DashboardWindow
         prompt.VerticalAlignment = VerticalAlignment.Bottom;
         Canvas.SetZIndex(prompt, 20);
         Grid.SetRowSpan(prompt, DashboardRoot.RowDefinitions.Count);
-        var choose = DashboardButton(chinese ? "选择账户" : "Choose account", async () =>
+        var choose = Ui.Button(chinese ? "选择账户" : "Choose account", async () =>
         {
             DashboardRoot.Children.Remove(prompt);
             SelectPage("account");
             await ShowAccountPickerAsync(authorizeCurrent: true);
         });
-        choose.Style = StyleFor("DashboardAccentButtonStyle");
-        var later = DashboardButton(chinese ? "稍后" : "Later", () => DashboardRoot.Children.Remove(prompt));
+        choose.Style = StyleFor("AccentButtonStyle");
+        var later = Ui.Button(chinese ? "稍后" : "Later", () => DashboardRoot.Children.Remove(prompt));
         var content = new StackPanel
         {
             Padding = new Thickness(14),

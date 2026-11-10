@@ -32,7 +32,7 @@ public sealed partial class DashboardWindow
         brand.Children.Add(product);
         page.Children.Add(brand);
 
-        checkForUpdates = DashboardButton(Strings.Get("Update.Check"), async () => await checkUpdates());
+        checkForUpdates = Ui.Button(Strings.Get("Update.Check"), async () => await checkUpdates());
         updateStatus = Quiet(Strings.Get("Update.CheckDescription"), 12);
         AutomationProperties.SetLiveSetting(updateStatus, AutomationLiveSetting.Polite);
         updateProgress = new ProgressRing
@@ -67,14 +67,14 @@ public sealed partial class DashboardWindow
             ShowMessage(Strings.Get("Update.SaveFailed"), InfoBarSeverity.Warning);
         };
 
-        page.Children.Add(Section(Strings.Get("Dashboard.VersionAndUpdates"), Rows(
+        page.Children.Add(Section(Strings.Get("Dashboard.VersionAndUpdates"), Cards(
             SettingRow("\uE7B8", Strings.Get("Dashboard.CurrentVersion"), "Windows x64", Mono(App.InstalledVersion.ToString(3), 14)),
             SettingRow("\uE895", Strings.Get("Update.Check"), release, updateAction),
             SettingRow("\uE896", Strings.Get("Dashboard.AutoCheckUpdates"), Strings.Get("Update.AutoDescription"), auto))));
 
         var mark = (PathIcon)((DataTemplate)Application.Current.Resources["DashboardGitHubIcon"]).LoadContent();
         var repository = new HyperlinkButton { Content = "Cirnouo/opssh", NavigateUri = ProjectUrl, Padding = new Thickness(0) };
-        page.Children.Add(Section(Strings.Get("Dashboard.Project"), Rows(
+        page.Children.Add(Section(Strings.Get("Dashboard.Project"), Cards(
             SettingRow("\uE77B", Strings.Get("Dashboard.Developer"), "", Ui.Text("Cirnouo")),
             SettingRow("\uE8F4", Strings.Get("Dashboard.License"), "", Ui.Text("Apache License 2.0")),
             SettingRow("", "GitHub", Strings.Get("Dashboard.GitHubDescription"), repository, symbol: mark))));

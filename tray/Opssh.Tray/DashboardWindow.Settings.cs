@@ -1,4 +1,5 @@
 using System.Globalization;
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -55,7 +56,7 @@ public sealed partial class DashboardWindow
             }
         };
 
-        page.Children.Add(Section(Strings.Get("Dashboard.Startup"), Rows(
+        page.Children.Add(Section(Strings.Get("Dashboard.Startup"), Cards(
             SettingRow("\uE7E8", Strings.Get("Dashboard.StartWithWindows"), loginStartupDescription, loginStartup),
             SettingRow("\uE916", Strings.Get("Dashboard.WaitForPassword"), Strings.Get("Dashboard.WaitForPasswordDescription"), waitForPassword))));
 
@@ -69,21 +70,21 @@ public sealed partial class DashboardWindow
         shellCommand.IsTextSelectionEnabled = true;
         AutomationProperties.SetName(shellCommand, Strings.Get("Settings.CommandAutomationName"));
         var code = new Border { Style = StyleFor("DashboardCodeStyle"), Child = shellCommand };
-        copyCommand = DashboardButton(Strings.Get("Dashboard.CopyCommand"), CopyShellCommand);
+        copyCommand = Ui.Button(Strings.Get("Dashboard.CopyCommand"), CopyShellCommand);
         AutomationProperties.SetName(copyCommand, Strings.Get("Dashboard.CopyCommand"));
         copyCommand.Content = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 7,
             Children = { Icon("\uE8C8", 14), new TextBlock { Text = Strings.Get("Dashboard.CopyCommand") } }
         };
-        page.Children.Add(Section(Strings.Get("Dashboard.SshIntegration"), Rows(
+        page.Children.Add(Section(Strings.Get("Dashboard.SshIntegration"), Cards(
             SettingRow("\uE8A4", Strings.Get("Dashboard.DefaultAgent"), Strings.Get("Dashboard.DefaultAgentDescription"), defaultAgent),
             SettingRow("\uE756", Strings.Get("Dashboard.PowerShell"), Strings.Get("Dashboard.PowerShellDescription"), copyCommand, code))));
 
         keyCacheEditor = BuildCacheEditor("\uE192", "Settings.KeyCache", "Settings.KeyCacheDescription", DefaultKeySeconds, isKey: true);
         approvalCacheEditor = BuildCacheEditor("\uE73E", "Settings.ApprovalCache", "Settings.ApprovalCacheDescription",
             DefaultApprovalSeconds, isKey: false);
-        page.Children.Add(Section(Strings.Get("Settings.CachePolicies"), keyCacheEditor.Card, approvalCacheEditor.Card));
+        page.Children.Add(Section(Strings.Get("Settings.CachePolicies"), Cards(keyCacheEditor.Expander, approvalCacheEditor.Expander)));
 
         if (actions.Diagnostics is { } diagnostics)
             page.Children.Add(BuildDiagnosticSettings(preferences, diagnostics));
@@ -106,7 +107,7 @@ public sealed partial class DashboardWindow
         }
         language.SelectionChanged += (sender, args) => ChangeAppearance((ComboBox)sender, args);
         theme.SelectionChanged += (sender, args) => ChangeAppearance((ComboBox)sender, args);
-        page.Children.Add(Section(Strings.Get("Dashboard.Preferences"), Rows(
+        page.Children.Add(Section(Strings.Get("Dashboard.Preferences"), Cards(
             SettingRow("\uE790", Strings.Get("Settings.Theme"), Strings.Get("Settings.ThemeDescription"), theme),
             SettingRow("\uE8C1", Strings.Get("Settings.Language"), Strings.Get("Settings.LanguageDescription"), language))));
         return page;
@@ -224,7 +225,7 @@ public sealed partial class DashboardWindow
         AutomationProperties.SetLiveSetting(validation, AutomationLiveSetting.Polite);
         var hint = Quiet("", 12);
 
-        var controls = new Grid { ColumnSpacing = 12, RowSpacing = 8, Margin = new Thickness(26, 0, 0, 0) };
+        var controls = new Grid { ColumnSpacing = 12, RowSpacing = 8 };
         controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -241,30 +242,24 @@ public sealed partial class DashboardWindow
             Grid.SetRow(duration, stacked ? 1 : 0);
         };
 
-        var heading = new Grid { ColumnSpacing = 10 };
-        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
-        heading.ColumnDefinitions.Add(new ColumnDefinition());
-        var icon = Icon(glyph);
-        icon.VerticalAlignment = VerticalAlignment.Top;
-        icon.Margin = new Thickness(0, 2, 0, 0);
-        heading.Children.Add(icon);
-        var label = new StackPanel
+        var contents = new StackPanel { Spacing = 6, Children = { controls, validation, hint } };
+        var expander = new SettingsExpander
         {
-            Spacing = 2,
-            Children = { Heading(title, 14, AutomationHeadingLevel.Level3), Quiet(Strings.Get(descriptionKey), 12) }
+            Header = title,
+            HeaderIcon = Icon(glyph),
+            Description = Strings.Get(descriptionKey),
+            IsExpanded = true,
+            Items =
+            {
+                new SettingsCard
+                {
+                    Content = contents,
+                    ContentAlignment = ContentAlignment.Left,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch
+                }
+            }
         };
-        Grid.SetColumn(label, 1);
-        heading.Children.Add(label);
-        hint.Margin = validation.Margin = new Thickness(26, 0, 0, 0);
-        var divider = Divider();
-        divider.Margin = new Thickness(26, 0, 0, 0);
-        var contents = new StackPanel
-        {
-            Spacing = 6,
-            Margin = new Thickness(13),
-            Children = { heading, divider, controls, validation, hint }
-        };
-        var editor = new CacheEditor(Card(contents), mode, duration, hint, validation, defaults, isKey);
+        var editor = new CacheEditor(expander, mode, duration, hint, validation, defaults, isKey);
         SetCacheEditor(editor, new CachePolicy("fixed", defaults));
         mode.SelectionChanged += async (_, _) => await CommitCacheAsync(editor, modeChanged: true);
         duration.KeyDown += async (_, args) =>
@@ -357,7 +352,7 @@ public sealed partial class DashboardWindow
         }
     }
 
-    private sealed record CacheEditor(Border Card, ComboBox Mode, TextBox Duration, TextBlock Hint,
+    private sealed record CacheEditor(SettingsExpander Expander, ComboBox Mode, TextBox Duration, TextBlock Hint,
         TextBlock Validation, int DefaultDuration, bool IsKey)
     {
         internal int LastDuration { get; set; } = DefaultDuration;

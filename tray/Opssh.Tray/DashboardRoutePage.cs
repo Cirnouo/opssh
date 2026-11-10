@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -6,6 +7,12 @@ namespace Opssh.Tray;
 public sealed partial class DashboardRoutePage : Page
 {
     public DashboardRoutePage() => InitializeComponent();
+
+    protected override void OnNavigatedTo(NavigationEventArgs args)
+    {
+        base.OnNavigatedTo(args);
+        Content = args.Parameter as UIElement;
+    }
 
     protected override void OnNavigatedFrom(NavigationEventArgs args)
     {

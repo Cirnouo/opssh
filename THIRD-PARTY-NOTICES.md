@@ -3,7 +3,7 @@
 opssh's first-party source is licensed under [Apache-2.0](LICENSE). The Windows distributions include third-party code and runtime files under their own terms. The pinned versions and accompanying notice files are listed in the [distribution manifest](third_party/licenses/manifest.json).
 
 - The Windows Go core includes the Go standard library and the modules selected by the production Windows build, including the 1Password Go SDK, its embedded core and its Go dependencies. The individual upstream licenses and notices are under [Go licenses and notices](third_party/licenses/go/). Use of 1Password services has separate [API and SDK terms](https://1password.com/legal/api-sdk-terms-of-service).
-- The self-contained tray includes the .NET runtime, the Windows App SDK and the Windows SDK and WebView2 projections. Their pinned package notices are under [NuGet licenses and notices](third_party/licenses/nuget/). The .NET `Microsoft.NETCore.App.Host.win-x64` 10.0.14 apphost has the same license and notice bytes as the pinned x64 .NET runtime package. The Windows SDK reference package points to the Microsoft SDK license provided there.
+- The self-contained tray includes the .NET runtime, the Windows App SDK and the Windows SDK and WebView2 projections, and Windows Community Toolkit SettingsControls and its dependencies. Their pinned package notices are under [NuGet licenses and notices](third_party/licenses/nuget/). The .NET `Microsoft.NETCore.App.Host.win-x64` 10.0.14 apphost has the same license and notice bytes as the pinned x64 .NET runtime package. The Windows SDK reference package points to the Microsoft SDK license provided there.
 - The installers use WiX 7.0.1. The MSI uses an unmodified utility custom action and the EXE uses the unmodified Burn engine and standard bootstrapper. WiX code is provided under its [Microsoft Reciprocal License](third_party/licenses/wix/LICENSE.TXT). The corresponding [WiX 7.0.1 source archive](https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip) includes the installer code. The installer legal payload includes the same pinned source archive.
 
 Before shipping a change to a toolchain or dependency, compare the actual Windows build and installer inputs with the manifest. Update the applicable version entries and upstream notice files together. Preserve upstream wording and source bytes.
@@ -42,7 +42,7 @@ SOFTWARE.
 
 ## WSL Settings navigation shell
 
-The tray adapts the [WSL Settings ShellPage](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml) and its [pane toggle behavior](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml.cs) under the [MIT License](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/LICENSE).
+The tray adapts the [WSL Settings ShellPage](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml), its [page layout resources](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Styles/CommonStyles.xaml), and its [pane toggle behavior](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml.cs) under the [MIT License](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/LICENSE).
 
 ```text
 MIT License

@@ -20,7 +20,6 @@ public sealed partial class DashboardWindow
     private TextBlock vaultCount = null!;
     private TextBlock vaultHint = null!;
     private StackPanel vaultRows = null!;
-    private Border vaultCard = null!;
     private Button switchAccount = null!;
     private Button logout = null!;
     private Button reloadVaults = null!;
@@ -32,8 +31,8 @@ public sealed partial class DashboardWindow
     {
         var page = Page(Strings.Get("Dashboard.AccountTitle"), Strings.Get("Dashboard.AccountDescription"));
         accountName = Quiet("", 12);
-        switchAccount = DashboardButton(Strings.Get("Dashboard.SwitchAccount"), async () => await PickAccountAsync());
-        logout = DashboardButton(Strings.Get("Dashboard.Logout"), async () => await LogoutAsync());
+        switchAccount = Ui.Button(Strings.Get("Dashboard.SwitchAccount"), async () => await PickAccountAsync());
+        logout = Ui.Button(Strings.Get("Dashboard.Logout"), async () => await LogoutAsync());
         AutomationProperties.SetName(logout, Strings.Get("Dashboard.LogoutName"));
         var accountActions = new StackPanel
         {
@@ -55,15 +54,13 @@ public sealed partial class DashboardWindow
         AutomationProperties.SetHelpText(providerTime, Strings.Get("Dashboard.ProviderTime"));
         var request = new StackPanel { Spacing = 3, Children = { provider, providerTime }, MaxWidth = 210 };
         var selected = SettingRow("\uE77B", Strings.Get("Dashboard.SelectedAccount"), accountName, accountActions);
-        selected.MinHeight = 61;
         var access = SettingRow("\uE72E", Strings.Get("Dashboard.DesktopAccess"), Strings.Get("Dashboard.DesktopAccessDescription"), request);
-        access.MinHeight = 62;
-        page.Children.Add(Rows(selected, access));
+        page.Children.Add(Cards(selected, access));
         page.Children.Insert(1, BuildPickerNotice());
 
         vaultCount = Quiet("", 12);
         vaultCount.VerticalAlignment = VerticalAlignment.Center;
-        reloadVaults = DashboardButton(Strings.Get("Dashboard.ReloadVaults"), async () => await send("reload-vaults", null, false));
+        reloadVaults = Ui.Button(Strings.Get("Dashboard.ReloadVaults"), async () => await send("reload-vaults", null, false));
         var vaultActions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -71,8 +68,7 @@ public sealed partial class DashboardWindow
             Children = { vaultCount, reloadVaults }
         };
         var vaultTitle = Heading(Strings.Get("Dashboard.AllowedVaults"), 16, AutomationHeadingLevel.Level2);
-        vaultRows = new StackPanel();
-        vaultCard = Card(vaultRows);
+        vaultRows = Cards();
         vaultHint = Quiet("");
         goToKeys = new HyperlinkButton { Content = Strings.Get("Dashboard.GoToKeys"), Padding = new Thickness(0) };
         goToKeys.Click += (_, _) =>
@@ -87,7 +83,7 @@ public sealed partial class DashboardWindow
             {
                 SettingsLayout.Row(vaultTitle, vaultActions),
                 Quiet(Strings.Get("Dashboard.VaultScopeDescription")),
-                vaultCard, goToKeys, vaultHint
+                vaultRows, goToKeys, vaultHint
             }
         });
         return page;
@@ -174,8 +170,6 @@ public sealed partial class DashboardWindow
                     await SetVaultAsync(vault.Id, check.IsOn);
             };
             vaultChecks.Add(vault.Id, check);
-            if (vaultRows.Children.Count > 0)
-                vaultRows.Children.Add(Divider());
             var status = Quiet("", 12);
             AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
             var retry = new HyperlinkButton { Content = Strings.Get("Dashboard.Retry"), Padding = new Thickness(0) };
@@ -188,10 +182,9 @@ public sealed partial class DashboardWindow
             var row = SettingRow("\uE8B7", label, "", check, detail);
             detail.Visibility = Visibility.Collapsed;
             vaultFeedback.Add(vault.Id, (detail, status, retry));
-            row.Padding = new Thickness(13, 5, 13, 5);
             vaultRows.Children.Add(row);
         }
-        vaultCard.Visibility = vaults.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        vaultRows.Visibility = vaults.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void UpdateVaultChoices(CoreState state)
@@ -275,8 +268,8 @@ public sealed partial class DashboardWindow
     private StackPanel BuildPickerNotice()
     {
         var notice = new InfoBar { IsOpen = true, IsClosable = false };
-        var retry = DashboardButton(Strings.Get("Dashboard.Retry"), async () => await PickAccountAsync(pickerForAuthorization));
-        retry.Style = StyleFor("DashboardAccentButtonStyle");
+        var retry = Ui.Button(Strings.Get("Dashboard.Retry"), async () => await PickAccountAsync(pickerForAuthorization));
+        retry.Style = StyleFor("AccentButtonStyle");
         retry.HorizontalAlignment = HorizontalAlignment.Left;
         var host = new StackPanel { Spacing = 8, Visibility = Visibility.Collapsed, Children = { notice, retry } };
         pickerNotices.Add((host, notice, retry));

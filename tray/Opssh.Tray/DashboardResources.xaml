@@ -3,12 +3,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-            <SolidColorBrush x:Key="DashboardButtonBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="#D6D6D6" />
-            <SolidColorBrush x:Key="DashboardCardBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="DashboardSubtleBrush" Color="#F4F4F4" />
-            <SolidColorBrush x:Key="DashboardLineBrush" Color="#E2E2E2" />
-            <SolidColorBrush x:Key="DashboardQuietBrush" Color="#555555" />
             <SolidColorBrush x:Key="DashboardAccentBrush" Color="#005FB8" />
             <SolidColorBrush x:Key="DashboardOnAccentBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="DashboardGitHubBrush" Color="#000000" />
@@ -17,12 +11,6 @@
             <SolidColorBrush x:Key="DashboardErrorBrush" Color="#AD2929" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Default">
-            <SolidColorBrush x:Key="DashboardButtonBrush" Color="#333333" />
-            <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="#494949" />
-            <SolidColorBrush x:Key="DashboardCardBrush" Color="#2D2D2D" />
-            <SolidColorBrush x:Key="DashboardSubtleBrush" Color="#242424" />
-            <SolidColorBrush x:Key="DashboardLineBrush" Color="#3C3C3C" />
-            <SolidColorBrush x:Key="DashboardQuietBrush" Color="#C7C7C7" />
             <SolidColorBrush x:Key="DashboardAccentBrush" Color="#60CDFF" />
             <SolidColorBrush x:Key="DashboardOnAccentBrush" Color="#082A3B" />
             <SolidColorBrush x:Key="DashboardGitHubBrush" Color="#FFFFFF" />
@@ -31,12 +19,6 @@
             <SolidColorBrush x:Key="DashboardErrorBrush" Color="#FF9D9D" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
-            <SolidColorBrush x:Key="DashboardButtonBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="DashboardCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="DashboardSubtleBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="DashboardLineBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="DashboardQuietBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="DashboardAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="DashboardOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="DashboardGitHubBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -45,19 +27,27 @@
             <SolidColorBrush x:Key="DashboardErrorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
+    <!-- WSL Settings page resources. See THIRD-PARTY-NOTICES.md. -->
+    <Thickness x:Key="ContentPageMargin">16,0,24,8</Thickness>
+    <Style x:Key="PageHeaderTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="1,28,0,4" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
+    </Style>
     <Style x:Key="DashboardCardStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource DashboardCardBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DashboardLineBrush}" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
     </Style>
     <Style x:Key="DashboardDividerStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource DashboardLineBrush}" />
+        <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="Height" Value="1" />
     </Style>
     <Style x:Key="DashboardCodeStyle" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource DashboardSubtleBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DashboardLineBrush}" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="Padding" Value="12,9" />
@@ -74,28 +64,14 @@
             HorizontalAlignment="Center" VerticalAlignment="Center"
             Data="M2,3 L3,2 8,7 3,12 2,11 6,7 Z M8,11 H14 V12.5 H8 Z" />
     </DataTemplate>
-    <Style x:Key="DashboardButtonStyle" TargetType="Button">
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="Background" Value="{ThemeResource DashboardButtonBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DashboardButtonEdgeBrush}" />
-    </Style>
-    <Style x:Key="DashboardAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
-        <Setter Property="Background" Value="{ThemeResource DashboardAccentBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource DashboardOnAccentBrush}" />
-    </Style>
-    <Style x:Key="DashboardDialogStyle" TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
-        <Setter Property="Background" Value="{ThemeResource DashboardCardBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource DashboardButtonEdgeBrush}" />
-        <Setter Property="CornerRadius" Value="8" />
-    </Style>
     <Style x:Key="DashboardTableHeaderStyle" TargetType="Grid">
-        <Setter Property="Background" Value="{ThemeResource DashboardSubtleBrush}" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="DashboardSuccessTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{ThemeResource DashboardSuccessBrush}" />
     </Style>
     <Style x:Key="DashboardQuietTextStyle" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{ThemeResource DashboardQuietBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
     <Style x:Key="DashboardErrorTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{ThemeResource DashboardErrorBrush}" />
