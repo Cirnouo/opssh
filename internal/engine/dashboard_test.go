@@ -170,7 +170,7 @@ func TestSelectiveGrantRevocationMatchesOnlyItsIssuance(t *testing.T) {
 	var prompts atomic.Int32
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		prompts.Add(1)
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 	client := process(21, 10)
@@ -194,7 +194,7 @@ func TestSelectiveGrantRevocationMatchesOnlyItsIssuance(t *testing.T) {
 			revoked = grant
 		}
 	}
-	if revoked.ID == "" || revoked.Name != "client.exe" || revoked.Scope != "client" || !revoked.ExpiresAt.IsZero() {
+	if revoked.ID == "" || revoked.Name != "client.exe" || revoked.Scope != "app" || !revoked.ExpiresAt.IsZero() {
 		t.Fatalf("unexpected grant display: %+v", revoked)
 	}
 	if err := e.RevokeGrant(other.ID, revoked.ID); !errors.Is(err, engine.ErrUnknownGrant) {
@@ -244,7 +244,7 @@ func TestRevokingGrantCancelsPendingSignatureWithThatGrant(t *testing.T) {
 		return nil, ctx.Err()
 	})
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 	client := peer(process(42, 17))
@@ -296,7 +296,7 @@ func TestGrantListingRetiresExitedProcessAndExpiredApproval(t *testing.T) {
 	opts.ApprovalCache = engine.Policy{Mode: "fixed", TTL: time.Minute}
 	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 
@@ -340,7 +340,7 @@ func TestIndexSuspensionRetainsStateOnlyForUnchangedIdentity(t *testing.T) {
 	var prompts atomic.Int32
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		prompts.Add(1)
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 	client := peer(process(42, 17))
@@ -387,11 +387,12 @@ func TestSignObservationIdentifiesTheSelectedHost(t *testing.T) {
 	key, secret, _ := edFixture(t)
 	host := process(24, 11)
 	client := peer(process(25, 12), host)
+	client.ApprovalApp = func(context.Context) (int, bool) { return 1, true }
 	opts := engine.DefaultOptions()
 	opts.Keys = []engine.Key{key}
 	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-		return engine.Approval{Scope: "host", Candidate: 1}, nil
+		return engine.Approval{Scope: "app", Candidate: 1}, nil
 	}
 	e := makeEngine(t, opts)
 	for range 2 {

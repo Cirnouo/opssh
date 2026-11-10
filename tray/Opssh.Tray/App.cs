@@ -12,7 +12,6 @@ public sealed partial class App : Application
 {
     internal static Version InstalledVersion { get; } = typeof(App).Assembly.GetName().Version!;
 
-    private readonly Queue<Approval> waiting = new();
     private DispatcherQueue dispatcher = null!;
     private DispatcherQueueTimer? statusTimer;
     private DashboardWindow? settings;
@@ -38,7 +37,8 @@ public sealed partial class App : Application
     private int stateRevision;
     private bool polling;
     private CoreSession? waitingForPoll;
-    private ApprovalWindow? prompt;
+    private AppNotifications notifications = null!;
+    private SigningApprovalQueue signingApprovals = null!;
     private bool transitioning;
     private bool quitting;
 
@@ -59,7 +59,19 @@ public sealed partial class App : Application
         DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
         preferences = UiPreferences.Load();
-        offeredStartupNotification = FromStartupNotification();
+        offeredStartupNotification = FromAppNotification();
+        notifications = new AppNotifications((kind, nonce, choice) =>
+            dispatcher.TryEnqueue(() =>
+            {
+                if (quitting)
+                    return;
+                if (kind == AppNotifications.Signing)
+                    signingApprovals.Invoke(nonce, choice);
+                else
+                    startupNotification.Invoke(nonce, choice);
+            }));
+        startupNotification = new StartupNotification(notifications, ActivateStartupPrompt);
+        signingApprovals = new SigningApprovalQueue(new SigningNotification(notifications).ShowAsync);
         Strings.Use(preferences.ResolveLanguage());
         icon = new TrayIcon();
         icon.OpenRequested += OpenSettings;
@@ -226,16 +238,12 @@ public sealed partial class App : Application
         var previous = preferences;
         preferences = next;
         if (next.Theme != previous.Theme)
-        {
             settings?.ApplyTheme(next.Theme);
-            prompt?.ApplyTheme(next.Theme);
-        }
         var language = next.ResolveLanguage();
         if (language != Strings.Language)
         {
             Strings.Use(language);
             icon.RefreshLanguage();
-            prompt?.ApplyLanguage();
             if (settings is { } current)
                 dispatcher.TryEnqueue(() => ReopenAppearance(current));
         }
@@ -352,10 +360,9 @@ public sealed partial class App : Application
             core = child;
             candidate = new CoreSession(child.Pipe);
             var current = candidate;
-            current.ApprovalRequested += approval => dispatcher.TryEnqueue(() => QueueApproval(current, approval));
-            current.ApprovalEnded += id => dispatcher.TryEnqueue(() => EndApproval(current, id));
-            current.Disconnected += () => dispatcher.TryEnqueue(() => _ = CoreDisconnectedAsync(current));
+            ObserveCore(current);
             session = current;
+            signingApprovals.SetOwner(current);
             var greeting = await current.StartAsync(timeout.Token);
             if (quitting || session != current)
                 return;
@@ -373,6 +380,7 @@ public sealed partial class App : Application
         {
             if (session == candidate)
             {
+                signingApprovals.SetOwner(null);
                 session = null;
                 candidate?.Dispose();
                 core = null;
@@ -585,7 +593,10 @@ public sealed partial class App : Application
 
     private async Task CoreDisconnectedAsync(CoreSession current)
     {
-        if (current != session || transitioning || quitting)
+        if (current != session)
+            return;
+        signingApprovals.SetOwner(null);
+        if (transitioning || quitting)
             return;
         transitioning = true;
         ShowMessage(null);
@@ -600,65 +611,11 @@ public sealed partial class App : Application
             SetAvailability(false, true, "App.Stopped");
     }
 
-    private void QueueApproval(CoreSession current, Approval approval)
+    private void ObserveCore(CoreSession current)
     {
-        if (current != session || quitting || !current.IsCurrentApproval(approval.Id))
-            return;
-        if (waiting.Count >= 64)
-        {
-            var valid = waiting.Where(item => current.IsCurrentApproval(item.Id)).ToArray();
-            waiting.Clear();
-            foreach (var item in valid)
-                waiting.Enqueue(item);
-        }
-        if (waiting.Count < 64)
-            waiting.Enqueue(approval);
-        ShowNextApproval(current);
-    }
-
-    private void EndApproval(CoreSession current, string id)
-    {
-        if (current != session)
-            return;
-        if (prompt?.Approval.Id == id)
-        {
-            prompt.Dismiss();
-            prompt = null;
-        }
-        ShowNextApproval(current);
-    }
-
-    private void ShowNextApproval(CoreSession current)
-    {
-        if (quitting || current != session || prompt is not null)
-            return;
-        while (waiting.TryDequeue(out var approval))
-        {
-            if (!current.IsCurrentApproval(approval.Id))
-                continue;
-            prompt = new ApprovalWindow(approval, (scope, index) => _ = DecideAsync(current, approval.Id, scope, index), preferences.Theme);
-            prompt.Activate();
-            return;
-        }
-    }
-
-    private async Task DecideAsync(CoreSession current, string id, string scope, int candidate)
-    {
-        if (current != session || prompt?.Approval.Id != id || quitting)
-            return;
-        prompt.Dismiss();
-        prompt = null;
-        try
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await current.DecideAsync(id, scope, candidate, timeout.Token);
-        }
-        catch (Exception e) when (IsControlFailure(e))
-        {
-            if (current == session && !quitting)
-                ShowMessage("Error.ApprovalClosed");
-        }
-        ShowNextApproval(current);
+        current.ApprovalRequested += approval => dispatcher.TryEnqueue(() => signingApprovals.Enqueue(current, approval));
+        current.ApprovalEnded += id => dispatcher.TryEnqueue(() => signingApprovals.End(current, id));
+        current.Disconnected += () => dispatcher.TryEnqueue(() => _ = CoreDisconnectedAsync(current));
     }
 
     private async Task StopCoreAsync()
@@ -673,9 +630,7 @@ public sealed partial class App : Application
         session = null;
         core = null;
         waitingForPoll = null;
-        prompt?.Dismiss();
-        prompt = null;
-        waiting.Clear();
+        var retireApprovals = signingApprovals.StopAsync();
 
         try
         {
@@ -709,6 +664,7 @@ public sealed partial class App : Application
             urgentComplete = null;
             current?.Dispose();
             child?.Dispose();
+            await retireApprovals;
         }
     }
 
@@ -717,11 +673,12 @@ public sealed partial class App : Application
         if (quitting)
             return;
         quitting = true;
+        signingApprovals.SetOwner(null);
         StopDiagnostics();
         updateCancellation?.Cancel();
         accountTransition?.Cancel();
+        var retireStartup = startupNotification.DismissAsync();
         CancelStartupWait();
-        startupNotification?.Dispose();
         releaseClient?.Dispose();
         icon.CanRestart = false;
         settings?.Close();
@@ -730,6 +687,8 @@ public sealed partial class App : Application
         while (transitioning)
             await Task.Delay(20);
         await StopCoreAsync();
+        await retireStartup;
+        notifications.Dispose();
         icon.Dispose();
         instance?.ReleaseMutex();
         instance?.Dispose();

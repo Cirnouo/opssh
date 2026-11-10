@@ -1,5 +1,5 @@
 {
-  "Keys.Description": "Discover keys, manage loaded private keys, and review process approvals.",
+  "Keys.Description": "Discover keys, manage loaded private keys, and review signing approvals.",
   "Keys.Discover": "Discover SSH keys",
   "Keys.CancelDiscovery": "Cancel discovery",
   "Keys.ScanVaults": "Scanning vaults",
@@ -37,11 +37,13 @@
   "Keys.Loaded": "Loaded",
   "Keys.LoadingNow": "Loading",
   "Keys.NotLoaded": "Not loaded",
-  "Keys.NoGrants": "This key has no process approvals.",
-  "Keys.LoadingGrants": "Loading process approvals…",
-  "Keys.Process": "Process name",
+  "Keys.NoGrants": "This key has no signing approvals.",
+  "Keys.LoadingGrants": "Loading signing approvals…",
+  "Keys.Process": "Application",
+  "Keys.AllApps": "All apps",
   "Keys.Pid": "PID",
   "Keys.Expires": "Expires (local)",
   "Keys.RevokeGrant": "Revoke approval",
+  "Keys.UntilAppExit": "Until the app exits",
   "Keys.UntilExit": "Until opssh exits"
 }

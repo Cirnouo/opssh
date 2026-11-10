@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
@@ -132,6 +134,8 @@ public sealed partial class App
         private int discoveryStep;
         private bool discoveryCanceled;
         private bool hasDiagnosticSamples;
+        private CancellationTokenSource? signingToastLifetime;
+        private Task? signingToastTask;
 
         internal DashboardFixture(string scenario, UiPreferences preferences, Action exit)
         {
@@ -163,9 +167,9 @@ public sealed partial class App
 
             if (!keyApprovalPreview)
                 grants.AddRange([
-                    new("workstation", SampleId(1), "warp.exe", 10432, "client", Now.AddMinutes(8)),
-                    new("workstation", SampleId(2), "WindowsTerminal.exe", 8420, "host", Now.AddMinutes(6)),
-                    new("build", SampleId(3), "Code.exe", 13108, "client", Now.AddMinutes(4))
+                    new("workstation", SampleId(1), "warp.exe", 10432, "app", Now.AddMinutes(8)),
+                    new("workstation", SampleId(2), "", 0, "all", Now.AddMinutes(6)),
+                    new("build", SampleId(3), "Code.exe", 13108, "app", Now.AddMinutes(4))
                 ]);
             activity = SampleActivity();
             state = state with
@@ -198,11 +202,14 @@ public sealed partial class App
                 () => Task.CompletedTask, preferences, ApplyAppearance, CheckUpdatesAsync,
                 enabled => { preferences = preferences with { AutoCheckUpdates = enabled }; return true; }, actions);
             window = next;
-            next.Closed += (_, _) =>
+            next.Closed += async (_, _) =>
             {
                 if (ReferenceEquals(window, next))
                 {
                     window = null!;
+                    signingToastLifetime?.Cancel();
+                    if (signingToastTask is not null)
+                        await signingToastTask;
                     exit();
                 }
             };
@@ -217,6 +224,38 @@ public sealed partial class App
                 next.RevealDiagnosticSection();
             if (scenario == "startup")
                 next.ShowFixtureStartupPrompt(state.AccountName);
+            if (scenario is "signing-toast" or "signing-toast-once" && signingToastTask is null)
+                signingToastTask = ShowSigningToastAsync(scenario == "signing-toast");
+        }
+
+        private async Task ShowSigningToastAsync(bool cacheAllowed)
+        {
+            if (Environment.ProcessPath is not { } path)
+                return;
+            using var process = Process.GetCurrentProcess();
+            var candidate = new ProcessIdentity((uint)process.Id, (ulong)process.StartTime.ToUniversalTime().ToFileTimeUtc(), path);
+            var approval = new Approval("fixture", "workstation", "SHA256:cM0jjnWCB44+awYSYFjkCBnY4i6KKUX4MbXjqZ2mFYI",
+                [candidate], DateTimeOffset.UtcNow.AddMinutes(1), cacheAllowed);
+            var prompt = new SigningPrompt(approval);
+            var dispatcher = DispatcherQueue.GetForCurrentThread();
+            var chosen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var lifetime = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            signingToastLifetime = lifetime;
+            using var notifications = new AppNotifications((kind, nonce, choice) =>
+                dispatcher.TryEnqueue(() =>
+                {
+                    if (kind == AppNotifications.Signing && !lifetime.IsCancellationRequested &&
+                        prompt.TryConsume(nonce, choice, DateTimeOffset.UtcNow))
+                        chosen.TrySetResult();
+                }));
+            try
+            {
+                await using var shown = await new SigningNotification(notifications).ShowAsync(prompt, lifetime.Token);
+                if (shown is not null)
+                    await chosen.Task.WaitAsync(lifetime.Token);
+            }
+            catch (OperationCanceledException) { }
+            finally { signingToastLifetime = null; }
         }
 
         private bool ApplyAppearance(string language, string theme)

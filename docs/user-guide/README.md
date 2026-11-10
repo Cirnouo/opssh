@@ -58,14 +58,16 @@ In **Settings → Startup**, **Wait for 1Password to start** shows a Windows not
 
 ## Approve an SSH signature
 
-Connect to a host that accepts one of the listed public keys with your usual `ssh` command. When opssh asks for approval, check the key fingerprint and requesting process. Use the process chain to identify an ancestor before approving it. SSH agent requests provide no verified remote destination.
+Connect to a host that accepts one of the listed public keys with your usual `ssh` command. Check the application, PID and key fingerprint in the opssh Windows notification. SSH agent requests provide no verified remote destination.
 
 | Choice | What you approve |
 | --- | --- |
+| **Allow all apps** | Reuse the displayed key for verified clients in the same Windows logon, within your approval cache policy. |
+| **Allow this app** | Reuse the displayed key for the running app and its verified descendants. If opssh shows the requester itself, reuse covers only that process instance. |
 | **Allow once** | The pending signature. |
-| **Allow this client** | Reuse for the same key and the same requesting process, within your approval cache policy. |
-| **Allow selected ancestor** | Reuse for the same key by the selected running process and its verified descendants, within your approval cache policy. |
 | **Deny** | Reject the pending signature. |
+
+Turn approval caching off to show only the request and deny options. You can revoke an all-apps approval by expanding that key in **SSH keys**. If Windows disables or rejects the notification, opssh refuses the request and records the outcome in Activity. A notification that you dismiss expires at the request deadline.
 
 If the approved request needs a private key, opssh fetches it from 1Password. Complete a separate authorization in the 1Password window if prompted. Closing the opssh Settings window leaves the tray and agent running. **Quit opssh** stops both.
 

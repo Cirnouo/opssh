@@ -21,8 +21,10 @@ type Grant struct {
 }
 
 type grantID struct {
-	scope    string
-	instance Instance
+	scope       string
+	instance    Instance
+	descendants bool
+	logon       [32]byte
 }
 
 type grant struct {
@@ -107,7 +109,7 @@ func (e *Engine) useGrantLocked(request signRequest, now time.Time) {
 	if current == nil {
 		var alive func() bool
 		var release func()
-		if request.peer.Retain != nil {
+		if request.grantID.scope == "app" && request.peer.Retain != nil {
 			var ok bool
 			alive, release, ok = request.peer.Retain(request.grantID.instance)
 			if !ok {

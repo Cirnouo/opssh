@@ -120,7 +120,7 @@
   "Dashboard.CacheFixedHint": "Time starts when the cache entry is created.",
   "Dashboard.CacheIdleHint": "Clear after the specified time without use.",
   "Dashboard.KeyCacheExitHint": "Clear when opssh exits. You can also clear it manually.",
-  "Dashboard.ApprovalCacheExitHint": "Keep while the approved process is active. Revoke at any time, or exit opssh to clear.",
+  "Dashboard.ApprovalCacheExitHint": "Keep until opssh exits. App approvals also end when the approved app exits.",
   "Dashboard.Preferences": "Preferences",
   "Dashboard.AboutDescription": "Sign with SSH keys stored in 1Password from your Windows SSH client.",
   "Dashboard.AutoCheckUpdates": "Automatically check for updates at startup",

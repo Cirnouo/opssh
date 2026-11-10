@@ -71,14 +71,30 @@ func TestUnrelatedAndReplayDecisionsCannotGrantNewRequest(t *testing.T) {
 	if err := Write(gui, Event("decision", req.ID, Decision{Scope: "once"})); err != nil {
 		t.Fatal(err)
 	}
-	if err := Write(gui, Event("decision", req2.ID, Decision{Scope: "host", Candidate: 1})); err != nil {
+	if err := Write(gui, Event("decision", req2.ID, Decision{Scope: "app", Candidate: 1})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Read(gui); err != nil {
 		t.Fatal(err)
 	}
-	if got := <-second; got.Scope != "host" || got.Candidate != 1 {
+	if got := <-second; got.Scope != "app" || got.Candidate != 1 {
 		t.Fatalf("decision: %+v", got)
+	}
+	for _, scope := range []string{"all", "unavailable"} {
+		out := prompt()
+		request, err := Read(gui)
+		if err != nil || request.Type != "approval" {
+			t.Fatalf("%v %v", request, err)
+		}
+		if err := Write(gui, Event("decision", request.ID, Decision{Scope: scope})); err != nil {
+			t.Fatal(err)
+		}
+		if end, err := Read(gui); err != nil || end.Type != "approval-ended" || end.ID != request.ID {
+			t.Fatalf("%v %v", end, err)
+		}
+		if got := <-out; got.Scope != scope || got.Candidate != 0 {
+			t.Fatalf("decision: %+v", got)
+		}
 	}
 }
 

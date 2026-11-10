@@ -85,9 +85,7 @@ public sealed partial class App
             child = await CoreProcess.StartAsync(attempt.Token, candidate: true);
             candidate = new CoreSession(child.Pipe);
             var promoted = candidate;
-            promoted.ApprovalRequested += approval => dispatcher.TryEnqueue(() => QueueApproval(promoted, approval));
-            promoted.ApprovalEnded += id => dispatcher.TryEnqueue(() => EndApproval(promoted, id));
-            promoted.Disconnected += () => dispatcher.TryEnqueue(() => _ = CoreDisconnectedAsync(promoted));
+            ObserveCore(promoted);
             var ready = await candidate.StartAsync(attempt.Token);
             if (hello is not { } currentHello || ready != currentHello)
                 return feedback;
@@ -118,9 +116,7 @@ public sealed partial class App
             state = current;
             locked = current.Locked;
             defaultAgentActive = current.DefaultAgent;
-            waiting.Clear();
-            prompt?.Dismiss();
-            prompt = null;
+            signingApprovals.SetOwner(promoted);
             candidate = null;
             child = null;
             mayBePaused = false;

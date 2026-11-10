@@ -150,11 +150,12 @@ func (a *application) approve(ctx context.Context, prompt engine.Prompt) (engine
 		NameHint     string           `json:"nameHint,omitempty"`
 		Fingerprint  string           `json:"fingerprint"`
 		Chain        []processDisplay `json:"chain"`
+		AppCandidate int              `json:"appCandidate"`
 		Deadline     time.Time        `json:"deadline"`
 		CacheAllowed bool             `json:"cacheAllowed"`
 	}{
 		Name: prompt.Key.Name, Fingerprint: fingerprint(prompt.Key.Public),
-		Chain: chain, Deadline: prompt.Deadline, CacheAllowed: prompt.CacheAllowed,
+		Chain: chain, AppCandidate: prompt.AppCandidate, Deadline: prompt.Deadline, CacheAllowed: prompt.CacheAllowed,
 	}
 	if body.Name == "" {
 		body.NameHint = prompt.Key.ItemID[:8]

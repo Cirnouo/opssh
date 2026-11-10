@@ -32,7 +32,7 @@ func (k *generatedKey) Load(context.Context, engine.Key) ([]byte, error) {
 	return bytes.Clone(k.data), nil
 }
 
-func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
+func TestWindowsOpenSSHListsAndSignsWithSameLogonApproval(t *testing.T) {
 	systemSSH := filepath.Join(os.Getenv("SystemRoot"), "System32", "OpenSSH")
 	client := filepath.Join(systemSSH, "ssh.exe")
 	sshAdd := filepath.Join(systemSSH, "ssh-add.exe")
@@ -64,12 +64,11 @@ func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
 	opts.Keys = []engine.Key{{ID: "test", Name: "Offline", Public: public.Marshal()}}
 	opts.Approve = func(_ context.Context, p engine.Prompt) (engine.Approval, error) {
 		promptCount.Add(1)
-		for i, entry := range p.Chain {
-			if i > 0 && entry.PID == uint32(os.Getpid()) {
-				return engine.Approval{Scope: "host", Candidate: i}, nil
-			}
+		if p.AppCandidate < 0 || p.AppCandidate >= len(p.Chain) {
+			t.Errorf("approval candidate %d is outside the verified chain", p.AppCandidate)
+			return engine.Approval{}, engine.ErrDenied
 		}
-		return engine.Approval{}, engine.ErrDenied
+		return engine.Approval{Scope: "all"}, nil
 	}
 	agent, err := engine.New(opts)
 	if err != nil {
@@ -166,6 +165,6 @@ func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
 		}
 	}
 	if prompts, loads := promptCount.Load(), store.loads.Load(); prompts != 1 || loads != 1 {
-		t.Fatalf("new ssh-keygen instance did not reuse host approval and loaded key: prompts=%d loads=%d", prompts, loads)
+		t.Fatalf("new ssh-keygen instance did not reuse same-logon approval and loaded key: prompts=%d loads=%d", prompts, loads)
 	}
 }

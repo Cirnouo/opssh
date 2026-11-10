@@ -285,10 +285,12 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 		attempt.Finish(entry)
 	}()
 	peer := engine.Peer{
-		Chain:     make([]engine.Process, 0, len(client.Chain)),
-		Alive:     func(p engine.Instance) bool { return client.Alive(p.PID, p.Created) },
-		Connected: h.conn.Connected,
-		Retain:    func(p engine.Instance) (func() bool, func(), bool) { return client.Retain(p.PID, p.Created) },
+		Chain:       make([]engine.Process, 0, len(client.Chain)),
+		Logon:       client.Logon,
+		Alive:       func(p engine.Instance) bool { return client.Alive(p.PID, p.Created) },
+		Connected:   h.conn.Connected,
+		ApprovalApp: client.ApprovalApp,
+		Retain:      func(p engine.Instance) (func() bool, func(), bool) { return client.Retain(p.PID, p.Created) },
 	}
 	for _, p := range client.Chain {
 		peer.Chain = append(peer.Chain, engine.Process{Instance: engine.Instance{PID: p.PID, Created: p.Created}, Path: p.Path})

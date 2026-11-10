@@ -18,6 +18,7 @@
   "Activity.Denied": "已拒绝",
   "Activity.Canceled": "已取消",
   "Activity.Timeout": "已超时",
+  "Activity.Unavailable": "授权通知不可用",
   "Activity.Failed": "失败",
   "Activity.ConfirmClear": "清除活动？",
   "Activity.ConfirmDescription": "清除列表中的 SSH 请求记录。",

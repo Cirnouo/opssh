@@ -88,7 +88,7 @@ func (r *Ring) Finish(attempt Attempt, result string) {
 		return
 	}
 	switch result {
-	case "published", "denied", "timeout", "canceled", "failed":
+	case "published", "denied", "unavailable", "timeout", "canceled", "failed":
 	default:
 		return
 	}

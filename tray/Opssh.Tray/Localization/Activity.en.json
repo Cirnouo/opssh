@@ -18,6 +18,7 @@
   "Activity.Denied": "Denied",
   "Activity.Canceled": "Canceled",
   "Activity.Timeout": "Timed out",
+  "Activity.Unavailable": "Approval notification unavailable",
   "Activity.Failed": "Failed",
   "Activity.ConfirmClear": "Clear activity?",
   "Activity.ConfirmDescription": "Clear the SSH requests in this list.",

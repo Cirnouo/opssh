@@ -7,7 +7,7 @@ public sealed partial class App
 {
     private readonly DefaultAgent defaultAgent = DefaultAgent.ForCurrentUser();
     private CancellationTokenSource? startupWait;
-    private StartupNotification? startupNotification;
+    private StartupNotification startupNotification = null!;
     private (CoreSession Session, string Action)? startupPrompt;
     private bool offeredStartupNotification;
     private long startupIntentRevision;
@@ -15,7 +15,7 @@ public sealed partial class App
     private bool defaultAgentDesired;
     private bool changingDefaultAgent;
 
-    private static bool FromStartupNotification()
+    private static bool FromAppNotification()
     {
         try { return AppInstance.GetCurrent().GetActivatedEventArgs()?.Kind == ExtendedActivationKind.AppNotification; }
         catch (COMException) { return false; }
@@ -106,7 +106,7 @@ public sealed partial class App
         wait?.Cancel();
         startupPrompt = null;
         startupIntentRevision++;
-        startupNotification?.Dismiss();
+        startupNotification.Dismiss();
     }
 
     private async Task WaitForProviderAsync(CoreSession current, CancellationTokenSource wait)
@@ -119,7 +119,6 @@ public sealed partial class App
             offeredStartupNotification = true;
             var action = Guid.NewGuid().ToString("N");
             startupPrompt = (current, action);
-            startupNotification ??= new StartupNotification(value => dispatcher.TryEnqueue(() => ActivateStartupPrompt(value)));
             if (!startupNotification.Show("opssh", Strings.Get("Startup.ChooseMessage"),
                 Strings.Get("Startup.Choose"), Strings.Get("Startup.Later"), action))
             {

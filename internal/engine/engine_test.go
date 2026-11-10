@@ -192,7 +192,7 @@ func TestHostApprovalRequiresTheLiveOriginalAncestor(t *testing.T) {
 	var prompts atomic.Int32
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		if prompts.Add(1) == 1 {
-			return engine.Approval{Scope: "host", Candidate: 1}, nil
+			return engine.Approval{Scope: "app", Candidate: 1}, nil
 		}
 		return engine.Approval{Scope: "deny"}, nil
 	}
@@ -204,7 +204,9 @@ func TestHostApprovalRequiresTheLiveOriginalAncestor(t *testing.T) {
 			return public.Verify(data, signature)
 		})
 	}
-	if err := sign(peer(process(21, 11), host)); err != nil {
+	client := peer(process(21, 11), host)
+	client.ApprovalApp = func(context.Context) (int, bool) { return 1, true }
+	if err := sign(client); err != nil {
 		t.Fatal(err)
 	}
 	if err := sign(peer(process(22, 12), host)); err != nil {
@@ -233,7 +235,7 @@ func TestFreshFixedApprovalExpiresDuringLoad(t *testing.T) {
 	opts.Keys = []engine.Key{key}
 	opts.ApprovalCache = engine.Policy{Mode: "fixed", TTL: time.Second}
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) {
 		elapsed.Store(int64(2 * time.Second))
@@ -250,26 +252,31 @@ func TestFreshFixedApprovalExpiresDuringLoad(t *testing.T) {
 }
 
 func TestFailedPublicationDoesNotCommitApproval(t *testing.T) {
-	key, secret, _ := edFixture(t)
-	opts := engine.DefaultOptions()
-	opts.Keys = []engine.Key{key}
-	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
-	var prompts atomic.Int32
-	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-		if prompts.Add(1) == 1 {
-			return engine.Approval{Scope: "client"}, nil
-		}
-		return engine.Approval{Scope: "deny"}, nil
-	}
-	e := makeEngine(t, opts)
-	p := peer(process(1, 1))
-	data := []byte("sign me")
-	err := e.Sign(t.Context(), p, key.Public, data, 0, func(*ssh.Signature) error { return errors.New("connection gone") })
-	if !errors.Is(err, engine.ErrPublish) {
-		t.Fatalf("got %v", err)
-	}
-	if err := e.Sign(t.Context(), p, key.Public, data, 0, accept); !errors.Is(err, engine.ErrDenied) {
-		t.Fatalf("failed publication seeded an approval: %v", err)
+	for _, scope := range []string{"app", "all"} {
+		t.Run(scope, func(t *testing.T) {
+			key, secret, _ := edFixture(t)
+			opts := engine.DefaultOptions()
+			opts.Keys = []engine.Key{key}
+			opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
+			var prompts atomic.Int32
+			opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
+				if prompts.Add(1) == 1 {
+					return engine.Approval{Scope: scope}, nil
+				}
+				return engine.Approval{Scope: "deny"}, nil
+			}
+			e := makeEngine(t, opts)
+			p := peer(process(1, 1))
+			p.Logon = [32]byte{1}
+			data := []byte("sign me")
+			err := e.Sign(t.Context(), p, key.Public, data, 0, func(*ssh.Signature) error { return errors.New("connection gone") })
+			if !errors.Is(err, engine.ErrPublish) {
+				t.Fatalf("got %v", err)
+			}
+			if err := e.Sign(t.Context(), p, key.Public, data, 0, accept); !errors.Is(err, engine.ErrDenied) {
+				t.Fatalf("failed publication seeded an approval: %v", err)
+			}
+		})
 	}
 }
 
@@ -287,7 +294,7 @@ func TestCacheExpiryAndInvalidationStayIndependent(t *testing.T) {
 	})
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		prompts.Add(1)
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 	sign := func(wantLoads, wantPrompts int32) {
@@ -362,7 +369,7 @@ func TestRevokeRetiresPendingApproval(t *testing.T) {
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		close(started)
 		<-returnApproval
-		return engine.Approval{Scope: "client"}, nil
+		return engine.Approval{Scope: "app"}, nil
 	}
 	e := makeEngine(t, opts)
 	result := make(chan error, 1)
@@ -472,7 +479,7 @@ func TestSignRechecksConnectionAfterLoad(t *testing.T) {
 	})
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		if prompts.Add(1) == 1 {
-			return engine.Approval{Scope: "client"}, nil
+			return engine.Approval{Scope: "app"}, nil
 		}
 		return engine.Approval{Scope: "deny"}, nil
 	}
@@ -501,7 +508,7 @@ func TestRevocationWaitsForPublication(t *testing.T) {
 	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		if prompts.Add(1) == 1 {
-			return engine.Approval{Scope: "client"}, nil
+			return engine.Approval{Scope: "app"}, nil
 		}
 		return engine.Approval{Scope: "deny"}, nil
 	}
@@ -559,7 +566,7 @@ func TestIdleApprovalOnlyRenewsOnSuccessfulPublication(t *testing.T) {
 	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
 	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
 		if prompts.Add(1) == 1 {
-			return engine.Approval{Scope: "client"}, nil
+			return engine.Approval{Scope: "app"}, nil
 		}
 		return engine.Approval{Scope: "deny"}, nil
 	}

@@ -16,6 +16,7 @@ func TestActivityResultClassifiesFinalSignOutcomes(t *testing.T) {
 	}{
 		{"published", nil, "published"},
 		{"denied", engine.ErrDenied, "denied"},
+		{"notification unavailable", engine.ErrUnavailable, "unavailable"},
 		{"approval timeout", engine.ErrApprovalTimeout, "timeout"},
 		{"provider timeout", engine.ErrLoadTimeout, "timeout"},
 		{"deadline", context.DeadlineExceeded, "timeout"},

@@ -1,5 +1,5 @@
 {
-  "Keys.Description": "发现密钥、管理预加载状态和进程授权。",
+  "Keys.Description": "发现密钥、管理预加载状态和签名授权。",
   "Keys.Discover": "发现 SSH 密钥",
   "Keys.CancelDiscovery": "取消发现",
   "Keys.ScanVaults": "正在扫描保险库",
@@ -21,7 +21,7 @@
   "Keys.Actions": "操作",
   "Keys.Expand": "展开",
   "Keys.GrantCount": "{0} 项",
-  "Keys.ExpandFor": "查看 {0} 的进程授权（{1} 项）",
+  "Keys.ExpandFor": "查看 {0} 的签名授权（{1} 项）",
   "Keys.Preload": "预加载私钥",
   "Keys.LoadFailed": "加载失败",
   "Keys.RetryPreload": "重试预加载",
@@ -37,11 +37,13 @@
   "Keys.Loaded": "已加载",
   "Keys.LoadingNow": "正在加载",
   "Keys.NotLoaded": "未加载",
-  "Keys.NoGrants": "此密钥暂无进程授权。",
-  "Keys.LoadingGrants": "正在读取进程授权…",
-  "Keys.Process": "进程名称",
+  "Keys.NoGrants": "此密钥暂无签名授权。",
+  "Keys.LoadingGrants": "正在读取签名授权…",
+  "Keys.Process": "应用",
+  "Keys.AllApps": "所有应用",
   "Keys.Pid": "PID",
   "Keys.Expires": "到期时间（本地）",
   "Keys.RevokeGrant": "撤销此授权",
+  "Keys.UntilAppExit": "直到应用退出",
   "Keys.UntilExit": "直到 opssh 退出"
 }
