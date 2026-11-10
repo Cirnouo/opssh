@@ -22,7 +22,7 @@ try {
         throw [OpsshReleaseFailure]::new('Admission requires a GitHub Actions stable tag push.')
     }
     $null = Get-OpsshReleaseVersion -Tag $Matches[1]
-    $noticeManifest = Join-Path (Split-Path -Parent $PSScriptRoot) 'licenses/manifest.json'
+    $noticeManifest = Join-Path (Split-Path -Parent $PSScriptRoot) 'third_party/licenses/manifest.json'
     Assert-OpsshReleaseNoticeReadiness -ManifestPath $noticeManifest
     $head = Read-GitObjectId 'HEAD^{commit}'
     $tagObject = Read-GitObjectId $env:GITHUB_REF
