@@ -13,6 +13,7 @@ import (
 	"opssh/internal/agentwire"
 	"opssh/internal/config"
 	"opssh/internal/control"
+	"opssh/internal/diagnostics"
 	"opssh/internal/engine"
 	"opssh/internal/winipc"
 )
@@ -111,7 +112,7 @@ func (s *sshEndpoint) start() error {
 	s.close, s.done = cancel, done
 	go func() {
 		defer close(done)
-		acceptSSH(ctx, listener, s.app.engine, s.app.activity)
+		acceptSSH(ctx, listener, s.app.engine, s.app.activity, &s.app.diagnostics)
 		if ctx.Err() == nil {
 			s.fail()
 		}
@@ -232,7 +233,7 @@ func launchHandles(args []string) (uintptr, uintptr, error) {
 	return uintptr(a), uintptr(b), nil
 }
 
-func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine, history *activity.Log) {
+func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine, history *activity.Log, events *diagnostics.Ring) {
 	stop := context.AfterFunc(ctx, func() { listener.Close() })
 	defer stop()
 	for {
@@ -244,7 +245,7 @@ func acceptSSH(ctx context.Context, listener *winipc.Listener, e *engine.Engine,
 			defer conn.Close()
 			closeOnCancel := context.AfterFunc(ctx, func() { conn.Close() })
 			defer closeOnCancel()
-			_ = agentwire.Serve(ctx, conn, sshHandler{conn: conn, engine: e, history: history})
+			_ = agentwire.Serve(ctx, conn, sshHandler{conn: conn, engine: e, history: history, events: events})
 		}()
 	}
 }
@@ -253,6 +254,7 @@ type sshHandler struct {
 	conn    *winipc.Conn
 	engine  *engine.Engine
 	history *activity.Log
+	events  *diagnostics.Ring
 }
 
 func (h sshHandler) List() []agentwire.Identity {
@@ -265,6 +267,7 @@ func (h sshHandler) List() []agentwire.Identity {
 }
 
 func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32, publish func(*ssh.Signature) error) (result error) {
+	diagnostic := h.events.Begin()
 	attempt := h.history.Begin()
 	client, err := h.conn.Peer()
 	if err != nil {
@@ -278,6 +281,7 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 	attempt.Capture(func() (activity.Source, bool) { return client.RetainRequester() })
 	defer func() {
 		entry.Result = activityResult(result)
+		h.events.Finish(diagnostic, entry.Result)
 		attempt.Finish(entry)
 	}()
 	peer := engine.Peer{

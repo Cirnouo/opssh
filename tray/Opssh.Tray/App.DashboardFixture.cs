@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
 
 namespace Opssh.Tray;
@@ -20,8 +22,13 @@ public sealed partial class App
         }
         string[] options = flag < 0 ? [] : commandLine[(flag + 1)..];
         var scenario = options.ElementAtOrDefault(0) ?? "ready";
-        var page = options.ElementAtOrDefault(1) ?? (scenario.StartsWith("default-agent-", StringComparison.Ordinal)
-            ? "settings" : scenario == "discover" ? "keys" : "account");
+        var page = options.ElementAtOrDefault(1) ?? (scenario switch
+        {
+            "cache" or "logs" => "settings",
+            "discover" => "keys",
+            _ when scenario.StartsWith("default-agent-", StringComparison.Ordinal) => "settings",
+            _ => "account"
+        });
         var theme = options.ElementAtOrDefault(2) is "light" or "dark" ? options[2] : "system";
         var language = options.ElementAtOrDefault(3) is "en" or "zh-Hans" ? options[3] : "system";
 
@@ -35,6 +42,7 @@ public sealed partial class App
     private sealed class DashboardFixture
     {
         private const string DedicatedPipe = @"\\.\pipe\opssh-agent-0123456789abcdef";
+        private const string DefaultPipe = @"\\.\pipe\openssh-ssh-agent";
         private static readonly DateTimeOffset Now = new(new DateTime(2026, 11, 10, 15, 20, 0, DateTimeKind.Local));
         private static readonly DesktopAccount[] Accounts =
         [
@@ -56,6 +64,7 @@ public sealed partial class App
         ];
 
         private readonly string scenario;
+        private readonly string defaultOutcome;
         private readonly Action exit;
         private readonly List<FixtureGrant> grants = [];
         private FixtureActivity[] activity = [];
@@ -70,12 +79,21 @@ public sealed partial class App
         private string? fixtureDiscovery;
         private int discoveryStep;
         private bool discoveryCanceled;
+        private bool hasDiagnosticSamples;
 
         internal DashboardFixture(string scenario, UiPreferences preferences, Action exit)
         {
             this.scenario = scenario;
+            const string restoreScenario = "default-agent-restore-";
+            defaultAgent = scenario.StartsWith(restoreScenario, StringComparison.Ordinal);
+            defaultOutcome = defaultAgent ? "default-agent-" + scenario[restoreScenario.Length..] : scenario;
             this.preferences = preferences;
             this.exit = exit;
+            hasDiagnosticSamples = scenario == "logs";
+            if (hasDiagnosticSamples)
+                this.preferences = preferences with { DiagnosticLogging = true };
+            if (scenario == "startup")
+                this.preferences = preferences with { WaitForPassword = true };
             var ready = scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs" ||
                 scenario.StartsWith("default-agent-", StringComparison.Ordinal);
             var account = ready || scenario is "new-account" or "no-access" or "startup" ? Accounts[1] : null;
@@ -83,6 +101,8 @@ public sealed partial class App
             state = new CoreState(DedicatedPipe, false, account?.Id ?? "", [], new CachePolicy("fixed", 300),
                 new CachePolicy("fixed", 600), "unknown", 0);
             SetAccount(account?.Id ?? "", account?.Label);
+            if (defaultAgent)
+                state = state with { Pipe = DefaultPipe, DefaultAgent = true };
             if (scenario is "no-access" or "startup")
                 state = state with { LastProvider = null, ProviderAt = null };
             if (!ready)
@@ -110,7 +130,16 @@ public sealed partial class App
                 () => loginStartup ? LoginStartupStatus.On : LoginStartupStatus.Off,
                 enabled => { loginStartup = enabled; return true; },
                 wait => { preferences = preferences with { WaitForPassword = wait }; return true; },
-                () => defaultAgent, SetDefaultAgentAsync, () => defaultAgent, DiscoveryControlAsync);
+                () => defaultAgent, SetDefaultAgentAsync, () => defaultAgent, DiscoveryControlAsync, new DiagnosticActions(
+                    (enabled, level) =>
+                    {
+                        preferences = preferences with { DiagnosticLogging = enabled, DiagnosticLevel = level };
+                        return true;
+                    },
+                    () => Task.FromResult<DiagnosticLogState?>(new(hasDiagnosticSamples
+                        ? [new("opssh.log", 384 * 1024), new("opssh.1.log", 1024 * 1024)] : [])),
+                    () => Task.FromResult(true),
+                    () => { hasDiagnosticSamples = false; return Task.FromResult(true); }));
             var next = new DashboardWindow(SendAsync, (command, body) => SendAsync(command, body, false),
                 () => Task.CompletedTask, preferences, ApplyAppearance, CheckUpdatesAsync,
                 enabled => { preferences = preferences with { AutoCheckUpdates = enabled }; return true; }, actions);
@@ -129,7 +158,19 @@ public sealed partial class App
             next.SelectPage(page);
             if (bounds is { } value)
                 next.AppWindow.MoveAndResize(value);
-            next.Activate();
+            // Keep captures behind the user's desktop windows, including after a language change.
+            const int windowBottom = 1;
+            const uint showWindow = 0x0040;
+            const uint noActivate = 0x0010;
+            const uint noMove = 0x0002;
+            const uint noSize = 0x0001;
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(next);
+            if (!SetWindowPos(hwnd, windowBottom, 0, 0, 0, 0, showWindow | noActivate | noMove | noSize))
+                throw new System.ComponentModel.Win32Exception();
+            if (scenario == "logs" && page == "settings")
+                next.RevealDiagnosticSection();
+            if (scenario == "startup")
+                next.ShowFixtureStartupPrompt(state.AccountName);
         }
 
         private bool ApplyAppearance(string language, string theme)
@@ -172,13 +213,19 @@ public sealed partial class App
             };
         }
 
-        private Task<string?> SwitchAccountAsync(string id, string label, CancellationToken token)
+        private async Task<string?> SwitchAccountAsync(string id, string label, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+            if (!await window.ConfirmFixtureAuthorizationAsync(label, state.Account.Length != 0))
+                return null;
             token.ThrowIfCancellationRequested();
             SetAccount(id, label);
             window.ShowState(state, resetSettings: false);
             window.SelectPage("account");
-            return Task.FromResult<string?>(null);
+            window.ShowMessage(Strings.Language == "zh-Hans"
+                ? "已连接账户并列出保险库。请选择允许发现的保险库。"
+                : "Account connected and vaults listed. Choose the vaults to allow.");
+            return null;
         }
 
         private void SetAccount(string id, string? name)
@@ -202,11 +249,11 @@ public sealed partial class App
         private async Task<string?> SetDefaultAgentAsync(bool enabled, Action<DefaultAgentStage> report, CancellationToken token)
         {
             await StepAsync(DefaultAgentStage.Checking);
-            var absent = scenario == "default-agent-service-absent";
+            var absent = defaultOutcome == "default-agent-service-absent";
             if (enabled && !await ChangeServiceAsync(DefaultAgentStage.StoppingOpenSsh, DefaultAgentStage.DisablingOpenSsh))
                 return "Startup.DefaultRecovery";
             await StepAsync(enabled ? DefaultAgentStage.ReservingPipe : DefaultAgentStage.ReleasingPipe);
-            if (scenario == "default-agent-pipe-failure")
+            if (defaultOutcome == "default-agent-pipe-failure")
             {
                 await StepAsync(DefaultAgentStage.RollingBackAfterFailure);
                 return "Startup.DefaultChangeFailed";
@@ -215,7 +262,7 @@ public sealed partial class App
                 return "Startup.DefaultRecovery";
             await StepAsync(DefaultAgentStage.Saving);
             defaultAgent = enabled;
-            state = state with { DefaultAgent = enabled };
+            state = state with { DefaultAgent = enabled, Pipe = enabled ? DefaultPipe : DedicatedPipe };
             window.ShowState(state, resetSettings: false);
             return null;
 
@@ -227,7 +274,7 @@ public sealed partial class App
                     return true;
                 }
                 await StepAsync(first);
-                if (scenario == "default-agent-service-pending")
+                if (defaultOutcome == "default-agent-service-pending")
                     return false;
                 await StepAsync(second);
                 return true;
@@ -370,7 +417,11 @@ public sealed partial class App
             if (command is "authorize-desktop" or "update-account-label")
             {
                 if (command == "authorize-desktop")
+                {
+                    if (!await window.ConfirmFixtureAuthorizationAsync(state.AccountName ?? "", false))
+                        return new Result(false, null, state, false, "canceled");
                     RecordProviderSuccess();
+                }
                 else
                     state = state with { AccountName = Field(data, "name") };
                 return new Result(true, null, state, false);
@@ -405,6 +456,10 @@ public sealed partial class App
             value.ValueKind == JsonValueKind.Object && value.TryGetProperty(field, out var property) ? property.GetString() : null;
 
         private static string SampleId(int index) => index.ToString("D26", CultureInfo.InvariantCulture);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
 
         private static FixtureActivity[] SampleActivity()
         {
@@ -442,5 +497,65 @@ public sealed partial class App
 
         private sealed record FixtureGrant(string KeyId, string Id, string Name, uint Pid, string Scope, DateTimeOffset ExpiresAt);
         private sealed record FixtureActivity(string Id, string App, uint Pid, string Key, string Result, DateTimeOffset Time, string Command);
+    }
+}
+
+public sealed partial class DashboardWindow
+{
+    internal async Task<bool> ConfirmFixtureAuthorizationAsync(string label, bool switching)
+    {
+        if (closed)
+            return false;
+        var chinese = Strings.Language == "zh-Hans";
+        var explanation = switching ? Strings.Get("Dashboard.SwitchAccountDescription") :
+            chinese ? "真实验证会在 1Password 窗口完成。" : "1Password handles the actual authorization.";
+        var dialog = new ContentDialog
+        {
+            Title = chinese ? "1Password 授权" : "1Password authorization",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children = { Ui.Text(chinese ? $"为 {label} 请求授权。" : $"Request access for {label}."), Quiet(explanation) }
+            },
+            PrimaryButtonText = chinese ? "模拟批准" : "Simulate approval",
+            CloseButtonText = Strings.Get("Dashboard.Cancel")
+        };
+        return await ShowDialogAsync(dialog) == ContentDialogResult.Primary;
+    }
+
+    internal void ShowFixtureStartupPrompt(string? label)
+    {
+        var chinese = Strings.Language == "zh-Hans";
+        var prompt = Card(new StackPanel());
+        prompt.Width = 312;
+        prompt.Margin = new Thickness(0, 0, 18, 18);
+        prompt.HorizontalAlignment = HorizontalAlignment.Right;
+        prompt.VerticalAlignment = VerticalAlignment.Bottom;
+        Canvas.SetZIndex(prompt, 20);
+        Grid.SetRowSpan(prompt, DashboardRoot.RowDefinitions.Count);
+        var choose = DashboardButton(chinese ? "选择账户" : "Choose account", async () =>
+        {
+            DashboardRoot.Children.Remove(prompt);
+            SelectPage("account");
+            await ShowAccountPickerAsync(authorizeCurrent: true);
+        });
+        choose.Style = StyleFor("DashboardAccentButtonStyle");
+        var later = DashboardButton(chinese ? "稍后" : "Later", () => DashboardRoot.Children.Remove(prompt));
+        var content = new StackPanel
+        {
+            Padding = new Thickness(14),
+            Spacing = 9,
+            Children =
+            {
+                Ui.Heading("opssh", 14),
+                Ui.Heading(chinese ? "1Password 已就绪" : "1Password is ready", 14),
+                Quiet(chinese ? "选择要授权的 1Password 账户。" : "Choose a 1Password account to authorize."),
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { choose, later } }
+            }
+        };
+        if (!string.IsNullOrEmpty(label))
+            content.Children.Insert(3, Quiet(chinese ? $"当前账户为 {label}。" : $"The current account is {label}."));
+        prompt.Child = content;
+        DashboardRoot.Children.Add(prompt);
     }
 }

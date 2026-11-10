@@ -19,7 +19,8 @@ internal sealed record DashboardActions(
     Func<bool> GetDefaultAgent,
     Func<bool, Action<DefaultAgentStage>, CancellationToken, Task<string?>> SetDefaultAgent,
     Func<bool>? GetDefaultAgentActive = null,
-    Func<string, object?, Task<Result>>? DiscoveryControl = null);
+    Func<string, object?, Task<Result>>? DiscoveryControl = null,
+    DiagnosticActions? Diagnostics = null);
 
 public sealed partial class DashboardWindow : Window
 {
@@ -168,6 +169,7 @@ public sealed partial class DashboardWindow : Window
                 UpdateActivityPage(displayedState, displayedState);
         }
         SetPageMargin(DashboardRoot.ActualWidth);
+        RefreshDiagnosticUsage();
     }
 
     private void SetPageMargin(double width)
@@ -300,11 +302,32 @@ public sealed partial class DashboardWindow : Window
     {
         if (closed || activeDialog is not null)
             return ContentDialogResult.None;
+        dialog.Style = StyleFor("DashboardDialogStyle");
         dialog.XamlRoot = DashboardRoot.XamlRoot;
         var width = Math.Clamp(DashboardRoot.ActualWidth - 24, 280, 420);
         dialog.Resources["ContentDialogMinWidth"] = width;
         dialog.Resources["ContentDialogMaxWidth"] = width;
-        dialog.Resources["ContentDialogPadding"] = new Thickness(22, 17, 22, 17);
+        dialog.Resources["ContentDialogMinHeight"] = 0d;
+        dialog.Resources["ContentDialogButtonMinWidth"] = 0d;
+        dialog.Resources["ContentDialogSeparatorThickness"] = new Thickness(0);
+        dialog.Resources["ContentDialogTopOverlay"] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        dialog.Opened += (_, _) =>
+        {
+            if (FindDialogPart<ContentControl>(dialog, "Title") is { } title)
+                title.FontSize = 16;
+            if (FindDialogPart<ScrollViewer>(dialog, "ContentScrollViewer") is { Content: Grid body } scroller)
+            {
+                body.Padding = new Thickness(22, 22, 22, 0);
+                scroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            }
+            if (FindDialogPart<Grid>(dialog, "CommandSpace") is { } commands)
+            {
+                commands.HorizontalAlignment = HorizontalAlignment.Right;
+                commands.Padding = new Thickness(0, 16, 22, 22);
+                foreach (var column in commands.ColumnDefinitions.Where(column => column.Width.IsStar))
+                    column.Width = GridLength.Auto;
+            }
+        };
         activeDialog = dialog;
         try
         {
@@ -314,6 +337,19 @@ public sealed partial class DashboardWindow : Window
         {
             activeDialog = null;
         }
+    }
+
+    private static T? FindDialogPart<T>(DependencyObject root, string name) where T : FrameworkElement
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T part && part.Name == name)
+                return part;
+            if (FindDialogPart<T>(child, name) is { } nested)
+                return nested;
+        }
+        return null;
     }
 
     private void ResizeToWorkArea()

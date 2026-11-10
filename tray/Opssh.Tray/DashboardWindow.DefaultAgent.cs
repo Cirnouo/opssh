@@ -9,7 +9,7 @@ public sealed partial class DashboardWindow
 {
     private enum AgentStepState { Running, Done, Skipped, Failed, Pending }
 
-    private sealed record AgentStep(Border Indicator, TextBlock Status);
+    private sealed record AgentStep(DefaultAgentStage Stage, Border Indicator, TextBlock Status, TextBlock Detail);
 
     private async Task ChangeDefaultAgentAsync(bool enable)
     {
@@ -19,7 +19,7 @@ public sealed partial class DashboardWindow
         RefreshSystemSettings();
         UpdateSettingsAvailability();
 
-        var steps = new StackPanel { Spacing = 10 };
+        var steps = new StackPanel();
         var summary = new InfoBar { IsClosable = false };
         var dialog = new ContentDialog
         {
@@ -82,7 +82,7 @@ public sealed partial class DashboardWindow
                     key == "Startup.DefaultRecovery" ? AgentStepState.Pending : AgentStepState.Failed);
             }
             RefreshSystemSettings();
-            summary.Severity = key is null ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
+            summary.Severity = key is null ? InfoBarSeverity.Informational : InfoBarSeverity.Warning;
             if (key == "Startup.DefaultChangeFailed" && lastStage != DefaultAgentStage.RollingBackAfterFailure)
                 key = "Dashboard.DefaultChangeFailed";
             summary.Message = Strings.Get(key ?? (enable ? "Dashboard.DefaultEnabled" :
@@ -132,9 +132,8 @@ public sealed partial class DashboardWindow
             var title = Strings.Get(key);
             var heading = Ui.Heading(title, 14);
             heading.TextWrapping = TextWrapping.Wrap;
-            var label = new StackPanel { Spacing = 2, Children = { heading } };
-            if (state == AgentStepState.Skipped)
-                label.Children.Add(Quiet(Strings.Get("Dashboard.DefaultServiceAbsent"), 12));
+            var detail = Quiet("");
+            var label = new StackPanel { Children = { heading, detail } };
 
             var indicator = new Border
             {
@@ -143,7 +142,7 @@ public sealed partial class DashboardWindow
             var status = Quiet("", 12);
             AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
             AutomationProperties.SetName(status, title);
-            var row = new Grid { ColumnSpacing = 8 };
+            var row = new Grid { ColumnSpacing = 8, Padding = new Thickness(0, 8, 0, 8) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition());
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -153,7 +152,7 @@ public sealed partial class DashboardWindow
             row.Children.Add(label);
             row.Children.Add(status);
             steps.Children.Add(row);
-            var step = new AgentStep(indicator, status);
+            var step = new AgentStep(stage, indicator, status, detail);
             SetAgentStepState(step, state);
             return step;
         }
@@ -170,6 +169,28 @@ public sealed partial class DashboardWindow
             _ => ("Dashboard.DefaultPending", "\uE7BA", "DashboardWarningIconStyle")
         };
         step.Status.Text = Strings.Get(key);
+        var detailKey = state switch
+        {
+            AgentStepState.Skipped => "Dashboard.DefaultServiceAbsent",
+            AgentStepState.Pending => "Dashboard.DefaultPendingDetail",
+            AgentStepState.Failed when step.Stage is DefaultAgentStage.ReservingPipe or DefaultAgentStage.ReleasingPipe =>
+                "Dashboard.DefaultPipeFailedDetail",
+            AgentStepState.Done => step.Stage switch
+            {
+                DefaultAgentStage.Checking => "Dashboard.DefaultCheckedDetail",
+                DefaultAgentStage.StoppingOpenSsh => "Dashboard.DefaultStoppedDetail",
+                DefaultAgentStage.DisablingOpenSsh => "Dashboard.DefaultDisabledDetail",
+                DefaultAgentStage.ReservingPipe => "Dashboard.DefaultReservedDetail",
+                DefaultAgentStage.ReleasingPipe => "Dashboard.DefaultReleasedDetail",
+                DefaultAgentStage.ConfiguringOpenSsh => "Dashboard.DefaultConfiguredDetail",
+                DefaultAgentStage.StartingOpenSsh => "Dashboard.DefaultStartedDetail",
+                DefaultAgentStage.Saving => "Dashboard.DefaultSavedDetail",
+                _ => "Dashboard.DefaultRollbackDetail"
+            },
+            _ => null
+        };
+        step.Detail.Text = detailKey is null ? "" : Strings.Get(detailKey);
+        step.Detail.Visibility = detailKey is null ? Visibility.Collapsed : Visibility.Visible;
         if (step.Indicator.Child is ProgressRing previous)
             previous.IsActive = false;
         UIElement indicator = state == AgentStepState.Running

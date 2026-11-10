@@ -71,10 +71,18 @@ internal static class AppearanceChecks
             File.WriteAllText(path, """{"version":4,"language":"en","theme":"dark","waitForPassword":true}""");
             Require(UiPreferences.Load(path) == defaults, "fallback for an unsupported future version");
 
-            var preference = new UiPreferences("system", "dark", false);
+            Require(!legacy.DiagnosticLogging && legacy.DiagnosticLevel == "INFO",
+                "older settings do not opt into diagnostics");
+            var preference = new UiPreferences("system", "dark", false)
+            {
+                DiagnosticLogging = true,
+                DiagnosticLevel = "WARN"
+            };
             Require(preference.TrySave(path), "save system language, dark theme and disabled update checks");
-            Require(UiPreferences.Load(path) == preference, "appearance and update preferences persist after reload");
+            Require(UiPreferences.Load(path) == preference, "appearance, update, and diagnostic preferences persist after reload");
             Require(!new UiPreferences("zh-Hant", "dark").TrySave(path), "reject an unsupported locale");
+            Require(!(preference with { DiagnosticLevel = "invalid" }).TrySave(path) && UiPreferences.Load(path) == preference,
+                "a failed log policy save preserves the other preferences");
             File.WriteAllText(path, "{\"language\":\"en\",\"theme\":\"invalid\"}");
             Require(UiPreferences.Load(path) == defaults, "fallback for invalid appearance preferences");
             File.WriteAllText(path, "{\"language\":\"en\",\"theme\":\"dark\",\"autoCheckUpdates\":\"false\"}");

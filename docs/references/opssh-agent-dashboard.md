@@ -1,6 +1,6 @@
 # Dashboard visual reference
 
-[Approved Visualize source](opssh-agent-dashboard.html) preserves the original bytes. Its SHA-256 is `21202CB9F2EF713FCB63544E838B75B2F4F125CC654EE67BAEC7DC5F401FC216`.
+[The final review source](opssh-desktop-ux-review.html) preserves the approved Visualize bytes. Its SHA-256 is `28C0DD079609AC1F4B4A5F8497622AD381D92153A25F36CE8F02E09664AC1F98`. [The original dashboard source](opssh-agent-dashboard.html) remains available as a historical reference with SHA-256 `21202CB9F2EF713FCB63544E838B75B2F4F125CC654EE67BAEC7DC5F401FC216`.
 
 Run [the reference renderer](../../tools/Render-DashboardReference.ps1) to create a separate, sandboxed HTML file. The renderer checks the hash, supplies the prototype's icons and fixes the sample clock at 15:20 local time on 2026-11-10.
 
@@ -8,7 +8,7 @@ Run [the reference renderer](../../tools/Render-DashboardReference.ps1) to creat
 ./tools/Render-DashboardReference.ps1 -OutputPath "$env:TEMP/opssh-reference.html" -Page keys -Theme dark
 ```
 
-Pass `-Scenario first-run` for the signed-out entry, `-Width 576` for the compact layout, or `-Page settings -AtBottom` for the lower settings groups. The renderer leaves the archived HTML intact.
+Pass `-Scenario first-run` for the signed-out entry, `-Width 576` for the compact layout, or `-Page settings -AtBottom` for the lower settings groups. The final source also supports `picker`, `cli-missing`, `no-access`, `vault-save`, `discover`, `cache`, and `logs` and four `-DefaultOutcome` values for the default-agent confirmation dialog. Pass `-Revision Original` to render the historical source. The renderer leaves both archives intact.
 
 Publish the tray on Windows x64 with `-p:OpsshDashboardFixture=true` to include the in-memory screenshot fixture. For example, launch `opssh-tray.exe --dashboard-fixture ready keys dark` from the fixture publish folder. Production publishes omit the fixture. It supplies synthetic accounts, keys, grants and activity and does not run the real provider, startup registration or OpenSSH service actions.
 

@@ -85,6 +85,9 @@ public sealed partial class DashboardWindow
             DefaultApprovalSeconds, isKey: false);
         page.Children.Add(Section(Strings.Get("Settings.CachePolicies"), keyCacheEditor.Card, approvalCacheEditor.Card));
 
+        if (actions.Diagnostics is { } diagnostics)
+            page.Children.Add(BuildDiagnosticSettings(preferences, diagnostics));
+
         var theme = Choice(Strings.Get("Settings.Theme"), preferences.Theme,
             ("system", Strings.Get("Settings.ThemeSystem")), ("light", Strings.Get("Settings.ThemeLight")),
             ("dark", Strings.Get("Settings.ThemeDark")));

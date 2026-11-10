@@ -17,6 +17,7 @@ import (
 	"opssh/internal/config"
 	"opssh/internal/control"
 	"opssh/internal/desktop"
+	"opssh/internal/diagnostics"
 	"opssh/internal/engine"
 )
 
@@ -63,6 +64,7 @@ type application struct {
 	restartMu       sync.Mutex
 	restartRequired bool // written only by the worker, read by unlock under restartMu
 	activity        *activity.Log
+	diagnostics     diagnostics.Ring
 	candidate       bool
 	attempted       bool
 	prepared        *config.Settings
@@ -362,6 +364,20 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 			result.Data = map[string]any{"grants": rows}
 		}
 		return result
+	case "diagnostics":
+		var request struct {
+			Enabled *bool  `json:"enabled"`
+			Epoch   uint64 `json:"epoch"`
+			After   uint64 `json:"after"`
+		}
+		if control.DecodeBody(msg, &request) != nil || request.Enabled == nil {
+			return commandResult(errCommand)
+		}
+		batch, ok := a.diagnostics.Sync(*request.Enabled, request.Epoch, request.After)
+		if !ok {
+			return commandResult(errCommand)
+		}
+		return control.Result{OK: true, Data: batch}
 	case "activity":
 		var body struct {
 			Before string `json:"before"`
