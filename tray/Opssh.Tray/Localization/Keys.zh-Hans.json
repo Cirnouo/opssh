@@ -1,6 +1,12 @@
 {
   "Keys.Description": "发现密钥、管理预加载状态和进程授权。",
   "Keys.Discover": "发现 SSH 密钥",
+  "Keys.CancelDiscovery": "取消发现",
+  "Keys.ScanVaults": "正在扫描保险库",
+  "Keys.ReadPublic": "正在读取 SSH 公钥",
+  "Keys.DiscoveryCanceled": "已取消发现，保留上次结果。",
+  "Keys.DiscoveryCancelRetry": "暂时无法取消发现，请重试。",
+  "Keys.DiscoveryFinished": "发现完成，已更新 {0} 把公钥。",
   "Keys.PreloadAll": "预加载全部私钥",
   "Keys.EvictAll": "清除已加载私钥",
   "Keys.RevokeAll": "撤销全部授权",

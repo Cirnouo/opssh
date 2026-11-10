@@ -10,7 +10,7 @@ public sealed partial class App
         var previousChild = core;
         if (previous is null || previousChild is null || state is null || transitioning || quitting || changingDefaultAgent)
             return "Error.Busy";
-        if (string.Equals(account, state.Account, StringComparison.Ordinal))
+        if (DesktopAccount.SameId(account, state.Account))
             return null;
 
         using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

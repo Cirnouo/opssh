@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"time"
 
@@ -17,24 +18,33 @@ type excludedVaultBrowser interface {
 	Browse(context.Context, config.Scope, []desktop.Vault) ([]desktop.Vault, error)
 }
 
-func (a *application) refreshIndex(ctx context.Context, next config.Settings) error {
-	return a.scanIndex(ctx, next, false)
+type discoveryReporter interface {
+	DiscoverWithProgress(context.Context, config.Scope, func(int, int)) ([]desktop.Vault, error)
 }
 
-func (a *application) scanIndex(ctx context.Context, next config.Settings, preserve bool) error {
+type publicBatchReader interface {
+	PublicBatch(context.Context, []config.Key) ([][]byte, error)
+}
+
+func (a *application) refreshIndex(ctx context.Context, next config.Settings) error {
+	ctx, cancel := context.WithTimeout(ctx, indexTimeout)
+	defer cancel()
+	return a.scanIndex(ctx, next, nil)
+}
+
+func (a *application) scanIndex(ctx context.Context, next config.Settings, op *discoveryOperation) (result error) {
 	if next.Account == "" {
 		return desktop.ErrUnconfigured
 	}
-	ctx, cancel := context.WithTimeout(ctx, indexTimeout)
-	defer cancel()
 
 	// As with single-item refresh, retire old identities before reading from
 	// the provider. Persist any new scope in the same update so restarting
 	// cannot restore keys the user just excluded.
+	previous := a.settings
 	next.Keys = []config.Key{}
 	next.Index = config.IndexUnavailable
 	published := false
-	if preserve {
+	if op != nil {
 		a.engine.SuspendIndex()
 		defer a.engine.ResumeIndex()
 		if err := config.Save(a.path, next); err != nil {
@@ -42,12 +52,19 @@ func (a *application) scanIndex(ctx context.Context, next config.Settings, prese
 		}
 		withdrawn := next
 		defer func() {
-			if !published {
-				// The durable index was already withdrawn. Do not republish
-				// a previous identity after cancellation or a provider error.
-				_ = a.engine.ReplaceKeys(nil)
-				a.settings = withdrawn
+			_ = op.finish()
+			if published {
+				return
 			}
+			if errors.Is(context.Cause(ctx), errDiscoveryCanceled) {
+				result = a.restoreDiscoveryIndex(previous, withdrawn)
+				if errors.Is(result, errDiscoveryCanceled) {
+					return
+				}
+			}
+			// A timeout or provider error leaves the durable index withdrawn.
+			_ = a.engine.ReplaceKeys(nil)
+			a.settings = withdrawn
 		}()
 	} else if err := a.persist(next); err != nil {
 		return err
@@ -56,7 +73,15 @@ func (a *application) scanIndex(ctx context.Context, next config.Settings, prese
 	if !ok {
 		return desktop.ErrUnavailable
 	}
-	vaults, discoverErr := provider.Discover(ctx, next.Scope)
+	var vaults []desktop.Vault
+	var discoverErr error
+	if reporter, ok := provider.(discoveryReporter); op != nil && ok {
+		vaults, discoverErr = reporter.DiscoverWithProgress(ctx, next.Scope, func(completed, total int) {
+			op.report("vaults", completed, total)
+		})
+	} else {
+		vaults, discoverErr = provider.Discover(ctx, next.Scope)
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -65,35 +90,35 @@ func (a *application) scanIndex(ctx context.Context, next config.Settings, prese
 	if discoverErr != nil && !partial && !overflow {
 		return discoverErr
 	}
-	a.setVaults(vaults)
-	if preserve {
-		next.Vaults = publicVaults(a.vaults)
-	}
 	if !overflow {
 		next.Keys, overflow = scopedKeys(next.Scope, vaults)
 	}
 	if overflow {
 		next.Index = config.IndexScopeTooBroad
-		if err := a.persist(next); err != nil {
+	} else {
+		if op != nil {
+			op.report("public", 0, len(next.Keys))
+		}
+		complete, err := readPublicIndex(ctx, provider, next.Keys)
+		if errors.Is(err, desktop.ErrSessionExpired) {
 			return err
 		}
-		published = true
-		if errors.Is(discoverErr, desktop.ErrScanLimit) {
-			return desktop.ErrScanLimit
+		partial = partial || !complete
+		next.Index = config.IndexReady
+		if partial {
+			next.Index = config.IndexPartial
+		} else if op != nil {
+			next.Vaults = publicVaults(vaults)
 		}
-		return desktop.ErrScopeTooBroad
-	}
-
-	if !readPublicIndex(ctx, provider, next.Keys) {
-		partial = true
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	next.Index = config.IndexReady
-	if partial {
-		next.Index = config.IndexPartial
-		if preserve {
+	if op != nil {
+		if err := op.finish(); err != nil {
+			return err
+		}
+		if next.Index == config.IndexPartial {
 			_ = a.engine.ReplaceKeys(nil)
 		}
 	}
@@ -101,9 +126,16 @@ func (a *application) scanIndex(ctx context.Context, next config.Settings, prese
 		return err
 	}
 	published = true
+	a.setVaults(vaults)
+	if overflow {
+		if errors.Is(discoverErr, desktop.ErrScanLimit) {
+			return desktop.ErrScanLimit
+		}
+		return desktop.ErrScopeTooBroad
+	}
 	// An excluded vault's metadata is for the legacy item scope editor. Its availability
 	// cannot block or change the result of publishing the effective keys.
-	if !preserve {
+	if op == nil {
 		if browser, ok := provider.(excludedVaultBrowser); ok {
 			a.browseExcluded(ctx, browser, next.Scope, vaults)
 		}
@@ -112,6 +144,24 @@ func (a *application) scanIndex(ctx context.Context, next config.Settings, prese
 		return desktop.ErrPartial
 	}
 	return nil
+}
+
+func (a *application) restoreDiscoveryIndex(previous, withdrawn config.Settings) error {
+	current, err := config.Read(a.path)
+	if err != nil {
+		return errSettingsWrite
+	}
+	if current.Account != withdrawn.Account || current.AccountName != withdrawn.AccountName ||
+		current.Index != config.IndexUnavailable || len(current.Keys) != 0 ||
+		current.KeyCache != withdrawn.KeyCache || current.ApprovalCache != withdrawn.ApprovalCache ||
+		!slices.Equal(current.Vaults, withdrawn.Vaults) || current.Scope.Default != withdrawn.Scope.Default ||
+		!maps.Equal(current.Scope.Vaults, withdrawn.Scope.Vaults) || !maps.Equal(current.Scope.Items, withdrawn.Scope.Items) {
+		return errAccountChanged
+	}
+	if err := a.persist(previous); err != nil {
+		return err
+	}
+	return errDiscoveryCanceled
 }
 
 func (a *application) browseExcluded(ctx context.Context, browser excludedVaultBrowser, scope config.Scope, vaults []desktop.Vault) {
@@ -149,15 +199,33 @@ func scopedKeys(scope config.Scope, vaults []desktop.Vault) ([]config.Key, bool)
 	return keys, false
 }
 
-func readPublicIndex(ctx context.Context, provider vault, keys []config.Key) bool {
-	first := make(map[string]int, len(keys))
-	complete := true
-	for i, key := range keys {
-		if ctx.Err() != nil {
-			return false
+func readPublicIndex(ctx context.Context, provider vault, keys []config.Key) (bool, error) {
+	blobs := make([][]byte, len(keys))
+	var batchErr error
+	if bulk, ok := provider.(publicBatchReader); ok {
+		var resolved [][]byte
+		resolved, batchErr = bulk.PublicBatch(ctx, keys)
+		if len(resolved) == len(keys) {
+			blobs = resolved
 		}
-		public, err := provider.Public(ctx, key.VaultID, key.ItemID)
-		if err != nil || !engine.ValidPublic(public) {
+	} else {
+		for i, key := range keys {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
+			public, err := provider.Public(ctx, key.VaultID, key.ItemID)
+			if errors.Is(err, desktop.ErrSessionExpired) {
+				return false, err
+			}
+			if err == nil {
+				blobs[i] = public
+			}
+		}
+	}
+	first := make(map[string]int, len(keys))
+	complete := batchErr == nil
+	for i, public := range blobs {
+		if !engine.ValidPublic(public) {
 			complete = false
 			continue
 		}
@@ -170,5 +238,5 @@ func readPublicIndex(ctx context.Context, provider vault, keys []config.Key) boo
 		first[string(public)] = i
 		keys[i].Public = public
 	}
-	return complete
+	return complete, batchErr
 }

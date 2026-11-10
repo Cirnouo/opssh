@@ -18,7 +18,8 @@ internal sealed record DashboardActions(
     Func<bool, string, bool> SetStartupPolicy,
     Func<bool> GetDefaultAgent,
     Func<bool, CancellationToken, Task<string?>> SetDefaultAgent,
-    Func<bool>? GetDefaultAgentActive = null);
+    Func<bool>? GetDefaultAgentActive = null,
+    Func<string, object?, Task<Result>>? DiscoveryControl = null);
 
 public sealed partial class DashboardWindow : Window
 {
@@ -193,7 +194,7 @@ public sealed partial class DashboardWindow : Window
             Padding = new Thickness(12),
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { logo, title, detail, connectButton, restartButton }
+            Children = { logo, title, detail, connectButton, restartButton, BuildPickerNotice() }
         };
     }
 

@@ -20,7 +20,7 @@ public sealed partial class App
         }
         string[] options = flag < 0 ? [] : commandLine[(flag + 1)..];
         var scenario = options.ElementAtOrDefault(0) ?? "ready";
-        var page = options.ElementAtOrDefault(1) ?? (scenario is "ready" or "provider-failed" ? "keys" : "account");
+        var page = options.ElementAtOrDefault(1) ?? (scenario == "discover" ? "keys" : "account");
         var theme = options.ElementAtOrDefault(2) is "light" or "dark" ? options[2] : "system";
         var language = options.ElementAtOrDefault(3) is "en" or "zh-Hans" ? options[3] : "system";
 
@@ -38,8 +38,8 @@ public sealed partial class App
         private static readonly DateTimeOffset Now = new(new DateTime(2026, 11, 10, 15, 20, 0, DateTimeKind.Local));
         private static readonly DesktopAccount[] Accounts =
         [
-            new("demo", "Demo Account · 个人"),
-            new("engineering", "Engineering Demo · 团队")
+            new("demo", "demo@example.test"),
+            new("engineering", "Alex Chen(engineering@example.test)")
         ];
         private static readonly DiscoveredVault[] Vaults =
         [
@@ -65,17 +65,25 @@ public sealed partial class App
         private ReleaseCheckResult release = new(ReleaseCheckStatus.Idle);
         private bool loginStartup;
         private bool defaultAgent;
+        private bool firstAccountLookup = true;
+        private bool failVaultSave;
+        private string? fixtureDiscovery;
+        private int discoveryStep;
+        private bool discoveryCanceled;
 
         internal DashboardFixture(string scenario, UiPreferences preferences, Action exit)
         {
             this.scenario = scenario;
             this.preferences = preferences;
             this.exit = exit;
-            var ready = scenario is "ready" or "provider-failed";
-            var account = ready || scenario == "new-account" ? Accounts[0] : null;
+            var ready = scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs";
+            var account = ready || scenario is "new-account" or "no-access" or "startup" ? Accounts[1] : null;
+            failVaultSave = scenario == "vault-save";
             state = new CoreState(DedicatedPipe, false, account?.Id ?? "", [], new CachePolicy("fixed", 300),
                 new CachePolicy("fixed", 600), "unknown", 0);
-            SetAccount(account?.Id ?? "", account is null ? null : "Demo Account");
+            SetAccount(account?.Id ?? "", account?.Label);
+            if (scenario is "no-access" or "startup")
+                state = state with { LastProvider = null, ProviderAt = null };
             if (!ready)
                 return;
 
@@ -101,7 +109,7 @@ public sealed partial class App
                 () => loginStartup ? LoginStartupStatus.On : LoginStartupStatus.Off,
                 enabled => { loginStartup = enabled; return true; },
                 (wait, action) => { preferences = preferences with { WaitForPassword = wait, StartupAction = action }; return true; },
-                () => defaultAgent, SetDefaultAgentAsync);
+                () => defaultAgent, SetDefaultAgentAsync, DiscoveryControl: DiscoveryControlAsync);
             var next = new DashboardWindow(SendAsync, (command, body) => SendAsync(command, body, false),
                 () => Task.CompletedTask, preferences, ApplyAppearance, CheckUpdatesAsync,
                 enabled => { preferences = preferences with { AutoCheckUpdates = enabled }; return true; }, actions);
@@ -150,18 +158,23 @@ public sealed partial class App
             return true;
         }
 
-        private Task<AccountListResult> ListAccountsAsync(CancellationToken token)
+        private async Task<AccountListResult> ListAccountsAsync(CancellationToken token)
         {
-            token.ThrowIfCancellationRequested();
-            return Task.FromResult(scenario == "no-accounts"
-                ? new AccountListResult(AccountListStatus.Empty, [])
-                : new AccountListResult(AccountListStatus.Ready, Accounts));
+            await Task.Delay(650, token);
+            var first = firstAccountLookup;
+            firstAccountLookup = false;
+            return scenario switch
+            {
+                "no-accounts" => new(AccountListStatus.Empty, []),
+                "cli-missing" when first => new(AccountListStatus.NotInstalled, []),
+                _ => new(AccountListStatus.Ready, Accounts)
+            };
         }
 
         private Task<string?> SwitchAccountAsync(string id, string label, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            SetAccount(id, label.Split(" · ", 2)[0]);
+            SetAccount(id, label);
             window.ShowState(state, resetSettings: false);
             window.SelectPage("account");
             return Task.FromResult<string?>(null);
@@ -205,7 +218,7 @@ public sealed partial class App
             window.ShowReleaseCheck(release);
         }
 
-        private Task SendAsync(string command, object? body, bool resetSettings)
+        private async Task SendAsync(string command, object? body, bool resetSettings)
         {
             var data = JsonSerializer.SerializeToElement(body, Protocol.Json);
             var keyId = Field(data, "keyId");
@@ -216,7 +229,7 @@ public sealed partial class App
                     break;
                 case "set-vault":
                     if (state.Scope is not { } scope || Field(data, "vaultId") is not { } vault)
-                        return Task.CompletedTask;
+                        return;
                     var allowed = new Dictionary<string, string>(scope.Vaults, StringComparer.Ordinal);
                     var enabled = data.GetProperty("enabled").GetBoolean();
                     if (enabled)
@@ -228,6 +241,17 @@ public sealed partial class App
                     state = state with { Scope = scope with { Vaults = allowed }, Keys = remaining };
                     break;
                 case "discover":
+                    fixtureDiscovery = Field(data, "operationId");
+                    discoveryCanceled = false;
+                    var vaultCount = state.Scope?.Vaults.Count ?? 0;
+                    for (discoveryStep = 0; discoveryStep <= vaultCount && !discoveryCanceled; discoveryStep++)
+                        await Task.Delay(1000);
+                    fixtureDiscovery = null;
+                    if (discoveryCanceled)
+                    {
+                        window.ShowMessage(Strings.Get("Keys.DiscoveryCanceled"));
+                        return;
+                    }
                     state = state with
                     {
                         Keys = Catalog.Where(key => state.Scope?.Vaults.ContainsKey(key.VaultId) == true)
@@ -272,17 +296,51 @@ public sealed partial class App
                     };
                     break;
                 default:
-                    return Task.CompletedTask;
+                    return;
             }
             window.ShowState(state, resetSettings);
-            window.ShowMessage(Strings.Get("App.Done"));
-            return Task.CompletedTask;
+            window.ShowMessage(command == "discover" ? Strings.Get("Keys.DiscoveryFinished", state.Keys.Length) : Strings.Get("App.Done"));
         }
 
-        private Task<Result> RequestAsync(string command, object? body, CancellationToken token)
+        private Task<Result> DiscoveryControlAsync(string command, object? body)
+        {
+            var request = JsonSerializer.SerializeToElement(body, Protocol.Json);
+            if (fixtureDiscovery is null || fixtureDiscovery != Field(request, "operationId"))
+                return Task.FromResult(new Result(false, null, null, false, "discovery-not-active"));
+            if (command == "cancel-discovery")
+            {
+                discoveryCanceled = true;
+                return Task.FromResult(new Result(true, null, null, false));
+            }
+            var total = state.Scope?.Vaults.Count ?? 0;
+            var progress = JsonSerializer.SerializeToElement(
+                new { phase = discoveryStep < total ? "vaults" : "public", completed = discoveryStep, total }, Protocol.Json);
+            return Task.FromResult(new Result(true, null, null, false, Data: progress));
+        }
+
+        private async Task<Result> RequestAsync(string command, object? body, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var data = JsonSerializer.SerializeToElement(body, Protocol.Json);
+            if (command == "set-vault")
+            {
+                await Task.Delay(600, token);
+                if (failVaultSave)
+                {
+                    failVaultSave = false;
+                    return new Result(false, null, state, false, "configuration-write");
+                }
+                await SendAsync(command, body, false);
+                return new Result(true, null, state, false);
+            }
+            if (command is "authorize-desktop" or "update-account-label")
+            {
+                if (command == "authorize-desktop")
+                    RecordProviderSuccess();
+                else
+                    state = state with { AccountName = Field(data, "name") };
+                return new Result(true, null, state, false);
+            }
             if (command == "clear-activity")
                 activity = [];
             object? reply = command switch
@@ -301,8 +359,8 @@ public sealed partial class App
                     ? new { match.Command } : null,
                 _ => null
             };
-            return Task.FromResult(new Result(reply is not null || command == "clear-activity", null, null, false,
-                Data: reply is null ? null : JsonSerializer.SerializeToElement(reply, Protocol.Json)));
+            return new Result(reply is not null || command == "clear-activity", null, null, false,
+                Data: reply is null ? null : JsonSerializer.SerializeToElement(reply, Protocol.Json));
         }
 
         private void RecordProviderSuccess() => state = state with { LastProvider = "last-success", ProviderAt = Now };

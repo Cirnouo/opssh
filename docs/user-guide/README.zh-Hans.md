@@ -26,10 +26,10 @@
 ## 连接 1Password 并查看密钥
 
 1. 在 1Password 桌面应用中登录，安装官方 1Password CLI。启用 Windows Hello，并在 **设置 → 开发者** 中开启 CLI 和 SDK 集成。[CLI 桌面集成](https://www.1password.dev/cli/app-integration) · [桌面 SDK 集成](https://www.1password.dev/sdks/desktop-app-integrations)
-2. 从托盘打开 opssh，选择 **连接 1Password 账户**。从列表选中账户，在 1Password 窗口中完成验证。
+2. 从托盘打开 opssh，选择 **连接 1Password**。列表默认选中第一个账户，显示邮箱，有用户名时同时显示。选择 **在 1Password 中继续**，按提示完成授权。
 3. 在 **1Password** 页选择允许发现的保险库。进入 **SSH 密钥**，点击 **发现 SSH 密钥**。
 
-opssh 保存连接的账户和公钥索引。**1Password** 页显示上次桌面请求结果和本地时间。在此切换账户或从 opssh 注销，会清除原账户的保险库范围、公钥索引、私钥缓存、授权和活动。
+opssh 保存已选账户和公钥索引。**1Password** 页显示上次请求的结果和本地时间，下次请求时 1Password 仍可能要求授权。切换账户或选择 **移除账户** 会清除原账户的保险库范围、公钥索引、私钥缓存、授权和活动。
 
 <a name="select-agent"></a>
 

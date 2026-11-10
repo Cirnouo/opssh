@@ -67,7 +67,7 @@ func (b *Backend) ListVaults(ctx context.Context) ([]Vault, error) {
 		}
 		listed, err := lister.Vaults(ctx)
 		if err != nil {
-			return nil, ErrUnavailable
+			return nil, SDKError(err)
 		}
 		if len(listed) > maxScannedVaults {
 			return nil, ErrScanLimit
@@ -86,17 +86,24 @@ func (b *Backend) ListVaults(ctx context.Context) ([]Vault, error) {
 			}
 			rows = append(rows, Vault{ID: vault.ID, Name: safeName(vault.Title, "Vault "+vault.ID[:8]), Items: []Item{}})
 		}
+		if len(listed) != 0 && len(rows) == 0 {
+			return nil, ErrUnavailable
+		}
 		return rows, ctx.Err()
 	}, nil)
 }
 
 func (b *Backend) Discover(ctx context.Context, scope config.Scope) ([]Vault, error) {
+	return b.DiscoverWithProgress(ctx, scope, nil)
+}
+
+func (b *Backend) DiscoverWithProgress(ctx context.Context, scope config.Scope, report func(int, int)) ([]Vault, error) {
 	return execute(ctx, b, func(client resolver) ([]Vault, error) {
 		lister, ok := client.(metadataLister)
 		if !ok {
 			return nil, ErrUnavailable
 		}
-		return discover(ctx, lister, scope)
+		return discover(ctx, lister, scope, report)
 	}, nil)
 }
 
@@ -151,10 +158,10 @@ type catalogVault struct {
 	priority int
 }
 
-func discover(ctx context.Context, lister metadataLister, scope config.Scope) ([]Vault, error) {
+func discover(ctx context.Context, lister metadataLister, scope config.Scope, report func(int, int)) ([]Vault, error) {
 	listed, err := lister.Vaults(ctx)
 	if err != nil {
-		return nil, ErrUnavailable
+		return nil, SDKError(err)
 	}
 	scanLimit := len(listed) > maxScannedVaults
 	listed = listed[:min(len(listed), maxScannedVaults)]
@@ -175,7 +182,7 @@ func discover(ctx context.Context, lister metadataLister, scope config.Scope) ([
 		}
 	}
 	var partial bool
-	effective := 0
+	total := 0
 	vaults := make([]catalogVault, 0, len(listed))
 	for _, vault := range listed {
 		if err := ctx.Err(); err != nil {
@@ -192,22 +199,46 @@ func discover(ctx context.Context, lister metadataLister, scope config.Scope) ([
 		}
 		if eligible {
 			row.vault.Items = []Item{}
-			items, err := lister.Items(ctx, vault.ID)
-			if err != nil {
-				partial = true
-			} else {
-				var selected int
-				var incomplete, tooMany bool
-				row.groups, selected, incomplete, tooMany = activeSSHItems(items, vault.ID, scope)
-				if selected > 0 {
-					row.priority = 0
-				}
-				effective += selected
-				partial = partial || incomplete
-				scanLimit = scanLimit || tooMany
-			}
+			total++
 		}
 		vaults = append(vaults, row)
+	}
+	completed, effective := 0, 0
+	if report != nil {
+		report(completed, total)
+	}
+	for i := range vaults {
+		row := &vaults[i]
+		if row.vault.Items == nil {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		items, err := lister.Items(ctx, row.vault.ID)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err != nil {
+			if errors.Is(SDKError(err), ErrSessionExpired) {
+				return nil, ErrSessionExpired
+			}
+			partial = true
+		} else {
+			var selected int
+			var incomplete, tooMany bool
+			row.groups, selected, incomplete, tooMany = activeSSHItems(items, row.vault.ID, scope)
+			if selected > 0 {
+				row.priority = 0
+			}
+			effective += selected
+			partial = partial || incomplete
+			scanLimit = scanLimit || tooMany
+		}
+		completed++
+		if report != nil {
+			report(completed, total)
+		}
 	}
 	display := displayVaults(vaults)
 	if scanLimit {

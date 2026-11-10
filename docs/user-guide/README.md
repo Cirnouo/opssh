@@ -26,10 +26,10 @@ For a source checkout, see [development and contributions](../../CONTRIBUTING.md
 ## Connect 1Password and list keys
 
 1. Sign in to 1Password Desktop. Install the official 1Password CLI. Turn on Windows Hello and enable **Integrate with 1Password CLI** and **Integrate with 1Password SDKs** in **Settings → Developer**. [CLI desktop integration](https://www.1password.dev/cli/app-integration) · [Desktop SDK integration](https://www.1password.dev/sdks/desktop-app-integrations)
-2. Open opssh from the tray and choose **Connect 1Password account**. Select the account shown in the picker and complete verification in the 1Password window.
+2. Open opssh from the tray and choose **Connect 1Password**. The picker selects the first available account and displays its email, with the user name when available. Choose **Continue in 1Password** and complete any authorization prompt.
 3. On **1Password**, select the vaults allowed for discovery. Then open **SSH keys** and choose **Discover SSH keys**.
 
-opssh saves the connected account and its public index. The 1Password page shows the outcome and local time of the last Desktop SDK request. Switch accounts from this page or sign out of opssh to remove the current account's scope, index, cached keys, approvals, and activity.
+opssh saves the selected account and its public index. The 1Password page shows the outcome and local time of the last Desktop SDK request. 1Password may ask for authorization again on the next request. Switching accounts or choosing **Remove account** clears the previous account’s scope, index, cached keys, approvals, and activity.
 
 <a name="select-agent"></a>
 
