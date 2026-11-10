@@ -8,3 +8,4 @@ go.sum text eol=lf
 docs/evidences/** -text whitespace=trailing-space,space-before-tab,cr-at-eol
 docs/references/opssh-agent-dashboard.html -text
 docs/references/opssh-desktop-ux-review.html -text
+docs/references/opssh-key-approval-preview.html -text whitespace=-blank-at-eof

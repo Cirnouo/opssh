@@ -10,10 +10,14 @@ namespace Opssh.Tray;
 public sealed partial class App
 {
     private DashboardFixture? dashboardFixture;
+    private Window? referenceWindow;
 
     private bool TryRunDashboardFixture(string? activationArguments)
     {
         var commandLine = Environment.GetCommandLineArgs()[1..];
+        if (commandLine is ["--dashboard-reference", var reference])
+            return OpenDashboardReference(reference);
+
         var flag = Array.IndexOf(commandLine, "--dashboard-fixture");
         if (flag < 0)
         {
@@ -24,8 +28,8 @@ public sealed partial class App
         var scenario = options.ElementAtOrDefault(0) ?? "ready";
         var page = options.ElementAtOrDefault(1) ?? (scenario switch
         {
-            "cache" or "logs" => "settings",
-            "discover" => "keys",
+            "cache" or "logs" or "key-log-open-failure" => "settings",
+            "discover" or "key-approval" or "key-preload-failure" or "key-preload-partial" => "keys",
             _ when scenario.StartsWith("default-agent-", StringComparison.Ordinal) => "settings",
             _ => "account"
         });
@@ -38,6 +42,45 @@ public sealed partial class App
         dashboardFixture.Open(page);
         return true;
     }
+
+    private bool OpenDashboardReference(string path)
+    {
+        if (!Path.IsPathFullyQualified(path) || !File.Exists(path) ||
+            !string.Equals(Path.GetExtension(path), ".html", StringComparison.OrdinalIgnoreCase))
+        {
+            Exit();
+            return true;
+        }
+
+        DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
+        var view = new WebView2 { Source = new Uri(path) };
+        referenceWindow = new Window { Title = "opssh Visualize reference", Content = view };
+        referenceWindow.Closed += (_, _) =>
+        {
+            view.Close();
+            referenceWindow = null;
+            Exit();
+        };
+        ShowFixtureWindow(referenceWindow);
+        return true;
+    }
+
+    private static void ShowFixtureWindow(Window window)
+    {
+        // Keep captures behind the user's desktop windows, including after a language change.
+        const int windowBottom = 1;
+        const uint showWindow = 0x0040;
+        const uint noActivate = 0x0010;
+        const uint noMove = 0x0002;
+        const uint noSize = 0x0001;
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        if (!SetWindowPos(hwnd, windowBottom, 0, 0, 0, 0, showWindow | noActivate | noMove | noSize))
+            throw new System.ComponentModel.Win32Exception();
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
 
     private sealed class DashboardFixture
     {
@@ -63,7 +106,16 @@ public sealed partial class App
             new("archived", "archive", "archived", "archive-access", "SHA256:…vD6pS8", false, false, null)
         ];
 
+        private static readonly PublicKey[] KeyApprovalCatalog =
+        [
+            new("vm001", "personal", "vm001", "vm001 ssh key", "SHA256:J8x2VN4tkCQq5pI2aM6aFE8hQ6P0sWD8q1N3RZ2s7lk", false, false, null),
+            new("github-auth", "personal", "github-auth", "github authentication key", "SHA256:G7pN3b9fQK2cX6D4yW0eH8sRt5JvLa1mU3nY6pZq8So", false, false, null),
+            new("github-sign", "personal", "github-sign", "github signing key", "SHA256:S3mV6k1nR8xH4gZp2uL5J7fQ9aT0iY8bN2cW5oE1dUg", false, false, null)
+        ];
+
         private readonly string scenario;
+        private readonly bool keyApprovalPreview;
+        private PublicKey[] ActiveCatalog => keyApprovalPreview ? KeyApprovalCatalog : Catalog;
         private readonly string defaultOutcome;
         private readonly Action exit;
         private readonly List<FixtureGrant> grants = [];
@@ -89,12 +141,13 @@ public sealed partial class App
             defaultOutcome = defaultAgent ? "default-agent-" + scenario[restoreScenario.Length..] : scenario;
             this.preferences = preferences;
             this.exit = exit;
-            hasDiagnosticSamples = scenario == "logs";
+            keyApprovalPreview = scenario is "key-approval" or "key-preload-failure" or "key-preload-partial" or "key-log-open-failure";
+            hasDiagnosticSamples = scenario == "logs" || keyApprovalPreview;
             if (hasDiagnosticSamples)
-                this.preferences = preferences with { DiagnosticLogging = true };
+                this.preferences = preferences with { DiagnosticLogging = true, DiagnosticLevel = keyApprovalPreview ? "DEBUG" : "INFO" };
             if (scenario == "startup")
                 this.preferences = preferences with { WaitForPassword = true };
-            var ready = scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs" ||
+            var ready = keyApprovalPreview || scenario is "ready" or "provider-failed" or "vault-save" or "discover" or "cache" or "logs" ||
                 scenario.StartsWith("default-agent-", StringComparison.Ordinal);
             var account = ready || scenario is "new-account" or "no-access" or "startup" ? Accounts[1] : null;
             failVaultSave = scenario == "vault-save";
@@ -108,16 +161,17 @@ public sealed partial class App
             if (!ready)
                 return;
 
-            grants.AddRange([
-                new("workstation", SampleId(1), "warp.exe", 10432, "client", Now.AddMinutes(8)),
-                new("workstation", SampleId(2), "WindowsTerminal.exe", 8420, "host", Now.AddMinutes(6)),
-                new("build", SampleId(3), "Code.exe", 13108, "client", Now.AddMinutes(4))
-            ]);
+            if (!keyApprovalPreview)
+                grants.AddRange([
+                    new("workstation", SampleId(1), "warp.exe", 10432, "client", Now.AddMinutes(8)),
+                    new("workstation", SampleId(2), "WindowsTerminal.exe", 8420, "host", Now.AddMinutes(6)),
+                    new("build", SampleId(3), "Code.exe", 13108, "client", Now.AddMinutes(4))
+                ]);
             activity = SampleActivity();
             state = state with
             {
                 Scope = new DiscoveryScope("exclude", new() { ["work"] = "include", ["personal"] = "include" }, new()),
-                Keys = Catalog[..3].Select(key => key with { Loaded = key.VaultId == "work", Grants = GrantCount(key.Id) }).ToArray(),
+                Keys = ActiveCatalog[..3].Select(key => key with { Loaded = key.VaultId == "work", Grants = GrantCount(key.Id) }).ToArray(),
                 Index = "ready",
                 LastProvider = scenario == "provider-failed" ? "denied" : "last-success"
             };
@@ -138,7 +192,7 @@ public sealed partial class App
                     },
                     () => Task.FromResult<DiagnosticLogState?>(new(hasDiagnosticSamples
                         ? [new("opssh.log", 384 * 1024), new("opssh.1.log", 1024 * 1024)] : [])),
-                    () => Task.FromResult(true),
+                    () => Task.FromResult(scenario != "key-log-open-failure"),
                     () => { hasDiagnosticSamples = false; return Task.FromResult(true); }));
             var next = new DashboardWindow(SendAsync, (command, body) => SendAsync(command, body, false),
                 () => Task.CompletedTask, preferences, ApplyAppearance, CheckUpdatesAsync,
@@ -158,16 +212,8 @@ public sealed partial class App
             next.SelectPage(page);
             if (bounds is { } value)
                 next.AppWindow.MoveAndResize(value);
-            // Keep captures behind the user's desktop windows, including after a language change.
-            const int windowBottom = 1;
-            const uint showWindow = 0x0040;
-            const uint noActivate = 0x0010;
-            const uint noMove = 0x0002;
-            const uint noSize = 0x0001;
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(next);
-            if (!SetWindowPos(hwnd, windowBottom, 0, 0, 0, 0, showWindow | noActivate | noMove | noSize))
-                throw new System.ComponentModel.Win32Exception();
-            if (scenario == "logs" && page == "settings")
+            ShowFixtureWindow(next);
+            if ((scenario == "logs" || keyApprovalPreview) && page == "settings")
                 next.RevealDiagnosticSection();
             if (scenario == "startup")
                 next.ShowFixtureStartupPrompt(state.AccountName);
@@ -335,7 +381,7 @@ public sealed partial class App
                     }
                     state = state with
                     {
-                        Keys = Catalog.Where(key => state.Scope?.Vaults.ContainsKey(key.VaultId) == true)
+                        Keys = ActiveCatalog.Where(key => state.Scope?.Vaults.ContainsKey(key.VaultId) == true)
                             .Select(key => state.Keys.FirstOrDefault(current => current.Id == key.Id) ?? key).ToArray(),
                         Index = "ready"
                     };
@@ -346,6 +392,43 @@ public sealed partial class App
                     break;
                 case "preload":
                 case "preload-all":
+                    if (keyApprovalPreview)
+                    {
+                        var owner = window;
+                        var account = state.Account;
+                        state = state with
+                        {
+                            Keys = state.Keys.Select(key => !key.Loaded && (keyId is null || key.Id == keyId)
+                                ? key with { Loading = true } : key).ToArray()
+                        };
+                        owner.ShowState(state, resetSettings);
+                        await Task.Delay(TimeSpan.FromSeconds(3));
+                        if (!ReferenceEquals(owner, window) || account != state.Account)
+                            return;
+                        var failures = 0;
+                        var loads = 0;
+                        state = state with
+                        {
+                            Keys = state.Keys.Select(key =>
+                            {
+                                if (key.Loaded || keyId is not null && key.Id != keyId)
+                                    return key;
+                                if (key.Error is null && (scenario == "key-preload-failure" ||
+                                    scenario == "key-preload-partial" && key.Id == "github-auth"))
+                                {
+                                    failures++;
+                                    return key with { Loading = false, Error = "private-field-missing" };
+                                }
+                                loads++;
+                                return key with { Loaded = true, Loading = false, Error = null };
+                            }).ToArray()
+                        };
+                        window.ShowState(state, resetSettings);
+                        window.ShowMessage(Strings.Get(failures == 0 ? "App.Done" :
+                            loads == 0 ? "Keys.PrivateMissing" : "Keys.PreloadPartial"));
+                        return;
+                    }
+                    goto case "evict-keys";
                 case "evict-keys":
                     state = state with
                     {
@@ -456,10 +539,6 @@ public sealed partial class App
             value.ValueKind == JsonValueKind.Object && value.TryGetProperty(field, out var property) ? property.GetString() : null;
 
         private static string SampleId(int index) => index.ToString("D26", CultureInfo.InvariantCulture);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
 
         private static FixtureActivity[] SampleActivity()
         {

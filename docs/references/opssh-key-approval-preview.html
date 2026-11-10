@@ -1,0 +1,454 @@
+<style>
+#opssh-key-approval-preview {
+  color-scheme: light dark;
+  --frame: light-dark(#f3f3f3,#202020);
+  --pane: light-dark(#f9f9f9,#252525);
+  --row: light-dark(#fff,#2b2b2b);
+  --head: light-dark(#f4f4f4,#232323);
+  --edge: light-dark(#d8d8d8,#3b3b3b);
+  --fg: light-dark(#171717,#f5f5f5);
+  --quiet: light-dark(#545454,#c0c0c0);
+  --button: light-dark(#fff,#333);
+  --hover: light-dark(#ebebeb,#3b3b3b);
+  --accent: light-dark(#005fb8,#60cdff);
+  --on-accent: light-dark(#fff,#0b2634);
+  --warn: light-dark(#833d00,#ffd29d);
+  --good: light-dark(#126b35,#8ad8a1);
+  --toast: light-dark(#f6f6f6,#292929);
+  --taskbar: light-dark(#e8edf6,#20242e);
+  --mono: Consolas, "Cascadia Mono", monospace;
+  color: var(--fg);
+  font: 14px/1.45 "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+#opssh-key-approval-preview * {box-sizing:border-box}
+#opssh-key-approval-preview [hidden] {display:none!important}
+#opssh-key-approval-preview h1,#opssh-key-approval-preview h2,#opssh-key-approval-preview p {margin:0}
+#opssh-key-approval-preview h1 {font-size:30px;line-height:1.18;font-weight:650}
+#opssh-key-approval-preview h2 {font-size:17px;font-weight:650}
+#opssh-key-approval-preview button,#opssh-key-approval-preview select {font:inherit;color:inherit}
+#opssh-key-approval-preview button,#opssh-key-approval-preview select {
+  min-height:32px;padding:4px 10px;border:1px solid var(--edge);border-radius:5px;background:var(--button);
+}
+#opssh-key-approval-preview button {cursor:pointer;white-space:normal}
+#opssh-key-approval-preview button:hover:not(:disabled),#opssh-key-approval-preview select:hover:not(:disabled) {background:var(--hover)}
+#opssh-key-approval-preview button:focus-visible,#opssh-key-approval-preview select:focus-visible,#opssh-key-approval-preview input:focus-visible {outline:2px solid var(--accent);outline-offset:2px}
+#opssh-key-approval-preview button:disabled,#opssh-key-approval-preview select:disabled {opacity:.48;cursor:default}
+#opssh-key-approval-preview .op-accent {background:var(--accent);color:var(--on-accent);border-color:transparent}
+#opssh-key-approval-preview .op-accent:hover:not(:disabled) {background:var(--accent);filter:brightness(.94)}
+#opssh-key-approval-preview .op-flat {border-color:transparent;background:transparent}
+#opssh-key-approval-preview .op-icon-button {inline-size:28px;min-block-size:28px;padding:0;display:grid;place-items:center}
+#opssh-key-approval-preview [data-lucide],#opssh-key-approval-preview .lucide {width:16px;height:16px;flex:none;vertical-align:-3px}
+#opssh-key-approval-preview .op-action {display:inline-flex;align-items:center;justify-content:center;gap:7px}
+#opssh-key-approval-preview .op-muted {color:var(--quiet)}
+#opssh-key-approval-preview .op-mono {font-family:var(--mono);font-variant-numeric:tabular-nums}
+#opssh-key-approval-preview .op-preview {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 8px;color:var(--quiet);font-size:12px}
+#opssh-key-approval-preview .op-preview label {display:flex;align-items:center;gap:8px}
+#opssh-key-approval-preview .op-preview select {min-height:28px;padding:2px 7px;font-size:12px}
+#opssh-key-approval-preview .op-desktop {margin-inline:auto;max-inline-size:100%;position:relative;isolation:isolate;container:opdesktop / inline-size}
+#opssh-key-approval-preview .op-desktop[data-width="edge"] {inline-size:min(100%,930px)}
+#opssh-key-approval-preview .op-desktop[data-width="compact"] {inline-size:min(100%,700px)}
+#opssh-key-approval-preview .op-window {border:1px solid var(--edge);border-radius:9px 9px 0 0;background:var(--frame);overflow:hidden}
+#opssh-key-approval-preview .op-titlebar {display:flex;min-height:38px;align-items:center;justify-content:space-between;padding:0 12px;gap:8px;font-size:12px}
+#opssh-key-approval-preview .op-brand {display:flex;align-items:center;gap:8px}
+#opssh-key-approval-preview .op-brand-icon {display:grid;place-items:center;inline-size:20px;block-size:20px;border-radius:4px;background:var(--accent);color:var(--on-accent);flex:none}
+#opssh-key-approval-preview .op-chrome {display:flex;align-items:center;gap:23px;color:var(--quiet);letter-spacing:.1em}
+#opssh-key-approval-preview .op-app {display:grid;grid-template-columns:134px minmax(0,1fr);min-block-size:440px}
+#opssh-key-approval-preview .op-nav {display:flex;flex-direction:column;gap:5px;padding:9px 6px}
+#opssh-key-approval-preview .op-nav button {text-align:start;display:flex;align-items:center;gap:9px;padding:5px 10px;position:relative}
+#opssh-key-approval-preview .op-nav button[aria-current="page"] {background:var(--hover)}
+#opssh-key-approval-preview .op-nav button[aria-current="page"]::before {content:"";position:absolute;inset:7px auto 7px 0;width:3px;border-radius:3px;background:var(--accent)}
+#opssh-key-approval-preview .op-nav button:last-child {margin-top:auto}
+#opssh-key-approval-preview .op-main {min-inline-size:0;border:1px solid var(--edge);border-width:1px 0 0 1px;border-radius:8px 0 0 0;background:var(--pane);padding:22px 18px 24px}
+#opssh-key-approval-preview .op-pagehead {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:13px;flex-wrap:wrap}
+#opssh-key-approval-preview .op-pagehead p {margin-top:4px}
+#opssh-key-approval-preview .op-toolbar {display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 12px}
+#opssh-key-approval-preview .op-keytable {container:opkeytable / inline-size;border:1px solid var(--edge);border-radius:7px;background:var(--row);overflow:hidden}
+#opssh-key-approval-preview .op-keygrid {
+  display:grid;grid-template-columns:minmax(188px,1fr) 106px 84px 300px;
+  column-gap:12px;align-items:center;padding:10px 14px;
+}
+#opssh-key-approval-preview .op-tablehead {background:var(--head);color:var(--quiet);font-weight:600;font-size:12px}
+#opssh-key-approval-preview .op-keyentry {border-top:1px solid var(--edge)}
+#opssh-key-approval-preview .op-id,#opssh-key-approval-preview .op-stat,#opssh-key-approval-preview .op-grants {min-inline-size:0}
+#opssh-key-approval-preview .op-id strong {display:block;font-weight:600;overflow-wrap:anywhere}
+#opssh-key-approval-preview .op-fingerprint {display:block;color:var(--quiet);font-size:11px;overflow-wrap:anywhere}
+#opssh-key-approval-preview .op-ops {justify-self:end;display:flex;justify-content:flex-end;flex-wrap:wrap;gap:5px}
+#opssh-key-approval-preview .op-ops button,#opssh-key-approval-preview .op-grants button {font-size:12px;min-height:29px;padding:4px 7px}
+#opssh-key-approval-preview .op-col-label {display:none}
+#opssh-key-approval-preview .op-inline-state {display:flex;align-items:center;gap:7px;font-size:13px}
+#opssh-key-approval-preview .op-dot {inline-size:6px;block-size:6px;flex:none;border-radius:50%;background:currentColor}
+#opssh-key-approval-preview .op-is-good {color:var(--good)}
+#opssh-key-approval-preview .op-is-warn {color:var(--warn)}
+#opssh-key-approval-preview .op-row-note {margin:0 14px 11px!important;padding:6px 9px;border-radius:4px;background:color-mix(in srgb,var(--warn) 9%,var(--row));color:var(--warn);font-size:12px}
+#opssh-key-approval-preview .op-grant-note {padding:0 14px 12px;color:var(--quiet);font-size:12px}
+#opssh-key-approval-preview .op-statusline {color:var(--quiet);font-size:12px;margin-top:8px;min-height:1.4em}
+#opssh-key-approval-preview .op-logsection {margin-top:19px}
+#opssh-key-approval-preview .op-settingbox {margin-top:7px;border:1px solid var(--edge);border-radius:7px;background:var(--row);overflow:hidden}
+#opssh-key-approval-preview .op-setting {
+  min-height:58px;display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:9px;align-items:center;
+  padding:9px 14px;border-bottom:1px solid var(--edge);
+}
+#opssh-key-approval-preview .op-setting:last-child {border-bottom:0}
+#opssh-key-approval-preview .op-setting strong {font-weight:600}
+#opssh-key-approval-preview .op-setting p {color:var(--quiet);font-size:12px}
+#opssh-key-approval-preview .op-logright {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+#opssh-key-approval-preview .op-logsize {font-size:14px;font-weight:400;white-space:nowrap;line-height:1;font-variant-numeric:tabular-nums;align-self:center}
+#opssh-key-approval-preview .op-switch {display:inline-flex;align-items:center;gap:7px}
+#opssh-key-approval-preview .op-switch input {appearance:none;width:36px;height:19px;margin:0;border:1px solid var(--quiet);border-radius:18px;position:relative}
+#opssh-key-approval-preview .op-switch input::after {content:"";position:absolute;width:9px;height:9px;top:4px;left:4px;border-radius:50%;background:var(--quiet)}
+#opssh-key-approval-preview .op-switch input:checked {background:var(--accent);border-color:var(--accent)}
+#opssh-key-approval-preview .op-switch input:checked::after {left:21px;background:var(--on-accent)}
+#opssh-key-approval-preview .op-taskbar {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;background:var(--taskbar);border:1px solid var(--edge);border-top:0;border-radius:0 0 9px 9px;padding:7px 10px}
+#opssh-key-approval-preview .op-taskbar .op-run {display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#opssh-key-approval-preview .op-taskbar .op-run code {color:var(--fg)}
+#opssh-key-approval-preview .op-task-result {font-size:12px;overflow-wrap:anywhere}
+#opssh-key-approval-preview .op-warp {display:inline-grid;place-items:center;flex:none;inline-size:36px;block-size:36px;border-radius:8px;background:#184fd1;color:#fff}
+#opssh-key-approval-preview .op-warp img {display:block;width:62%;height:62%;filter:invert(1)}
+#opssh-key-approval-preview .op-warp span {font-size:17px;font-weight:700}
+#opssh-key-approval-preview .op-warp-small {inline-size:21px;block-size:21px;border-radius:4px}
+#opssh-key-approval-preview .op-warp-small span {font-size:12px}
+#opssh-key-approval-preview .op-toast {
+  position:absolute;z-index:3;inset:auto 10px 55px auto;inline-size:min(410px,calc(100% - 20px));
+  border:1px solid var(--edge);border-radius:8px;background:var(--toast);box-shadow:0 10px 32px #0004;overflow:hidden;
+}
+#opssh-key-approval-preview .op-toastbar {padding:6px 9px 4px 11px;display:flex;align-items:center;justify-content:space-between;gap:5px;font-size:12px}
+#opssh-key-approval-preview .op-toastbar .op-brand-icon {inline-size:16px;block-size:16px}
+#opssh-key-approval-preview .op-toastbar .op-brand-icon [data-lucide],#opssh-key-approval-preview .op-toastbar .op-brand-icon .lucide {inline-size:12px;block-size:12px}
+#opssh-key-approval-preview .op-toastbody {display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:7px 12px 11px;align-items:start}
+#opssh-key-approval-preview .op-toastbody h2 {font-size:15px;margin-bottom:2px}
+#opssh-key-approval-preview .op-toastbody p {font-size:13px}
+#opssh-key-approval-preview .op-toastbody .op-fingerprint {margin-top:2px}
+#opssh-key-approval-preview .op-toast-time {color:var(--quiet);margin-top:4px!important;font-size:11px!important}
+#opssh-key-approval-preview .op-toastactions {display:flex;gap:5px;padding:7px 9px 9px;border-top:1px solid var(--edge);flex-wrap:wrap}
+#opssh-key-approval-preview .op-toastactions button {flex:1 1 auto;font-size:12px;padding-inline:5px}
+#opssh-key-approval-preview .op-explorer {min-block-size:478px;background:var(--pane)}
+#opssh-key-approval-preview .op-explorer .op-titlebar {background:var(--frame);border-bottom:1px solid var(--edge)}
+#opssh-key-approval-preview .op-address {padding:9px 14px;border-bottom:1px solid var(--edge);font-size:12px;overflow-wrap:anywhere}
+#opssh-key-approval-preview .op-files {padding:13px 14px}
+#opssh-key-approval-preview .op-files .op-file {display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;margin:4px 0;text-align:start}
+#opssh-key-approval-preview .op-files pre {font-size:12px;margin:9px 0 0;padding:8px;border:1px solid var(--edge);border-radius:5px;background:var(--row);white-space:pre-wrap;overflow-wrap:anywhere}
+#opssh-key-approval-preview .op-clear {padding:8px 14px 12px;border-top:1px solid var(--edge)}
+#opssh-key-approval-preview .op-clear p {margin-bottom:7px}
+@container opkeytable (width < 742px) {
+  #opssh-key-approval-preview .op-keygrid {grid-template-columns:auto auto minmax(0,1fr);gap:8px 12px;padding:10px 12px}
+  #opssh-key-approval-preview .op-tablehead {display:none}
+  #opssh-key-approval-preview .op-id {grid-column:1/-1}
+  #opssh-key-approval-preview .op-col-label {display:block;font-size:11px;color:var(--quiet)}
+  #opssh-key-approval-preview .op-ops {justify-content:flex-start;justify-self:start}
+  #opssh-key-approval-preview .op-ops .op-col-label {flex-basis:100%;margin-bottom:-4px}
+}
+@container opkeytable (width < 490px) {
+  #opssh-key-approval-preview .op-keygrid {grid-template-columns:auto minmax(0,1fr);justify-content:start}
+  #opssh-key-approval-preview .op-ops {grid-column:1/-1}
+}
+@container opdesktop (width < 780px) {
+  #opssh-key-approval-preview .op-app {grid-template-columns:45px minmax(0,1fr)}
+  #opssh-key-approval-preview .op-nav {padding-inline:3px}
+  #opssh-key-approval-preview .op-nav button {justify-content:center;padding:5px 2px}
+  #opssh-key-approval-preview .op-nav span {display:none}
+  #opssh-key-approval-preview .op-main {padding:17px 11px}
+  #opssh-key-approval-preview h1 {font-size:25px}
+}
+@container opdesktop (width < 450px) {
+  #opssh-key-approval-preview .op-setting {grid-template-columns:16px minmax(0,1fr);padding-inline:10px}
+  #opssh-key-approval-preview .op-logright {grid-column:2;justify-content:flex-start}
+  #opssh-key-approval-preview .op-toast {bottom:82px}
+  #opssh-key-approval-preview .op-toastactions button {flex-basis:100%}
+}
+</style>
+<div id="opssh-key-approval-preview" aria-label="opssh 密钥与授权预览">
+  <div class="op-preview">
+    <label>预览窗口宽度
+      <select data-width-picker>
+        <option value="wide">宽窗口</option>
+        <option value="edge">接近临界</option>
+        <option value="compact">窄窗口</option>
+      </select>
+    </label>
+    <label>预加载演示
+      <select data-preload-picker>
+        <option value="failure">请求失败</option>
+        <option value="success">加载成功</option>
+      </select>
+    </label>
+  </div>
+  <div class="op-desktop" data-desktop data-width="wide">
+    <div class="op-window">
+      <div data-opssh>
+        <div class="op-titlebar">
+          <span class="op-brand"><span class="op-brand-icon"><i data-lucide="terminal" aria-hidden="true"></i></span>opssh</span>
+          <span class="op-chrome" aria-hidden="true">―　□　×</span>
+        </div>
+        <div class="op-app">
+          <nav class="op-nav" aria-label="opssh">
+            <button class="op-flat" type="button" data-page="keys" aria-label="SSH 密钥" aria-current="page"><i data-lucide="key-round" aria-hidden="true"></i><span>SSH 密钥</span></button>
+            <button class="op-flat" type="button" data-page="settings" aria-label="设置"><i data-lucide="settings" aria-hidden="true"></i><span>设置</span></button>
+          </nav>
+          <main class="op-main">
+            <section data-panel="keys">
+              <div class="op-pagehead">
+                <div><h1>SSH 密钥</h1><p class="op-muted">发现密钥、管理预加载状态和进程授权。</p></div>
+                <button class="op-accent op-action" type="button" data-command="discover"><i data-lucide="search" aria-hidden="true"></i>发现 SSH 密钥</button>
+              </div>
+              <p class="op-muted" data-key-count>3 把公钥　·　0 项授权</p>
+              <div class="op-toolbar">
+                <button class="op-action" type="button" data-command="preload-all"><i data-lucide="download" aria-hidden="true"></i>预加载全部私钥</button>
+                <button class="op-action" type="button" data-command="evict-all" disabled><i data-lucide="trash-2" aria-hidden="true"></i>清除已加载私钥</button>
+                <button class="op-action" type="button" data-command="revoke-all" disabled><i data-lucide="lock-keyhole" aria-hidden="true"></i>撤销全部授权</button>
+              </div>
+              <div class="op-keytable" role="table" aria-label="SSH 密钥">
+                <div class="op-keygrid op-tablehead" role="row"><span role="columnheader">密钥</span><span role="columnheader">私钥加载状态</span><span role="columnheader">授权</span><span role="columnheader">操作</span></div>
+                <div data-key-rows role="rowgroup"></div>
+              </div>
+              <p class="op-statusline" data-keys-status role="status"></p>
+            </section>
+            <section data-panel="settings" hidden>
+              <div class="op-pagehead"><div><h1>设置</h1><p class="op-muted">管理 SSH 集成和诊断日志。</p></div></div>
+              <h2>SSH 集成</h2>
+              <div class="op-settingbox">
+                <div class="op-setting">
+                  <i data-lucide="square-terminal" aria-hidden="true"></i>
+                  <div><strong>当前 PowerShell 会话</strong><p>将此会话的 SSH 请求交给 opssh。</p></div>
+                  <div class="op-logright"><code class="op-mono" style="overflow-wrap:anywhere">$env:SSH_AUTH_SOCK = '\\.\pipe\opssh-agent-0123456789abcdef'</code></div>
+                </div>
+              </div>
+              <section class="op-logsection">
+                <h2>日志</h2>
+                <div class="op-settingbox">
+                  <div class="op-setting"><i data-lucide="folder-open" aria-hidden="true"></i><div><strong>日志目录</strong><p class="op-mono">logs\</p></div><div class="op-logright"><button type="button" class="op-action" data-command="explorer"><i data-lucide="external-link" aria-hidden="true"></i>打开目录</button></div></div>
+                  <div class="op-setting"><i data-lucide="file-text" aria-hidden="true"></i><div><strong>启用日志</strong><p>记录运行阶段、耗时和结果。</p></div><div class="op-logright"><label class="op-switch"><input type="checkbox" role="switch" aria-label="启用日志" data-log-enabled checked><span data-log-toggle-label>开</span></label></div></div>
+                  <div class="op-setting"><i data-lucide="list-filter" aria-hidden="true"></i><div><strong>日志级别</strong><p data-log-hint>默认级别为 INFO。</p></div><div class="op-logright"><select aria-label="日志级别" data-log-level><option>ERROR</option><option>WARN</option><option>INFO</option><option selected>DEBUG</option></select></div></div>
+                  <div class="op-setting"><i data-lucide="hard-drive" aria-hidden="true"></i><div><strong>日志占用空间</strong></div><div class="op-logright"><span class="op-mono op-logsize" data-log-size>1.4 MB</span><button type="button" class="op-action" data-command="clear-ask"><i data-lucide="trash-2" aria-hidden="true"></i>清理日志</button></div></div>
+                  <div class="op-clear" data-clear-confirm hidden><p>清理 opssh 的诊断日志？</p><button type="button" data-command="clear-do">清理日志</button> <button type="button" data-command="clear-cancel">取消</button></div>
+                </div>
+              </section>
+              <p class="op-statusline" data-log-status role="status"></p>
+            </section>
+          </main>
+        </div>
+      </div>
+      <section class="op-explorer" data-explorer aria-label="Windows 文件资源管理器" hidden>
+        <div class="op-titlebar"><span class="op-brand"><i data-lucide="folder-open" aria-hidden="true"></i>logs · 文件资源管理器</span><button class="op-flat op-icon-button" type="button" data-command="explorer-close" aria-label="关闭文件资源管理器">×</button></div>
+        <div class="op-address op-mono">%LOCALAPPDATA% &gt; opssh &gt; logs</div>
+        <div class="op-files" data-files></div>
+      </section>
+    </div>
+    <div class="op-taskbar" aria-label="Warp PowerShell 演示">
+      <div class="op-run"><span class="op-warp op-warp-small" aria-hidden="true"><img src="https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/warp.svg" alt=""><span hidden>W</span></span><span class="op-muted">Warp · PowerShell</span><button type="button" data-command="run"><code class="op-mono">ssh github</code></button></div>
+      <span class="op-task-result op-muted" data-shell-result role="status">终端已使用 opssh</span>
+    </div>
+    <section class="op-toast" data-toast aria-label="Windows 通知 · SSH 签名请求" hidden>
+      <div class="op-toastbar">
+        <span class="op-brand"><span class="op-brand-icon"><i data-lucide="terminal" aria-hidden="true"></i></span>opssh</span>
+        <button class="op-flat op-icon-button" type="button" data-command="dismiss" aria-label="关闭通知">×</button>
+      </div>
+      <div class="op-toastbody">
+        <span class="op-warp" aria-hidden="true"><img src="https://cdn.jsdelivr.net/npm/simple-icons@16.0.0/icons/warp.svg" alt=""><span hidden>W</span></span>
+        <div>
+          <h2>SSH 签名请求</h2>
+          <p><strong>warp.exe</strong> <span class="op-muted">· PID 18420</span> 请求使用</p>
+          <p><strong>github authentication key</strong></p>
+          <code class="op-fingerprint op-mono" data-toast-fingerprint></code>
+          <p class="op-toast-time" data-expiry>50 秒后过期</p>
+        </div>
+      </div>
+      <div class="op-toastactions">
+        <button type="button" data-scope="all">为所有应用授权</button>
+        <button type="button" data-scope="app">授权此应用</button>
+        <button type="button" data-scope="once">仅授权请求</button>
+        <button type="button" data-command="deny">拒绝</button>
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById("opssh-key-approval-preview");
+  const one = selector => root.querySelector(selector);
+  const all = selector => Array.from(root.querySelectorAll(selector));
+  const keys = [
+    { name: "vm001 ssh key", fingerprint: "SHA256:J8x2VN4tkCQq5pI2aM6aFE8hQ6P0sWD8q1N3RZ2s7lk" },
+    { name: "github authentication key", fingerprint: "SHA256:G7pN3b9fQK2cX6D4yW0eH8sRt5JvLa1mU3nY6pZq8So" },
+    { name: "github signing key", fingerprint: "SHA256:S3mV6k1nR8xH4gZp2uL5J7fQ9aT0iY8bN2cW5oE1dUg" },
+  ].map(key => ({...key, loaded:false, status:"idle", expanded:false}));
+  const selectedKey = keys[1];
+  const scopeText = { all:"此密钥 · 所有应用", app:"此密钥 · warp.exe · PID 18420", once:"仅本次签名" };
+  const desktop = one("[data-desktop]");
+  const rows = one("[data-key-rows]");
+  const toast = one("[data-toast]");
+  const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
+  const state = { bytes:1441792, originalLog:true, logs:[], grant:null, expires:0, requestTimer:0, explorer:false, showLog:false, clear:false };
+  const icons = () => globalThis.lucide?.createIcons({ attrs:{ width:16, height:16 } });
+  const btn = (label, command, disabled = false) => '<button type="button" data-command="' + command + '"' + (disabled ? ' disabled' : '') + '>' + label + '</button>';
+  const count = key => key === selectedKey && state.grant ? 1 : 0;
+  function drawKeys() {
+    rows.innerHTML = keys.map((key, index) => {
+      const waiting = key.status === "busy", error = key.status === "failure", grants = count(key);
+      const status = waiting ? "加载中…" : key.loaded ? "已加载" : error ? "加载失败" : "未加载";
+      const tone = key.loaded ? " op-is-good" : error ? " op-is-warn" : " op-muted";
+      return '<div class="op-keyentry"><div class="op-keygrid" role="row">' +
+        '<div class="op-id" role="cell"><strong>' + key.name + '</strong><span class="op-muted">Personal</span><code class="op-fingerprint op-mono">' + key.fingerprint + '</code></div>' +
+        '<div class="op-stat" role="cell"><span class="op-col-label">私钥加载状态</span><span class="op-inline-state' + tone + '"><span class="op-dot" aria-hidden="true"></span>' + status + '</span></div>' +
+        '<div class="op-grants" role="cell"><span class="op-col-label">授权</span><button type="button" class="op-action" data-command="expand:' + index + '" aria-expanded="' + key.expanded + '"><i data-lucide="' + (key.expanded ? 'chevron-down' : 'chevron-right') + '" aria-hidden="true"></i>' + grants + ' 项</button></div>' +
+        '<div class="op-ops" role="cell"><span class="op-col-label">操作</span>' +
+        btn(error ? "重试预加载" : "预加载私钥", "preload:" + index, waiting || key.loaded) +
+        btn("清除私钥缓存", "evict:" + index, !key.loaded) +
+        btn("撤销该密钥授权", "revoke:" + index, !grants) + '</div></div>' +
+        (error ? '<p class="op-row-note" role="status">无法预加载私钥。' + (key.logged ? '诊断已记录。' : '可开启日志后重试。') + '</p>' : '') +
+        (key.expanded ? '<div class="op-grant-note">' + (grants ? scopeText[state.grant] + ' · 按批准缓存策略保留' : '此密钥暂无缓存授权。') + '</div>' : '') + '</div>';
+    }).join("");
+    one("[data-key-count]").textContent = "3 把公钥　·　" + (state.grant ? "1 项授权" : "0 项授权");
+    one('[data-command="evict-all"]').disabled = keys.every(key => !key.loaded);
+    one('[data-command="revoke-all"]').disabled = !state.grant;
+    one('[data-command="preload-all"]').disabled = keys.every(key => key.loaded || key.status === "busy");
+    icons();
+  }
+  function formatSize(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return bytes + " B";
+  }
+  function drawLogs() {
+    const enabled = one("[data-log-enabled]").checked;
+    one("[data-log-toggle-label]").textContent = enabled ? "开" : "关";
+    one("[data-log-level]").disabled = !enabled;
+    one("[data-log-hint]").textContent = enabled ? "默认级别为 INFO。" : "启用日志后可更改。";
+    one("[data-log-size]").textContent = formatSize(state.bytes);
+    one('[data-command="clear-ask"]').disabled = !state.bytes;
+    one("[data-clear-confirm]").hidden = !state.clear;
+  }
+  function drawFiles() {
+    const files = one("[data-files]");
+    files.innerHTML = state.bytes ? '<p class="op-muted">名称　/　大小</p>' +
+      '<button class="op-file" type="button" data-command="view-log"><span><i data-lucide="file-text" aria-hidden="true"></i> opssh.log</span><span class="op-mono">' +
+      formatSize(state.originalLog ? state.bytes - 1048576 : state.bytes) + '</span></button>' +
+      (state.originalLog ? '<p class="op-file"><span><i data-lucide="file-text" aria-hidden="true"></i> opssh.1.log</span><span class="op-mono">1.0 MB</span></p>' : '') :
+      '<p class="op-muted">此文件夹为空。</p>';
+    if (state.showLog && state.bytes) {
+      const pre = document.createElement("pre");
+      pre.className = "op-mono";
+      pre.textContent = state.logs.join("\n") || "INFO  agent.ready  outcome=success";
+      files.append(pre);
+    }
+    icons();
+  }
+  function record(level, event) {
+    if (!one("[data-log-enabled]").checked || levels.indexOf(level) < levels.indexOf(one("[data-log-level]").value)) return false;
+    const line = level.padEnd(5, " ") + "  ssh.preload  " + event;
+    state.logs.push(line);
+    if (state.logs.length > 12) state.logs.shift();
+    state.bytes += line.length + 1;
+    drawLogs();
+    if (state.explorer) drawFiles();
+    return true;
+  }
+  function preload(key) {
+    if (key.loaded || key.status === "busy") return;
+    const fail = one("[data-preload-picker]").value === "failure";
+    key.status = "busy";
+    record("DEBUG", "stage=requested");
+    drawKeys();
+    setTimeout(() => {
+      key.loaded = !fail;
+      key.status = fail ? "failure" : "idle";
+      key.logged = record(fail ? "ERROR" : "INFO", "outcome=" + (fail ? "failure" : "success"));
+      drawKeys();
+    }, 380);
+  }
+  function showPage(page) {
+    all("[data-page]").forEach(button => {
+      if (button.dataset.page === page) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    all("[data-panel]").forEach(panel => panel.hidden = panel.dataset.panel !== page);
+  }
+  function closeToast(message) {
+    clearInterval(state.requestTimer);
+    state.expires = 0;
+    toast.hidden = true;
+    one("[data-shell-result]").textContent = message;
+  }
+  function updateExpiry() {
+    const seconds = Math.ceil((state.expires - Date.now()) / 1000);
+    if (seconds <= 0) {
+      closeToast("请求已超时 · 未签名");
+      return;
+    }
+    one("[data-expiry]").textContent = seconds + " 秒后过期";
+  }
+  function run() {
+    if (state.expires) return;
+    if (state.grant) {
+      one("[data-shell-result]").textContent = "签名完成 · 已使用此密钥的缓存授权";
+      return;
+    }
+    state.expires = Date.now() + 50000;
+    toast.hidden = false;
+    one("[data-shell-result]").textContent = "等待 SSH 签名授权…";
+    updateExpiry();
+    state.requestTimer = setInterval(updateExpiry, 1000);
+  }
+  function approve(scope) {
+    if (!state.expires || state.expires <= Date.now()) return;
+    if (scope !== "once") {
+      state.grant = scope;
+      selectedKey.expanded = true;
+      drawKeys();
+    }
+    closeToast("签名完成 · " + scopeText[scope]);
+  }
+  function explorer(open) {
+    state.explorer = open;
+    state.showLog = false;
+    one("[data-opssh]").hidden = open;
+    one("[data-explorer]").hidden = !open;
+    if (open) {
+      drawFiles();
+      one('[data-command="explorer-close"]').focus();
+    } else {
+      one('[data-command="explorer"]').focus();
+    }
+  }
+  root.addEventListener("click", event => {
+    const control = event.target.closest("button");
+    if (!control || control.disabled) return;
+    if (control.dataset.page) { showPage(control.dataset.page); return; }
+    if (control.dataset.scope) { approve(control.dataset.scope); return; }
+    const [action, index] = (control.dataset.command || "").split(":");
+    const key = keys[index];
+    switch (action) {
+      case "discover": one("[data-keys-status]").textContent = "发现完成 · 3 把公钥"; break;
+      case "preload": preload(key); break;
+      case "preload-all": keys.forEach(preload); break;
+      case "evict": key.loaded = false; drawKeys(); break;
+      case "evict-all": keys.forEach(key => key.loaded = false); drawKeys(); break;
+      case "expand": key.expanded = !key.expanded; drawKeys(); one('[data-command="expand:' + index + '"]')?.focus(); break;
+      case "revoke":
+      case "revoke-all": state.grant = null; drawKeys(); break;
+      case "explorer": explorer(true); break;
+      case "explorer-close": explorer(false); break;
+      case "view-log": state.showLog = !state.showLog; drawFiles(); one('[data-command="view-log"]')?.focus(); break;
+      case "clear-ask": state.clear = true; drawLogs(); one('[data-command="clear-do"]').focus(); break;
+      case "clear-cancel": state.clear = false; drawLogs(); one('[data-command="clear-ask"]').focus(); break;
+      case "clear-do": state.bytes = 0; state.originalLog = false; state.logs = []; state.clear = false; drawLogs(); one("[data-log-status]").textContent = "日志已清理。"; break;
+      case "run": run(); break;
+      case "deny":
+        if (state.expires > Date.now()) closeToast("已拒绝本次请求 · 未签名");
+        else if (state.expires) updateExpiry();
+        break;
+      case "dismiss": closeToast("通知已关闭 · 未授权"); break;
+    }
+  });
+  one("[data-width-picker]").addEventListener("change", event => desktop.dataset.width = event.target.value);
+  one("[data-log-enabled]").addEventListener("change", drawLogs);
+  one("[data-toast-fingerprint]").textContent = selectedKey.fingerprint;
+  all(".op-warp img").forEach(img => {
+    const fallback = () => { img.hidden = true; img.nextElementSibling.hidden = false; };
+    if (img.complete && !img.naturalWidth) fallback();
+    else img.addEventListener("error", fallback, {once:true});
+  });
+  drawKeys();
+  drawLogs();
+})();
+</script>
+

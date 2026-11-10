@@ -1,11 +1,13 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Opssh.Tray;
 
 public sealed partial class DashboardWindow
 {
     private TextBlock? diagnosticUsage;
+    private Button? openLogDirectory;
     private Button? clearDiagnosticLogs;
     private bool diagnosticUsageReading;
     private bool diagnosticUsagePending;
@@ -53,62 +55,34 @@ public sealed partial class DashboardWindow
         enabled.Toggled += (_, _) => ChangePolicy();
         level.SelectionChanged += (_, _) => ChangePolicy();
 
-        var open = DashboardButton(Strings.Get("Settings.OpenLogDirectory"), async () =>
+        var open = KeysButton("Settings.OpenLogDirectory", async () =>
         {
             if (closed || diagnosticActionPending)
                 return;
             diagnosticActionPending = true;
+            openLogDirectory!.IsEnabled = false;
+            clearDiagnosticLogs!.IsEnabled = false;
             try
             {
-                var state = await diagnostics.Read();
-                if (closed)
-                    return;
-                if (state is null)
-                {
+                if (!await diagnostics.OpenDirectory() && !closed)
                     ShowMessage(Strings.Get("Settings.LogDirectoryFailed"), InfoBarSeverity.Warning);
-                    return;
-                }
-
-                var path = new HyperlinkButton
-                {
-                    Content = Mono(@"%LOCALAPPDATA%\opssh\logs\"),
-                    Padding = new Thickness(0)
-                };
-                var directoryError = Quiet(Strings.Get("Settings.LogDirectoryFailed"), 12);
-                directoryError.Style = StyleFor("DashboardErrorTextStyle");
-                directoryError.Visibility = Visibility.Collapsed;
-                path.Click += async (_, _) =>
-                {
-                    if (closed || !path.IsEnabled)
-                        return;
-                    path.IsEnabled = false;
-                    var opened = await diagnostics.OpenDirectory();
-                    if (closed)
-                        return;
-                    path.IsEnabled = true;
-                    directoryError.Visibility = opened ? Visibility.Collapsed : Visibility.Visible;
-                };
-                var details = new StackPanel { Spacing = 8, Children = { path, directoryError } };
-                if (state.Files.Count == 0)
-                    details.Children.Add(Quiet(Strings.Get("Settings.LogDirectoryEmpty")));
-                foreach (var file in state.Files)
-                    details.Children.Add(SettingsLayout.Row(Mono(file.Name), Mono(FormatDiagnosticBytes(file.Bytes))));
-                await ShowDialogAsync(new ContentDialog
-                {
-                    Title = Strings.Get("Settings.LogDirectory"),
-                    Content = details,
-                    CloseButtonText = Strings.Get("Settings.CloseLogDirectory")
-                });
             }
             finally
             {
                 diagnosticActionPending = false;
+                if (!closed)
+                    openLogDirectory.IsEnabled = true;
                 RefreshDiagnosticUsage();
             }
-        });
+        }, "\uE8A7");
+        openLogDirectory = open;
 
-        diagnosticUsage = Mono("—");
-        var clear = DashboardButton(Strings.Get("Settings.ClearLogs"), async () =>
+        diagnosticUsage = Mono("—", 14);
+        diagnosticUsage.FontFamily = new FontFamily("Consolas");
+        diagnosticUsage.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
+        diagnosticUsage.TextWrapping = TextWrapping.NoWrap;
+        diagnosticUsage.VerticalAlignment = VerticalAlignment.Center;
+        var clear = KeysButton("Settings.ClearLogs", async () =>
         {
             if (closed || diagnosticActionPending)
                 return;
@@ -149,19 +123,22 @@ public sealed partial class DashboardWindow
                 diagnosticActionPending = false;
                 RefreshDiagnosticUsage();
             }
-        });
+        }, "\uE74D");
         clear.IsEnabled = false;
         clearDiagnosticLogs = clear;
         var usage = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
             Children = { diagnosticUsage, clear }
         };
+        var usageRow = SettingRow("\uEDA2", Strings.Get("Settings.LogUsage"), "", usage);
+        usageRow.MinHeight = 58;
         var section = Section(Strings.Get("Settings.Logs"), Rows(
             SettingRow("\uE838", Strings.Get("Settings.LogDirectory"), Mono(@"logs\"), open),
             SettingRow("\uE8A5", Strings.Get("Settings.EnableLogs"), Strings.Get("Settings.EnableLogsDescription"), enabled),
             SettingRow("\uE71C", Strings.Get("Settings.LogLevel"), levelDescription, level),
-            SettingRow("\uEDA2", Strings.Get("Settings.LogUsage"), "", usage)));
+            usageRow));
 #if OPSSH_DASHBOARD_FIXTURE
         diagnosticSection = section;
 #endif

@@ -103,11 +103,7 @@ public sealed partial class DashboardWindow : Window
                 ShowPage();
             }
         };
-        DashboardRoot.SizeChanged += (_, args) =>
-        {
-            Navigation.OpenPaneLength = args.NewSize.Width <= 800 ? 152 : 186;
-            SetPageMargin(args.NewSize.Width);
-        };
+        DashboardRoot.SizeChanged += (_, args) => SetPageMargin(args.NewSize.Width);
         PageSurface.SizeChanged += (_, args) =>
             Feedback.Width = Math.Clamp(args.NewSize.Width - 28, 0, 480);
         SelectPage("account");
@@ -174,6 +170,26 @@ public sealed partial class DashboardWindow : Window
 
     private void SetPageMargin(double width)
     {
+        var keyPage = CurrentPage == "keys" && !SignedOutPage;
+        Navigation.OpenPaneLength = keyPage ? 134 : width <= 800 ? 152 : 186;
+        Navigation.CompactPaneLength = keyPage ? 45 : 48;
+        Navigation.ExpandedModeThresholdWidth = keyPage ? 780 : 620;
+        foreach (var item in navigationItems.Values)
+        {
+            if (keyPage)
+                item.FontSize = 13;
+            else
+                item.ClearValue(Control.FontSizeProperty);
+        }
+        if (keyPage)
+        {
+            var inset = width < 780 ? 11 : 18;
+            if (keysHeading is not null)
+                keysHeading.FontSize = width < 780 ? 25 : 30;
+            PageHost.Margin = new Thickness(inset, width < 780 ? 13 : 18, inset, 0);
+            return;
+        }
+
         var padding = width <= 620 ? 14 : Math.Clamp(width * 0.032, 16, 32);
         PageHost.Margin = SignedOutPage ? new Thickness(12, 12, 28, 12) : new Thickness(padding, Math.Max(0, padding - 4), padding + 14,
             CurrentPage == "activity" ? padding : 0);
