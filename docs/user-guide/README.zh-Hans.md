@@ -2,7 +2,7 @@
 
 [English](README.md) · **简体中文** · [项目概览](../../README.zh-Hans.md)
 
-通过 opssh，Windows x64 系统 OpenSSH 客户端可以使用 1Password 桌面应用中的 SSH 密钥签名。先[安装](#install)并[连接 1Password](#connect)，再[在 PowerShell 中选择代理](#select-agent)，并[批准首次签名请求](#approve-signing)。
+通过 opssh，Windows x64 系统 OpenSSH 客户端可以使用 1Password 桌面应用中的 SSH 密钥签名。先[安装](#install)并[连接 1Password](#connect)，再[选择 SSH 代理](#select-agent)，并[批准首次签名请求](#approve-signing)。
 
 <a name="install"></a>
 
@@ -10,14 +10,11 @@
 
 准备装有系统 OpenSSH 客户端的 Windows x64、PowerShell，以及已登录且存有 SSH Key 条目的 1Password 桌面应用。首次连接时，请使用已经接受该条目公钥的 SSH 主机。
 
-正式发行版发布后，请选择适合你的 Windows x64 安装包。安装器和 opssh 二进制文件均未签名。[GitHub 发行版](https://github.com/Cirnouo/opssh/releases)
+正式发行版发布后，请下载 Windows x64 MSI。它会为当前用户安装到 `%LOCALAPPDATA%\Programs\opssh`。安装器和 opssh 二进制文件均未签名。[GitHub 发行版](https://github.com/Cirnouo/opssh/releases)
 
-| 下载项 | 安装和启动 |
-| --- | --- |
-| MSI 或离线 EXE 安装器 | 运行任一安装器，为当前用户安装到 `%LOCALAPPDATA%\Programs\opssh`。安装后从开始菜单打开 **opssh**。 |
-| 便携 ZIP | 完整解压压缩包，然后运行顶层的 `opssh-tray.exe`。请保留同一目录下的 `opssh-runtime` 文件夹。 |
+首次交互安装的完成页默认勾选 **登录 Windows 时启动 opssh** 和 **将 opssh 设为默认 SSH 代理**。取消勾选自启会禁用默认代理选项。选择 **Skip** 可跳过这两项设置。如果 Windows 询问是否允许更改 OpenSSH 服务，请批准以完成默认代理切换。升级、修复或静默安装后可在 opssh 中调整设置。可从开始菜单打开 **opssh**。
 
-如果 opssh 正在运行，请在安装、修复、升级或卸载前，右键点击托盘图标并选择 **退出 opssh**。已安装的程序由 Windows **已安装的应用** 管理。卸载会移除程序文件和开始菜单快捷方式，保留 `%LOCALAPPDATA%\opssh` 中的设置和公钥索引。
+卸载前请关闭 **登录 Windows 时启动**，如有提示请确认 **恢复 OpenSSH**。如果 opssh 正在运行，请在安装、修复、升级或卸载前，右键点击托盘图标并选择 **退出 opssh**。已安装的程序由 Windows **已安装的应用** 管理。卸载会移除程序文件和开始菜单快捷方式，保留 `%LOCALAPPDATA%\opssh` 中的设置和公钥索引。
 
 如需从源代码构建，请参阅[开发与贡献指南](../../CONTRIBUTING.md)。
 
@@ -35,6 +32,8 @@ opssh 保存已选账户和公钥索引。**1Password** 页显示上次请求的
 
 ## 切换或恢复 SSH 代理
 
+opssh 已作为默认 SSH 代理时，直接使用 Windows OpenSSH。若要为单个会话指定代理，请按以下步骤操作。
+
 1. 在要使用 opssh 的 PowerShell 窗口中，先保存当前的代理设置。
 
    ```powershell
@@ -50,9 +49,9 @@ opssh 保存已选账户和公钥索引。**1Password** 页显示上次请求的
 $env:SSH_AUTH_SOCK = $previousSshAuthSock
 ```
 
-也可以在 **设置 → SSH 集成** 中将 opssh 设为系统默认 SSH 代理。对话框会显示正在执行的步骤。停止和禁用自动运行的 Windows OpenSSH 代理时，Windows 可能会要求管理员批准。退出 opssh 会释放管道，默认代理选择仍然保留。卸载前可关闭该开关并选择 **恢复 OpenSSH**。
+开启 **登录 Windows 时启动** 后，可在 **设置 → SSH 集成** 中将 opssh 设为系统默认 SSH 代理。默认管道生效后，PowerShell 卡片会隐藏。对话框会显示正在执行的步骤。停止和禁用自动运行的 Windows OpenSSH 代理时，Windows 可能会要求管理员批准。退出 opssh 会释放管道，默认代理选择仍然保留。关闭默认代理开关后，选择 **恢复 OpenSSH** 可恢复 Windows 服务。关闭开机自启时，opssh 也会在需要时先询问是否恢复 OpenSSH。
 
-在 **设置 → 启动** 中开启 **等待 1Password 启动**，1Password 就绪时会收到 Windows 通知。点击通知、选择账户，然后选择 **在 1Password 中继续** 来请求授权。选择当前账户会保留其保险库范围、密钥、授权和活动。移除便携版前可关闭 **登录 Windows 时启动**。
+在 **设置 → 启动** 中开启 **等待 1Password 启动**，1Password 就绪时会收到 Windows 通知。点击通知、选择账户，然后选择 **在 1Password 中继续** 来请求授权。选择当前账户会保留其保险库范围、密钥、授权和活动。
 
 <a name="approve-signing"></a>
 
@@ -110,7 +109,7 @@ $env:SSH_AUTH_SOCK = $previousSshAuthSock
 
 | 现象 | 处理方法 |
 | --- | --- |
-| 托盘已启动，但核心不可用 | 如果托盘菜单中的 **重启核心** 可用，请选择它。便携版请确认已完整解压 ZIP。 |
+| 托盘已启动，但核心不可用 | 如果托盘菜单中的 **重启核心** 可用，请选择它。如果仍无法启动核心，请修复 MSI 安装。 |
 | 连接、刷新或加载密钥时被拒绝或超时 | 确认账户，解锁 1Password 桌面应用，检查 SDK 集成，并完成窗口中的提示。然后重试刚才的操作。如果读取仍然超时，请退出并重新打开 opssh 来重启核心。 |
 | 找不到预期密钥，或轮换后无法使用 | 确认它是仍可使用的 SSH Key 条目，检查保险库选项后重新发现。opssh 支持 Ed25519，以及使用 SHA-2 签名的 2048–4096 位 RSA 密钥。 |
 | SSH 使用了其他代理或无法连接 opssh | 确认托盘正在运行，再在遇到问题的 PowerShell 会话中重新执行显示的命令。检查该主机的 SSH 配置是否设置了 `IdentityAgent`。 |

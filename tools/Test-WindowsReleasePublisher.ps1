@@ -153,8 +153,9 @@ function Invoke-FakeReleaseRequest($request, $cancellation) {
     if ($method -eq 'PATCH' -and $route -ceq '/releases/123' -and $uri.Host -ceq 'api.github.com') {
         $state.Writes.Add('publish')
         $body = $request.Content.ReadAsStringAsync($cancellation).GetAwaiter().GetResult() | ConvertFrom-Json -AsHashtable
-        Assert-Fixture ($state.Release.draft -and $state.Assets.Count -eq 3 -and $body.draft -ceq $false -and
-            $body.prerelease -ceq $false -and $body.make_latest -ceq 'legacy') 'Published before staging three assets or with wrong classification.'
+        Assert-Fixture ($state.Release.draft -and $state.Assets.Count -eq 1 -and $body.draft -ceq $false -and
+            $body.prerelease -ceq $false -and $body.make_latest -ceq 'legacy') 'Published before staging the MSI or with wrong classification.'
+        if ($state.FailPublish) { return Send-FakeResponse @{ message = 'fixture-private-body' } 502 }
         $state.Release = New-FakeRelease $false $body.body
         if ($state.MutablePublication) { $state.Release.immutable = $false }
         return Send-FakeResponse $state.Release
@@ -169,7 +170,7 @@ function Reset-Fixture {
         OversizedResponse = $false; Cancellation = [Threading.CancellationToken]::None;
         Release = $null; OtherRelease = $null; LatestRelease = $null; Assets = [Collections.Generic.List[object]]::new();
         Writes = [Collections.Generic.List[string]]::new(); FailUpload = ''; BadUploadDigest = $false;
-        MutablePublication = $false; Ancestor = $true; MainRuns = @{} }
+        FailPublish = $false; MutablePublication = $false; Ancestor = $true; MainRuns = @{} }
     $runId = 61
     foreach ($workflow in 'windows.yml', 'commit-subjects.yml', 'dependency-audit.yml', 'codeql.yml') {
         $state.MainRuns[$workflow] = @{ id = $runId++; run_attempt = 2; event = 'push'; status = 'completed'; conclusion = 'success';
@@ -227,31 +228,44 @@ function Assert-PublisherFails([string]$message, [string]$tagArgument = $tag) {
 $null = [IO.Directory]::CreateDirectory($root)
 try {
     $entries = @{}
-    foreach ($extension in 'msi', 'exe', 'zip') {
-        $name = "opssh-2.3.4-windows-x64.$extension"
-        $file = Join-Path $root $name
-        [IO.File]::WriteAllText($file, "controlled fixture bytes for $extension")
-        $entries[$name] = @{ name = $name; size = (Get-Item -LiteralPath $file).Length;
-            sha256 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() }
-    }
+    $name = 'opssh-2.3.4-windows-x64.msi'
+    $file = Join-Path $root $name
+    [IO.File]::WriteAllText($file, 'controlled fixture bytes for msi')
+    $entries[$name] = @{ name = $name; size = (Get-Item -LiteralPath $file).Length;
+        sha256 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() }
     $manifest = @{ schema = 1; tag = $tag; tagObject = $tagObject; sourceCommit = $source; assets = @($entries.Values) }
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
     [IO.File]::WriteAllText($notesPath, "## Changes`n`n- Fixture release notes.")
     $manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
     $notesSha256 = (Get-FileHash -LiteralPath $notesPath -Algorithm SHA256).Hash
+    $originalManifest = [IO.File]::ReadAllBytes($manifestPath)
+    try {
+        $legacyAsset = $entries[$name].Clone()
+        $legacyAsset.name = 'opssh-2.3.4-windows-x64.exe'
+        $manifest.assets += $legacyAsset
+        $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+        $manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+        Reset-Fixture
+        Assert-PublisherFails '*manifest*'
+        Assert-Fixture ($state.RefReads -eq 0 -and $state.Writes.Count -eq 0) 'A multi-asset manifest reached GitHub.'
+    } finally {
+        [IO.File]::WriteAllBytes($manifestPath, $originalManifest)
+        $manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+    }
     $manifestDigest = $manifestSha256.ToLowerInvariant()
     $notesDigest = $notesSha256.ToLowerInvariant()
     $provenance = "<!-- opssh-release-provenance v1 tag-object=$tagObject source-commit=$source manifest-sha256=$manifestDigest notes-sha256=$notesDigest -->"
 
     Reset-Fixture
     $result = Invoke-FixturePublisher
-    Assert-Fixture ($result.status -ceq 'published' -and $result.releaseId -eq 123 -and $result.assets.Count -eq 3) 'Missing publication evidence.'
-    Assert-Fixture ($state.Writes.Count -eq 5 -and $state.Writes[0] -ceq 'create' -and $state.Writes[4] -ceq 'publish' -and
-        $state.RefReads -ge 7 -and $state.TagReads -eq $state.RefReads) 'Missing repeated tag check or unexpected mutation sequence.'
+    Assert-Fixture ($result.status -ceq 'published' -and $result.releaseId -eq 123 -and $result.assets.Count -eq 1) 'Missing publication evidence.'
+    Assert-Fixture ($state.Writes.Count -eq 3 -and $state.Writes[0] -ceq 'create' -and
+        $state.Writes[1] -ceq "upload $name" -and $state.Writes[2] -ceq 'publish' -and
+        $state.RefReads -ge 5 -and $state.TagReads -eq $state.RefReads) 'Missing repeated tag check or unexpected mutation sequence.'
     foreach ($entry in $entries.Values) {
         Assert-Fixture ($state.Release.body.Contains($entry.name) -and $state.Release.body.Contains($entry.sha256)) 'Release notes omit asset checksum.'
     }
-    Assert-Fixture ($state.Release.body.Contains('The MSI, EXE, and first-party Windows binaries are unsigned.') -and
+    Assert-Fixture ($state.Release.body.Contains('The MSI and first-party Windows binaries are unsigned.') -and
         $state.Release.body.Contains('https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip')) 'Release notes omit unsigned status or corresponding WiX source.'
     Assert-Fixture ($state.Release.body.Contains('https://github.com/fixture/opssh/commits/v2.3.4')) 'Initial release notes omit current tag history.'
 
@@ -269,13 +283,28 @@ try {
     Assert-Fixture ($state.Writes.Count -eq 0) 'Older version mutated publication state.'
 
     Reset-Fixture
-    $state.FailUpload = 'opssh-2.3.4-windows-x64.exe'
+    $state.FailUpload = $name
     Assert-PublisherFails '*GitHub request failed (502)*'
-    Assert-Fixture ($state.Release.draft -and $state.Assets.Count -eq 1 -and $state.Writes.Count -eq 3) 'Upload failure did not leave a resumable draft.'
+    Assert-Fixture ($state.Release.draft -and $state.Assets.Count -eq 0 -and $state.Writes.Count -eq 2) 'Upload failure did not leave a resumable draft.'
     $state.FailUpload = ''
     $state.Writes.Clear()
-    Assert-Fixture ((Invoke-FixturePublisher).status -ceq 'published' -and $state.Writes.Count -eq 3 -and
-        $state.Writes[0] -ceq 'upload opssh-2.3.4-windows-x64.exe') 'Rerun did not preserve the verified asset.'
+    Assert-Fixture ((Invoke-FixturePublisher).status -ceq 'published' -and $state.Writes.Count -eq 2 -and
+        $state.Writes[0] -ceq "upload $name" -and $state.Writes[1] -ceq 'publish') 'Rerun did not finish the existing draft.'
+
+    Reset-Fixture
+    $state.FailPublish = $true
+    Assert-PublisherFails '*GitHub request failed (502)*'
+    Assert-Fixture ($state.Release.draft -and $state.Assets.Count -eq 1) 'Publication failure did not preserve the staged MSI.'
+    $state.FailPublish = $false
+    $state.Writes.Clear()
+    Assert-Fixture ((Invoke-FixturePublisher).status -ceq 'published' -and $state.Writes.Count -eq 1 -and
+        $state.Writes[0] -ceq 'publish') 'Rerun did not reuse the previously uploaded MSI.'
+
+    $state.Assets.Add(@{ name = 'opssh-2.3.4-windows-x64.zip' })
+    $state.Writes.Clear()
+    Assert-PublisherFails '*asset*'
+    Assert-Fixture ($state.Writes.Count -eq 0) 'Publisher accepted a release with an extra asset.'
+    $state.Assets.RemoveAt(1)
 
     $state.Writes.Clear()
     $state.Assets[0].size++
@@ -296,7 +325,7 @@ try {
     $state.Release = New-FakeRelease $true ($provenance.Replace("manifest-sha256=$manifestDigest", ('manifest-sha256=' + ('0' * 64))))
     $state.Assets.Add((New-FakeAsset 'opssh-2.3.4-windows-x64.msi' 1))
     Assert-PublisherFails '*provenance*'
-    Assert-Fixture ($state.Writes.Count -eq 0 -and $state.Assets.Count -eq 1) 'Publisher resumed a partial draft prepared with a different manifest.'
+    Assert-Fixture ($state.Writes.Count -eq 0 -and $state.Assets.Count -eq 1) 'Publisher resumed a staged draft prepared with a different manifest.'
 
     Reset-Fixture
     $state.Release = New-FakeRelease $true
@@ -319,7 +348,7 @@ try {
     Reset-Fixture
     $state.MutablePublication = $true
     Assert-PublisherFails '*classification*'
-    Assert-Fixture ($state.Writes.Count -eq 5 -and -not $state.Release.draft) 'Fixture did not reach publication readback.'
+    Assert-Fixture ($state.Writes.Count -eq 3 -and -not $state.Release.draft) 'Fixture did not reach publication readback.'
 
     foreach ($badTag in 'v02.3.4', 'V2.3.4', 'v256.0.0', 'v2.256.0', 'v2.3.65535', 'v2.3.4-rc.1', 'v2.3.4 ') {
         Reset-Fixture
@@ -450,7 +479,7 @@ try {
     $generated = Get-Content -LiteralPath (Join-Path $assetDirectory 'manifest.json') -Raw | ConvertFrom-Json -AsHashtable
     $releaseNotes = [IO.File]::ReadAllText((Join-Path $assetDirectory 'notes.md'))
     Assert-Fixture ($generated.schema -eq 1 -and $generated.tagObject -ceq $tagObject -and
-        $generated.sourceCommit -ceq $source -and $generated.assets.Count -eq 3) 'Generated handoff is missing source or package evidence.'
+        $generated.sourceCommit -ceq $source -and $generated.assets.Count -eq 1) 'Generated handoff is missing source or package evidence.'
     foreach ($asset in $generated.assets) {
         Assert-Fixture ($asset.sha256 -ceq $entries[$asset.name].sha256 -and $asset.size -eq $entries[$asset.name].size) 'Generated handoff changed package bytes.'
     }
@@ -458,6 +487,19 @@ try {
 
     [IO.File]::Delete((Join-Path $assetDirectory 'manifest.json'))
     [IO.File]::Delete((Join-Path $assetDirectory 'notes.md'))
+    $legacyPath = Join-Path $assetDirectory 'opssh-2.3.4-windows-x64.exe'
+    [IO.File]::WriteAllText($legacyPath, 'obsolete fixture asset')
+    try {
+        $failure = $null
+        try {
+            & (Join-Path $PSScriptRoot 'New-WindowsReleaseInputs.ps1') -Tag $tag -TagObject $tagObject -SourceCommit $source `
+                -PackageDirectory $assetDirectory -ChangelogPath $changelogPath
+        } catch { $failure = $_.Exception.Message }
+        Assert-Fixture ($failure -like '*only the verified MSI*' -and
+            -not (Test-Path -LiteralPath (Join-Path $assetDirectory 'manifest.json'))) 'An extra package produced a release handoff.'
+    } finally {
+        [IO.File]::Delete($legacyPath)
+    }
     foreach ($badChangelog in @(
         "## [2.3.4] - 2026-02-30`n`n- Invalid date.",
         "## [2.3.4] - 2026-11-09`n`n- First.`n`n## [2.3.4] - 2026-11-10`n`n- Duplicate.",

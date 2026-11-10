@@ -40,7 +40,7 @@ jobs:
         run: ./tools/Assert-WindowsReleaseAdmission.ps1
 
   verify:
-    name: Validate tagged Windows packages
+    name: Validate tagged Windows MSI
     needs: admit
     uses: ./.github/workflows/windows.yml
     permissions:
@@ -87,7 +87,7 @@ jobs:
               $env:RELEASE_ARTIFACT_NAME -cnotmatch $namePattern -or [int]$Matches[1] -gt [int]$env:GITHUB_RUN_ATTEMPT) {
               throw 'The checkout or validated artifact identity is missing or inconsistent.'
           }
-      - name: Download the exact validated package artifact
+      - name: Download the exact validated MSI and release inputs
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           artifact-ids: ${{ needs.verify.outputs.package-artifact-id }}

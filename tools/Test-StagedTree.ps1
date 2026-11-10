@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'HookSupport.psm1') -Force
 
 $phases = 'go-format','go-modules','go-tests','go-vet','tray-test-restore','tray-test-build','tray-tests',
-    'fixture-build','go-tray-interop','tray-restore','tray-publish','core-build','portable-launcher-build','release-inspection'
+    'fixture-build','go-tray-interop','tray-restore','tray-publish','core-build','release-inspection'
 
 function Get-RecordFile([string]$Path) {
     $file = Get-Item -LiteralPath $Path -Force
@@ -112,7 +112,7 @@ function Confirm-Report($Report, [string]$Output) {
         }
     }
     if ($files.Count -ne $report.release.Count) { throw 'Release evidence does not match the current output.' }
-    foreach ($name in 'Microsoft.UI.Xaml.dll','opssh-core.exe','opssh-portable.exe','opssh-tray.dll','opssh-tray.exe','opssh-tray.pri') {
+    foreach ($name in 'Microsoft.UI.Xaml.dll','opssh-core.exe','opssh-tray.dll','opssh-tray.exe','opssh-tray.pri') {
         if (!$files.ContainsKey($name) -or $files[$name].Length -eq 0) { throw 'Missing Windows release component.' }
     }
     $verifiedRelease = foreach ($entry in $report.release) {

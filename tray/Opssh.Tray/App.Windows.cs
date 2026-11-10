@@ -21,8 +21,23 @@ public sealed partial class App
         catch (COMException) { return false; }
     }
 
-    private bool SetLoginStartup(bool enabled) => LoginStartup.Set(enabled) ==
-        (enabled ? LoginStartupStatus.On : LoginStartupStatus.Off);
+    private bool SetLoginStartup(bool enabled) =>
+        (enabled || !defaultAgentActive && !changingDefaultAgent && defaultAgent.Read() is { Enabled: false, Before: null }) &&
+        LoginStartup.Set(enabled) == (enabled ? LoginStartupStatus.On : LoginStartupStatus.Off);
+
+    private async Task CompleteInstallationAsync(bool enableDefaultAgent)
+    {
+        var startupEnabled = SetLoginStartup(true);
+        await StartCoreAsync();
+        if (quitting || startupEnabled && !enableDefaultAgent)
+            return;
+        OpenSettings();
+        settings?.SelectAppearance();
+        if (!startupEnabled)
+            ShowMessage("Dashboard.StartupSaveFailed");
+        else if (session?.IsConnected == true)
+            settings?.EnableDefaultAgentAfterInstall();
+    }
 
     private bool SetWaitForPassword(bool wait)
     {
@@ -36,6 +51,8 @@ public sealed partial class App
 
     private async Task<string?> SetDefaultAgentAsync(bool enabled, Action<DefaultAgentStage> report, CancellationToken token)
     {
+        if (enabled && LoginStartup.Read() != LoginStartupStatus.On)
+            return "Startup.DefaultRequiresLogin";
         var current = session;
         if (current is null || quitting || transitioning || changingDefaultAgent || (operationComplete is not null && !polling))
             return "Error.Busy";

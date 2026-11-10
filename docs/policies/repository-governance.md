@@ -20,4 +20,4 @@ Remote rules and repository settings require authorization before applying chang
 
 ## Releases
 
-Keep PR and `main` validation separate from publication. Obtain authorization for tagging and publishing even when release automation is configured. Follow the [stable release policy](releases.md) for the verified source, the changelog, all three packages and the publication procedure.
+Keep PR and `main` validation separate from publication. Obtain authorization for tagging and publishing even when release automation is configured. Follow the [stable release policy](releases.md) for the verified source, the changelog, the MSI and the publication procedure.

@@ -2,13 +2,48 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="opssh" Manufacturer="opssh contributors" Version="$(var.Version)"
            ProductCode="$(var.ProductCode)" UpgradeCode="$(var.MsiUpgradeCode)"
-           Language="1033" Scope="perUser">
+           Language="1033" InstallerVersion="500" Scope="perUser">
     <MajorUpgrade Schedule="afterInstallInitialize"
                   DowngradeErrorMessage="A newer version of opssh is already installed." />
     <Launch Condition="NOT ALLUSERS" Message="opssh installs only for the current user." />
     <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
     <Property Id="REBOOT" Value="ReallySuppress" />
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Finish launches the installed tray in the interactive user's session.
+         Maintenance, quiet installs and elevated UI leave these settings alone. -->
+    <Property Id="OpsshLoginStartup" Value="1" />
+    <Property Id="OpsshDefaultAgent" Value="1" />
+    <UI>
+      <TextStyle Id="OpsshDialogFont" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="OpsshDialogTitle" FaceName="Segoe UI" Size="13" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="OpsshDialogFont" />
+      <Dialog Id="OpsshComplete" Width="340" Height="172" Title="opssh Setup">
+        <Control Id="Title" Type="Text" X="20" Y="16" Width="300" Height="24"
+                 Text="{\OpsshDialogTitle}opssh is installed" />
+        <Control Id="LoginStartup" Type="CheckBox" X="20" Y="55" Width="300" Height="16"
+                 Property="OpsshLoginStartup" CheckBoxValue="1" Text="Start opssh when I sign in to Windows" />
+        <Control Id="DefaultAgent" Type="CheckBox" X="36" Y="79" Width="284" Height="16"
+                 Property="OpsshDefaultAgent" CheckBoxValue="1" Text="Set opssh as the default SSH agent"
+                 EnableCondition="OpsshLoginStartup = 1" DisableCondition="NOT OpsshLoginStartup" />
+        <Control Id="Finish" Type="PushButton" X="264" Y="137" Width="56" Height="18"
+                 Default="yes" Text="Finish">
+          <Publish Event="MsiLaunchApp" Value="[#$(var.TrayFileId)] --install-login-default" Order="1"
+                   Condition="NOT MsiRunningElevated AND OpsshLoginStartup = 1 AND OpsshDefaultAgent = 1" />
+          <Publish Event="MsiLaunchApp" Value="[#$(var.TrayFileId)] --install-login" Order="2"
+                   Condition="NOT MsiRunningElevated AND OpsshLoginStartup = 1 AND NOT OpsshDefaultAgent" />
+          <Publish Event="EndDialog" Value="Return" Order="3" Condition="1" />
+        </Control>
+        <Control Id="Skip" Type="PushButton" X="200" Y="137" Width="56" Height="18"
+                 Cancel="yes" Text="Skip">
+          <Publish Event="EndDialog" Value="Return" Condition="1" />
+        </Control>
+      </Dialog>
+    </UI>
+    <InstallUISequence>
+      <Show Dialog="OpsshComplete" OnExit="success"
+            Condition="UILevel = 5 AND NOT Installed AND NOT WIX_UPGRADE_DETECTED AND NOT MsiRunningElevated" />
+    </InstallUISequence>
 
     <!-- Use WiX only to detect the process names. The user closes opssh. -->
     <util:CloseApplication Id="DetectOpsshTray" Target="opssh-tray.exe"

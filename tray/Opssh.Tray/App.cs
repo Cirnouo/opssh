@@ -59,6 +59,7 @@ public sealed partial class App : Application
         DispatcherShutdownMode = Microsoft.UI.Xaml.DispatcherShutdownMode.OnExplicitShutdown;
         dispatcher = DispatcherQueue.GetForCurrentThread();
         preferences = UiPreferences.Load();
+        defaultAgentDesired = defaultAgent.Read()?.Enabled == true;
         offeredStartupNotification = FromAppNotification();
         notifications = new AppNotifications((kind, nonce, choice) =>
             dispatcher.TryEnqueue(() =>
@@ -78,7 +79,12 @@ public sealed partial class App : Application
         icon.RestartRequested += () => _ = StartCoreAsync();
         icon.QuitRequested += () => _ = QuitAsync();
         StartDiagnostics();
-        _ = StartCoreAsync();
+        _ = Environment.GetCommandLineArgs() switch
+        {
+            [_, "--install-login"] => CompleteInstallationAsync(enableDefaultAgent: false),
+            [_, "--install-login-default"] => CompleteInstallationAsync(enableDefaultAgent: true),
+            _ => StartCoreAsync()
+        };
         if (preferences.AutoCheckUpdates)
             _ = CheckForUpdatesAsync(atStartup: true);
     }

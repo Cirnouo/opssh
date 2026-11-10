@@ -66,14 +66,14 @@ if ((Get-ChildItem Env:GIT_*) -or
 }
 $release = Join-Path $OutputDirectory 'release'
 New-Item -ItemType Directory -Path $release -Force | Out-Null
-$files = foreach ($name in 'Microsoft.UI.Xaml.dll','opssh-core.exe','opssh-portable.exe','opssh-tray.dll','opssh-tray.exe','opssh-tray.pri') {
+$files = foreach ($name in 'Microsoft.UI.Xaml.dll','opssh-core.exe','opssh-tray.dll','opssh-tray.exe','opssh-tray.pri') {
     $path = Join-Path $release $name
     [IO.File]::WriteAllText($path, 'fixture')
     @{path = $name; size = 7; sha256 = (Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}
 }
 $phases = foreach ($id in 'go-format','go-modules','go-tests','go-vet','tray-test-restore',
     'tray-test-build','tray-tests','fixture-build','go-tray-interop','tray-restore','tray-publish',
-    'core-build','portable-launcher-build','release-inspection') {
+    'core-build','release-inspection') {
     @{id = $id; outcome = 'passed'; exitCode = 0}
 }
 $report = @{schema = 1; outcome = 'passed'; phases = @($phases); release = @($files); diagnostics = 'synthetic evidence marker'}

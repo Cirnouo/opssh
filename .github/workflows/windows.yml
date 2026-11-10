@@ -82,11 +82,11 @@ jobs:
           ./tools/Test-WindowsArtifactHandoff.ps1 -Create -Directory .artifacts/ci
           $path = '.artifacts/ci/interop/artifact-provenance.json'
           "sha256=$((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash)" >> $env:GITHUB_OUTPUT
-      - name: Preserve the validated release folder
+      - name: Preserve the validated MSI build inputs
         id: release-artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ github.run_attempt == 1 && 'opssh-windows-x64' || format('opssh-windows-x64-attempt-{0}', github.run_attempt) }}
+          name: opssh-msi-build-input-${{ github.run_attempt }}
           path: .artifacts/ci/release
           if-no-files-found: error
       - name: Preserve the offline core handshake driver
@@ -145,12 +145,15 @@ jobs:
           dotnet tool install wix --tool-path $tooling --version 7.0.1 --source https://api.nuget.org/v3/index.json
           if ($LASTEXITCODE -ne 0) { throw 'Pinned WiX restore failed.' }
           $wix = Join-Path $tooling 'wix.exe'
-          foreach ($extension in @('WixToolset.Util.wixext/7.0.1', 'WixToolset.BootstrapperApplications.wixext/7.0.1')) {
-              & $wix extension add -acceptEula wix7 $extension
-              if ($LASTEXITCODE -ne 0) { throw "Pinned WiX extension restore failed for $extension." }
-          }
+          & $wix extension add -acceptEula wix7 'WixToolset.Util.wixext/7.0.1'
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned WiX Util extension restore failed.' }
           "path=$wix" >> $env:GITHUB_OUTPUT
-      - name: Build and verify the Windows packages
+      - name: Exercise the MSI packaging fixture
+        shell: pwsh
+        env:
+          WIX_PATH: ${{ steps.wix.outputs.path }}
+        run: ./tools/Test-PackagingFixture.ps1 -WixPath $env:WIX_PATH -OutputDirectory .artifacts/ci/package-fixture
+      - name: Build and verify the Windows MSI
         id: packages
         shell: pwsh
         env:
@@ -187,14 +190,11 @@ jobs:
           name: opssh-installer-lifecycle-${{ github.run_attempt }}
           path: .artifacts/ci/lifecycle/lifecycle-report.json
           if-no-files-found: ignore
-      - name: Preserve the verified Windows distributables
+      - name: Preserve the verified Windows MSI
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: opssh-windows-x64-packages-${{ github.run_attempt }}
-          path: |
-            .artifacts/ci/packages/opssh-*-windows-x64.msi
-            .artifacts/ci/packages/opssh-*-windows-x64.exe
-            .artifacts/ci/packages/opssh-*-windows-x64.zip
+          name: opssh-windows-x64-msi-${{ github.run_attempt }}
+          path: .artifacts/ci/packages/opssh-*-windows-x64.msi
           if-no-files-found: error
           compression-level: 0
       - name: Prepare the verified package handoff and release notes
@@ -219,8 +219,6 @@ jobs:
           name: ${{ steps.release-inputs.outputs.artifact-name }}
           path: |
             .artifacts/ci/packages/opssh-*-windows-x64.msi
-            .artifacts/ci/packages/opssh-*-windows-x64.exe
-            .artifacts/ci/packages/opssh-*-windows-x64.zip
             .artifacts/ci/packages/manifest.json
             .artifacts/ci/packages/notes.md
           if-no-files-found: error

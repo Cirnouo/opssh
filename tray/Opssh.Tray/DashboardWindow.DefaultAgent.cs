@@ -11,10 +11,23 @@ public sealed partial class DashboardWindow
 
     private sealed record AgentStep(DefaultAgentStage Stage, Border Indicator, TextBlock Status, TextBlock Detail);
 
-    private async Task ChangeDefaultAgentAsync(bool enable)
+    internal void EnableDefaultAgentAfterInstall()
+    {
+        if (DashboardRoot.IsLoaded)
+            _ = ChangeDefaultAgentAsync(true, confirmed: true);
+        else
+            DashboardRoot.Loaded += Apply;
+        void Apply(object sender, RoutedEventArgs args)
+        {
+            DashboardRoot.Loaded -= Apply;
+            _ = ChangeDefaultAgentAsync(true, confirmed: true);
+        }
+    }
+
+    private async Task<bool> ChangeDefaultAgentAsync(bool enable, bool confirmed = false)
     {
         if (closed || changingIntegration || activeDialog is not null)
-            return;
+            return false;
         changingIntegration = true;
         RefreshSystemSettings();
         UpdateSettingsAvailability();
@@ -33,6 +46,7 @@ public sealed partial class DashboardWindow
         var token = windowLifetime.Token;
         var change = Task.CompletedTask;
         var running = false;
+        var succeeded = false;
         var serviceAbsent = false;
         DefaultAgentStage? lastStage = null;
         AgentStep? lastStep = null;
@@ -41,6 +55,13 @@ public sealed partial class DashboardWindow
         dialog.PrimaryButtonClick += (_, args) =>
         {
             args.Cancel = true;
+            StartChange();
+        };
+        if (confirmed)
+            dialog.Opened += (_, _) => StartChange();
+
+        void StartChange()
+        {
             if (closed || running)
                 return;
             running = true;
@@ -50,7 +71,7 @@ public sealed partial class DashboardWindow
             dialog.PrimaryButtonText = "";
             dialog.CloseButtonText = "";
             change = RunChangeAsync();
-        };
+        }
 
         try
         {
@@ -64,6 +85,7 @@ public sealed partial class DashboardWindow
             RefreshSystemSettings();
             UpdateSettingsAvailability();
         }
+        return succeeded;
 
         async Task RunChangeAsync()
         {
@@ -73,6 +95,7 @@ public sealed partial class DashboardWindow
             finally { running = false; }
             if (closed)
                 return;
+            succeeded = key is null;
 
             if (lastStep is not null)
             {

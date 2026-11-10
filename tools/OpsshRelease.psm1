@@ -309,8 +309,9 @@ function Confirm-ReleaseAsset($asset, $expected) {
 }
 
 function Get-ReleaseAssets($release, [long]$id, [bool]$requireAll) {
-    $items = Invoke-ReleaseRequest $release GET "/releases/$id/assets?per_page=4"
-    if ($items -isnot [array] -or $items.Count -gt 3 -or ($requireAll -and $items.Count -ne 3)) {
+    $items = Invoke-ReleaseRequest $release GET "/releases/$id/assets?per_page=2"
+    if ($items -isnot [array] -or $items.Count -gt $release.AssetNames.Count -or
+        ($requireAll -and $items.Count -ne $release.AssetNames.Count)) {
         throw [OpsshReleaseFailure]::new('GitHub release asset count differs from the expected set.')
     }
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -420,12 +421,12 @@ function Invoke-OpsshRelease {
         } finally {
             $stream.Dispose()
         }
-        $names = @('msi', 'exe', 'zip' | ForEach-Object { "opssh-$version-windows-x64.$_" })
+        $names = @("opssh-$version-windows-x64.msi")
         if ($manifest -isnot [Collections.IDictionary] -or $manifest['schema'] -isnot [long] -or $manifest['schema'] -ne 1 -or
             -not (Test-ReleaseText $manifest['tag'] $Tag) -or -not (Test-ReleaseText $manifest['tagObject'] $TagObject) -or
             -not (Test-ReleaseText $manifest['sourceCommit'] $SourceCommit) -or
             $manifest['assets'] -isnot [array] -or $manifest['assets'].Count -ne $names.Count) {
-            throw [OpsshReleaseFailure]::new('Release manifest does not identify the admitted tag and three packages.')
+            throw [OpsshReleaseFailure]::new('Release manifest does not identify the admitted tag and its single MSI.')
         }
         $assets = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
         foreach ($entry in $manifest['assets']) {
@@ -462,7 +463,7 @@ function Invoke-OpsshRelease {
             @{ name = $_; size = $assets[$_].Size; sha256 = $assets[$_].Sha256 }
         })
         $checksums = ($evidence | ForEach-Object { "    $($_.sha256)  $($_.name)" }) -join "`n"
-        $disclosure = 'The MSI, EXE, and first-party Windows binaries are unsigned. The installers include WiX 7.0.1 code. [WiX 7.0.1 source archive](https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip)'
+        $disclosure = 'The MSI and first-party Windows binaries are unsigned. The installer includes WiX 7.0.1 code. [WiX 7.0.1 source archive](https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip)'
         $body = "$marker`n`n$notes`n`n## SHA-256 checksums`n`n$disclosure`n`n$checksums`n"
         $client = New-ReleaseClient $Handler
         $release = @{ Client = $client; Cancellation = $deadline.Token; Token = $Token; ApiRoot = "/repos/$Repository"; Repository = $Repository; Version = $version;

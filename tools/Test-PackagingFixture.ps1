@@ -31,15 +31,6 @@ Set-Content -LiteralPath (Join-Path $legal 'THIRD-PARTY-NOTICES.md') -Value 'syn
 Set-Content -LiteralPath (Join-Path $legal 'licenses/fixture/LICENSE') -Value 'synthetic third-party license'
 New-Item -ItemType Directory -Path (Join-Path $legal 'licenses/wix') | Out-Null
 Set-Content -LiteralPath (Join-Path $legal 'licenses/wix/wix-7.0.1-source.zip') -Value 'synthetic corresponding source'
-$repo = Split-Path -Parent $PSScriptRoot
-Push-Location -LiteralPath $repo
-try {
-    & go build -mod=readonly -trimpath '-ldflags=-H windowsgui' -o (Join-Path $release 'opssh-portable.exe') ./cmd/opssh-portable
-    if ($LASTEXITCODE -ne 0) { throw 'Could not build the launcher for the package fixture.' }
-} finally {
-    Pop-Location
-}
-
 $builder = Join-Path $PSScriptRoot 'Build-WindowsPackages.ps1'
 if (!(Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'The Windows packaging entry point is missing.' }
 
@@ -61,6 +52,14 @@ foreach ($invalid in @('255.255.65535', '256.255.65534', '255.256.65534', '0255.
 }
 Assert-Rejected '1.2.3' 'The Release tray assembly version differs from the package version.'
 
+$retiredLauncher = Join-Path $release 'opssh-portable.exe'
+[IO.File]::WriteAllText($retiredLauncher, 'retired launcher fixture')
+try {
+    Assert-Rejected '255.255.65534' 'Build the MSI from a fresh Release directory without the retired launcher.'
+} finally {
+    [IO.File]::Delete($retiredLauncher)
+}
+
 & $builder -Version '255.255.65534' -ReleaseDirectory $release -OutputDirectory $packages -LegalDirectory $legal -WixPath $WixPath
 $manifest = Get-Content -Raw -LiteralPath (Join-Path $packages 'payload-manifest.json') | ConvertFrom-Json
 $expectedPaths = @(
@@ -74,7 +73,7 @@ if ((Compare-Object $expectedPaths @($manifest.files.path) -CaseSensitive) -or $
 }
 
 $stem = 'opssh-255.255.65534-windows-x64'
-$expectedArtifacts = @('payload-manifest.json', "$stem.msi", "$stem.exe", "$stem.zip")
+$expectedArtifacts = @('payload-manifest.json', "$stem.msi")
 if (Compare-Object $expectedArtifacts @(Get-ChildItem -Force -LiteralPath $packages -Name) -CaseSensitive) {
     throw 'The output differs from the expected package filenames.'
 }
