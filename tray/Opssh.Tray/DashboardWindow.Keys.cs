@@ -25,7 +25,7 @@ public sealed partial class DashboardWindow
     private readonly Dictionary<string, (Button Load, Button Evict, Button Revoke, Border LoadStatus, TextBlock? Failure)> keyActions = new(StringComparer.Ordinal);
     private readonly HashSet<string> fetchingGrants = new(StringComparer.Ordinal);
     private StackPanel? keysBody;
-    private KeysTable? keysTable;
+    private TextBlock? keysHeading;
     private TextBlock? keysCount;
     private TextBlock? keysNotice;
     private Button? discoverKeys;
@@ -45,11 +45,12 @@ public sealed partial class DashboardWindow
 
     private FrameworkElement BuildKeysPage()
     {
-        var title = TableHeading("Dashboard.Keys", "Keys.Description", out var headingActions);
+        var title = TableHeading("Dashboard.Keys", "Keys.Description", out var headingActions, keyPage: true);
         discoverKeys = KeysButton("Keys.Discover", DiscoverKeysAsync, "\uE721", primary: true);
         cancelDiscovery = KeysButton("Keys.CancelDiscovery", CancelDiscoveryAsync);
         cancelDiscovery.Visibility = Visibility.Collapsed;
-        headingActions.VerticalAlignment = VerticalAlignment.Center;
+        headingActions.VerticalAlignment = VerticalAlignment.Top;
+        headingActions.Margin = new Thickness(0, 4, 0, 0);
         headingActions.Children.Add(discoverKeys);
         headingActions.Children.Add(cancelDiscovery);
         discoveryPhase = Ui.Heading(Strings.Get("Keys.ScanVaults"), 14);
@@ -75,7 +76,7 @@ public sealed partial class DashboardWindow
         void SurfaceSizeChanged(object sender, SizeChangedEventArgs args) => ResizeKeysTables();
         PageSurface.SizeChanged += SurfaceSizeChanged;
         Closed += (_, _) => PageSurface.SizeChanged -= SurfaceSizeChanged;
-        return new StackPanel { Spacing = 15, Children = { title, discoveryCard, keysNotice, keysCount, actionsRow, keysBody } };
+        return new StackPanel { Spacing = 11, Children = { title, discoveryCard, keysNotice, keysCount, actionsRow, keysBody } };
     }
 
     private async Task DiscoverKeysAsync()
@@ -217,24 +218,30 @@ public sealed partial class DashboardWindow
         grantActions.Clear();
         grantTables.Clear();
         keyActions.Clear();
-        keysTable = null;
         if (current is null || current.Keys.Length == 0)
         {
             keysBody.Children.Add(EmptyTable(current?.Index is "ready" or "partial" ? "Keys.NoneFound" : "Keys.BeforeDiscovery"));
             return;
         }
-        var widths = new[] { 19.0, 16, 15, 50 };
         string[] columns = ["Keys.Key", "Keys.Loading", "Keys.Grants", "Keys.Actions"];
-        keysTable = new KeysTable(TableHeader(widths, columns), grantTable: false);
-        var content = keysTable.Content;
+        var header = TableHeader([1, 1, 1, 1], columns);
+        var content = new StackPanel { Children = { header } };
+        var rows = new List<KeyListRow>();
+        var actionWidth = 300.0;
         var vaultNames = (current.Vaults ?? []).ToDictionary(vault => vault.Id, vault => vault.Name, StringComparer.Ordinal);
         foreach (var key in current.Keys)
         {
             content.Children.Add(Divider());
-            var keyText = new StackPanel { Spacing = 2, Children = { TableText(key.Name) } };
+            var name = TableText(key.Name);
+            name.FontWeight = FontWeights.SemiBold;
+            var keyText = new StackPanel { Spacing = 2, Children = { name } };
             if (vaultNames.TryGetValue(key.VaultId, out var vault))
                 keyText.Children.Add(Quiet(vault));
-            keyText.Children.Add(QuietMono(key.Fingerprint.Length == 0 ? "—" : key.Fingerprint, 11));
+            var fingerprint = QuietMono(key.Fingerprint.Length == 0 ? "—" : key.Fingerprint, 11);
+            fingerprint.FontFamily = new FontFamily("Consolas");
+            fingerprint.LineHeight = 16;
+            fingerprint.LineStackingStrategy = LineStackingStrategy.BaselineToBaseline;
+            keyText.Children.Add(fingerprint);
             var expanded = expandedKeys.Contains(key.Id);
             var expand = KeysButton("Keys.Expand", async () =>
             {
@@ -256,7 +263,15 @@ public sealed partial class DashboardWindow
             evict.IsEnabled = CanEvict(key);
             revoke.IsEnabled = connected && !urgentBusy && key.Grants != 0;
             var buttons = new KeysWrapPanel(5) { Children = { load, evict, revoke } };
-            content.Children.Add(KeysRow(widths, columns, 79, keyText, status, expand, buttons));
+            if (Strings.Language != "zh-Hans")
+            {
+                buttons.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                actionWidth = Math.Max(actionWidth, buttons.DesiredSize.Width);
+            }
+            var row = new KeyListRow(columns.Skip(1).Select(column => Quiet(Strings.Get(column), 11)).ToArray(),
+                [keyText, status, expand, buttons]);
+            rows.Add(row);
+            content.Children.Add(row);
             if (failure is not null)
             {
                 failure.Margin = new Thickness(14, 0, 14, 11);
@@ -273,6 +288,28 @@ public sealed partial class DashboardWindow
             PaintGrants(key.Id, key.Grants);
             content.Children.Add(grantHost);
         }
+        ConfigureKeyColumns(header, actionWidth);
+        header.Padding = new Thickness(14, 10, 14, 10);
+        foreach (var cell in header.Children.OfType<Border>())
+            cell.Padding = new Thickness(0);
+
+        bool? compact = null;
+        bool? narrow = null;
+        void Resize(double width)
+        {
+            var nextCompact = width < 188 + 106 + 84 + actionWidth + 3 * 12 + 2 * 14;
+            var nextNarrow = width < 490;
+            if (compact == nextCompact && narrow == nextNarrow)
+                return;
+            compact = nextCompact;
+            narrow = nextNarrow;
+            header.Visibility = nextCompact ? Visibility.Collapsed : Visibility.Visible;
+            content.Children[1].Visibility = header.Visibility;
+            foreach (var row in rows)
+                row.SetLayout(nextCompact, nextNarrow, actionWidth);
+        }
+        content.SizeChanged += (_, args) => Resize(args.NewSize.Width);
+        Resize(Math.Max(0, keysBody.ActualWidth - 2));
         ResizeKeysTables();
         keysBody.Children.Add(Card(content));
     }
@@ -372,7 +409,7 @@ public sealed partial class DashboardWindow
         }
         var widths = new[] { 32.0, 13, 30, 25 };
         string[] columns = ["Keys.Process", "Keys.Pid", "Keys.Expires", "Keys.Actions"];
-        var table = new KeysTable(TableHeader(widths, columns), grantTable: true);
+        var table = new KeysTable(TableHeader(widths, columns));
         var buttons = new List<Button>();
         foreach (var grant in rows)
         {
@@ -393,14 +430,12 @@ public sealed partial class DashboardWindow
         host.Child = Card(table.Content);
     }
 
-    // The prototype queries the surface's content box before subtracting page padding.
     private double KeysLayoutWidth => PageSurface.ActualWidth - PageSurface.BorderThickness.Left - PageSurface.BorderThickness.Right;
 
     private void ResizeKeysTables()
     {
         var width = KeysLayoutWidth;
         var narrow = width <= CompactKeyTableWidth;
-        keysTable?.SetLayout(narrow, narrow);
         foreach (var table in grantTables.Values)
             table.SetLayout(width <= CompactGrantTableWidth, narrow);
     }
@@ -430,15 +465,17 @@ public sealed partial class DashboardWindow
         return grid;
     }
 
-    private Grid TableHeading(string titleKey, string descriptionKey, out StackPanel actionsPanel)
+    private Grid TableHeading(string titleKey, string descriptionKey, out StackPanel actionsPanel, bool keyPage = false)
     {
         var grid = new Grid { ColumnSpacing = 10 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var title = new StackPanel { Spacing = 5, Children =
-            { Heading(Strings.Get(titleKey), 28, AutomationHeadingLevel.Level1), Quiet(Strings.Get(descriptionKey)) } };
+        var heading = Heading(Strings.Get(titleKey), keyPage ? 30 : 28, AutomationHeadingLevel.Level1);
+        if (keyPage)
+            keysHeading = heading;
+        var title = new StackPanel { Spacing = keyPage ? 4 : 5, Children = { heading, Quiet(Strings.Get(descriptionKey)) } };
         actionsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Top };
         grid.Children.Add(title);
         Grid.SetColumn(actionsPanel, 1);
@@ -560,7 +597,75 @@ public sealed partial class DashboardWindow
 
     private static string LocalTimestamp(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
-    private sealed class KeysTable(Grid header, bool grantTable)
+    private static void ConfigureKeyColumns(Grid grid, double actionWidth)
+    {
+        grid.ColumnSpacing = 12;
+        grid.ColumnDefinitions.Clear();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { MinWidth = 188 });
+        foreach (var width in new[] { 106, 84, actionWidth })
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(width) });
+    }
+
+    private sealed class KeyListRow : Grid
+    {
+        private readonly StackPanel[] details = new StackPanel[3];
+        private readonly TextBlock[] labels;
+        private readonly FrameworkElement identity;
+        private readonly FrameworkElement actions;
+
+        internal KeyListRow(TextBlock[] labels, FrameworkElement[] cells)
+        {
+            this.labels = labels;
+            identity = cells[0];
+            actions = cells[3];
+            RowSpacing = 8;
+            ColumnSpacing = 12;
+            identity.VerticalAlignment = VerticalAlignment.Center;
+            Children.Add(identity);
+            for (var i = 0; i < details.Length; i++)
+            {
+                var detail = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { labels[i], cells[i + 1] } };
+                details[i] = detail;
+                Children.Add(detail);
+            }
+        }
+
+        internal void SetLayout(bool compact, bool narrow, double actionWidth)
+        {
+            Padding = new Thickness(compact ? 12 : 14, 10, compact ? 12 : 14, compact ? 13 : 10);
+            RowDefinitions.Clear();
+            RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            if (compact)
+            {
+                RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                if (narrow)
+                    RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                ColumnDefinitions.Clear();
+                ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                ColumnDefinitions.Add(new ColumnDefinition { Width = narrow ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
+                if (!narrow)
+                    ColumnDefinitions.Add(new ColumnDefinition());
+            }
+            else
+                ConfigureKeyColumns(this, actionWidth);
+
+            var columns = ColumnDefinitions.Count;
+            Grid.SetColumnSpan(identity, compact ? columns : 1);
+            for (var i = 0; i < details.Length; i++)
+            {
+                var detail = details[i];
+                var stackedActions = compact && narrow && i == details.Length - 1;
+                labels[i].Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+                Grid.SetRow(detail, stackedActions ? 2 : compact ? 1 : 0);
+                Grid.SetColumn(detail, stackedActions ? 0 : compact ? i : i + 1);
+                Grid.SetColumnSpan(detail, stackedActions ? columns : 1);
+            }
+            details[0].MaxWidth = 106;
+            actions.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        }
+    }
+
+    private sealed class KeysTable(Grid header)
     {
         private (bool Compact, bool Narrow)? layout;
 
@@ -572,13 +677,10 @@ public sealed partial class DashboardWindow
                 return;
             layout = (compact, narrow);
             var horizontal = narrow ? 8 : 11;
-            var vertical = grantTable ? 7 : 9;
-            var padding = new Thickness(horizontal, vertical, horizontal, vertical);
+            var padding = new Thickness(horizontal, 7, horizontal, 7);
             header.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
             foreach (var cell in header.Children.OfType<Border>())
                 cell.Padding = padding;
-            if (!grantTable && Content.Children.Count > 1)
-                Content.Children[1].Visibility = header.Visibility;
             foreach (var row in Content.Children.OfType<KeysTableRow>())
                 row.SetLayout(compact, padding);
         }

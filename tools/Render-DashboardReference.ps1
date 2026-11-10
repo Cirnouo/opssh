@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)]
     [string] $OutputPath,
 
-    [ValidateSet('Final', 'Original')]
+    [ValidateSet('Final', 'Original', 'KeyApproval')]
     [string] $Revision = 'Final',
 
     [ValidateSet('ready', 'first-run', 'new-account', 'picker', 'cli-missing', 'no-accounts', 'no-access',
@@ -34,6 +34,12 @@ if ($Revision -eq 'Original') {
     $rootId = 'opssh-agent-dashboard'
     $expectedHash = '21202CB9F2EF713FCB63544E838B75B2F4F125CC654EE67BAEC7DC5F401FC216'
     if (!$Page) { $Page = 'keys' }
+} elseif ($Revision -eq 'KeyApproval') {
+    if ($Page -and $Page -notin @('keys', 'settings')) {
+        throw 'The key approval preview includes the keys and settings pages.'
+    }
+    $rootId = 'opssh-key-approval-preview'
+    $expectedHash = '764DE30A7E3E82E58CE930E85966CB23BAE2A9CB8A7C2CAE59E394E1D92B9A42'
 } else {
     $rootId = 'opssh-desktop-ux-review'
     $expectedHash = '28C0DD079609AC1F4B4A5F8497622AD381D92153A25F36CE8F02E09664AC1F98'
@@ -80,6 +86,10 @@ globalThis.Tweak = class {
   }
 };
 document.addEventListener('DOMContentLoaded', () => {
+  if (preset.root === '#opssh-key-approval-preview') {
+    if (preset.page === 'settings') document.querySelector(preset.root + ' [data-page="settings"]')?.click();
+    return;
+  }
   if (preset.page) document.querySelector('[data-action="nav:' + preset.page + '"]:not([aria-current="page"])')?.click();
   const theme = document.querySelector('select[data-action="theme"]');
   if (theme) {
@@ -93,7 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
 }, { once: true });
 </script>
 $archive
-<style>#$rootId .ops-github-mark{mask-image:url(data:image/svg+xml;base64,$octocat)}</style>
+<style>
+#$rootId .ops-github-mark{mask-image:url(data:image/svg+xml;base64,$octocat)}
+#opssh-key-approval-preview{color-scheme:$Theme}
+#opssh-key-approval-preview .op-preview{display:none}
+</style>
 </html>
 "@
 $encodedFrame = [Net.WebUtility]::HtmlEncode($frame)
@@ -113,7 +127,7 @@ iframe { display:block; width:min(100%, ${Width}px); height:642px; border:0; }
 </html>
 "@
 $output = [IO.Path]::GetFullPath($OutputPath, (Get-Location).ProviderPath)
-foreach ($archiveName in @('opssh-agent-dashboard.html', 'opssh-desktop-ux-review.html')) {
+foreach ($archiveName in @('opssh-agent-dashboard.html', 'opssh-desktop-ux-review.html', 'opssh-key-approval-preview.html')) {
     $archivePath = Join-Path $PSScriptRoot "../docs/references/$archiveName"
     if ($output -eq [IO.Path]::GetFullPath($archivePath)) {
         throw 'Choose an output path outside the archived dashboard HTML.'
