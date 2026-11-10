@@ -14,7 +14,9 @@
 
 Before designing changes to Windows UI or install, upgrade or uninstall flows, consult official platform controls, the packaging framework and established projects with comparable flows. Reuse suitable controls or lifecycle primitives and record the upstream sources, what the change adopts and what requires a custom design.
 
-Create the interactive Visualize proposal directly in [the repository reference directory](../references/). Use synthetic data. Show that source for approval before implementing the corresponding native UI or installer flow. Record the approved source path, variant, SHA-256 and capture scenarios in the [visual reference index](../references/opssh-agent-dashboard.md). Preserve approved reference bytes and return to this approval step when changing the approved design.
+Create the interactive Visualize proposal directly in [the repository reference directory](../references/). When a complete approved reference exists, derive the proposal from that source and reconcile it with the current product. Keep unaffected pages, navigation placement, controls and states in the proposal. For a reusable upstream template, pin its revision and identify the reused dialogs or controls and each extension. Use synthetic data.
+
+Copy the repository HTML into the Codex visualization directory without rewriting it and verify that the SHA-256 digests match. Show that copy for approval before implementing the corresponding native UI or installer flow. Record the approved repository path, variant, SHA-256 and capture scenarios in the [visual reference index](../references/opssh-agent-dashboard.md). Preserve approved reference bytes and return to this approval step when changing the approved design.
 
 For implementation PRs, link the approved baseline and compare matched screenshots with the real implementation. Include visible subviews, menus, dropdowns and modal states affected by the change. Record differences and unavailable checks. Capture with the cua-driver MCP on an isolated Windows desktop without taking the user's foreground, including for windows opened by the workflow.
 
