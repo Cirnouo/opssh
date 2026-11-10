@@ -453,6 +453,7 @@ public sealed partial class App : Application
             _ => null
         };
         var diagnostic = diagnosticPhase is null ? default : BeginTrayDiagnostic();
+        var preload = command is "preload" or "preload-all" ? BeginPreloadDiagnostic(current, command) : null;
         var revision = stateRevision;
         var restart = false;
         var refresh = false;
@@ -461,6 +462,7 @@ public sealed partial class App : Application
             var result = await RequestNormalAsync(current, command, body, timeout.Token);
             if (current != session || quitting)
                 return;
+            RecordPreloadDiagnostic(preload, preload?.Complete(result));
             if (diagnosticPhase is not null)
                 RecordTrayDiagnostic(diagnostic, diagnosticPhase, result.Ok ? "completed" : result.ErrorCode switch
                 {
@@ -496,6 +498,7 @@ public sealed partial class App : Application
         {
             if (current == session && !quitting)
             {
+                RecordPreloadDiagnostic(preload, preload?.Fail(e));
                 if (diagnosticPhase is not null)
                     RecordTrayDiagnostic(diagnostic, diagnosticPhase, e is OperationCanceledException ? "timeout" : "failed");
                 ShowMessage("Error.ControlRequestFailed");
@@ -503,6 +506,8 @@ public sealed partial class App : Application
         }
         finally
         {
+            if (preload is not null && preloadDiagnostic == preload)
+                preloadDiagnostic = null;
             if (operation == timeout)
             {
                 operation = null;
@@ -586,6 +591,8 @@ public sealed partial class App : Application
         ShowMessage(null);
         SetAvailability(false, false, "App.Stopped");
         icon.SetTip("Tray.Stopped");
+        if (preloadDiagnostic is { } preload && preload.Session == current)
+            RecordPreloadDiagnostic(preload, preload.Fail());
         RecordTrayDiagnostic(BeginTrayDiagnostic(), "core-session", "disconnected");
         await StopCoreAsync();
         transitioning = false;

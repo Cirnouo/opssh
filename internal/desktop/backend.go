@@ -4,6 +4,7 @@ package desktop
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -18,7 +19,10 @@ var (
 	ErrUnconfigured   = errors.New("desktop account is not configured")
 	ErrUnavailable    = errors.New("desktop request failed")
 	ErrSessionExpired = errors.New("desktop authorization expired")
+	ErrAccessDenied   = errors.New("desktop access denied")
 	ErrPublic         = errors.New("public key is unavailable or unsupported")
+	ErrPrivateMissing = errors.New("private key field is missing")
+	ErrPrivateInvalid = errors.New("private key field is invalid")
 )
 
 // SDKError maps vendor errors to safe categories before they cross the adapter.
@@ -26,6 +30,14 @@ func SDKError(err error) error {
 	var expired *onepassword.DesktopSessionExpiredError
 	if errors.As(err, &expired) {
 		return ErrSessionExpired
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, fs.ErrPermission):
+		return ErrAccessDenied
 	}
 	return ErrUnavailable
 }
@@ -88,31 +100,72 @@ func (b *Backend) Observation() (status, last string, at time.Time) {
 }
 
 func (b *Backend) Public(ctx context.Context, vault, item string) ([]byte, error) {
-	return b.resolve(ctx, vault, item, "public key", parsePublic)
-}
-
-func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, error) {
-	return b.resolve(ctx, vault, item, "private key?ssh-format=openssh", func(value string) ([]byte, error) {
-		if len(value) == 0 || len(value) > 64*1024 {
-			return nil, ErrUnavailable
-		}
-		return []byte(value), nil
-	})
-}
-
-func (b *Backend) resolve(ctx context.Context, vault, item, field string, convert func(string) ([]byte, error)) ([]byte, error) {
 	if !config.ValidID(vault) || !config.ValidID(item) {
 		return nil, ErrUnavailable
 	}
 	return execute(ctx, b, func(client resolver) ([]byte, error) {
-		value, err := client.Resolve(ctx, "op://"+vault+"/"+item+"/"+field)
+		value, err := client.Resolve(ctx, "op://"+vault+"/"+item+"/public key")
 		if err != nil {
 			return nil, SDKError(err)
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		return convert(value)
+		return parsePublic(value)
+	}, func(buf []byte) { clear(buf) })
+}
+
+func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, error) {
+	if !config.ValidID(vault) || !config.ValidID(item) {
+		return nil, ErrUnavailable
+	}
+	return execute(ctx, b, func(client resolver) ([]byte, error) {
+		bulk, ok := client.(batchResolver)
+		if !ok {
+			return nil, ErrUnavailable
+		}
+		// A single-reference ResolveAll preserves structured field errors that
+		// Secrets.Resolve returns only as text.
+		ref := "op://" + vault + "/" + item + "/private key?ssh-format=openssh"
+		response, err := bulk.ResolveAll(ctx, []string{ref})
+		if err != nil {
+			return nil, SDKError(err)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		value := response.IndividualResponses[ref]
+		if len(response.IndividualResponses) != 1 {
+			return nil, ErrUnavailable
+		}
+		if value.Error != nil {
+			if value.Content != nil {
+				return nil, ErrUnavailable
+			}
+			switch value.Error.Type {
+			case onepassword.ResolveReferenceErrorTypeVariantFieldNotFound:
+				return nil, ErrPrivateMissing
+			case onepassword.ResolveReferenceErrorTypeVariantTooManyMatchingFields,
+				onepassword.ResolveReferenceErrorTypeVariantSSHKeyMetadataNotFound,
+				onepassword.ResolveReferenceErrorTypeVariantIncompatibleSSHKeyQueryParameterField,
+				onepassword.ResolveReferenceErrorTypeVariantUnableToParsePrivateKey,
+				onepassword.ResolveReferenceErrorTypeVariantUnableToFormatPrivateKeyToOpenSSH:
+				return nil, ErrPrivateInvalid
+			default:
+				return nil, ErrUnavailable
+			}
+		}
+		if value.Content == nil || value.Content.VaultID != vault || value.Content.ItemID != item {
+			return nil, ErrUnavailable
+		}
+		switch size := len(value.Content.Secret); {
+		case size == 0:
+			return nil, ErrPrivateMissing
+		case size > 64*1024:
+			return nil, ErrPrivateInvalid
+		default:
+			return []byte(value.Content.Secret), nil
+		}
 	}, func(buf []byte) { clear(buf) })
 }
 
@@ -174,14 +227,22 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 		}()
 		// Publish the actual observation before releasing the native slot.
 		// A new reader can inherit this outcome before this waiter resumes.
-		if ctx.Err() != nil {
+		switch {
+		case ctx.Err() != nil:
 			cancelStatus()
-		} else if errors.Is(out.err, ErrSessionExpired) {
+		case errors.Is(out.err, ErrSessionExpired):
 			setStatus("expired")
-		} else if out.err != nil && !errors.Is(out.err, ErrScopeTooBroad) && !errors.Is(out.err, ErrScanLimit) {
-			setStatus("unavailable")
-		} else {
+		case errors.Is(out.err, ErrAccessDenied):
+			setStatus("denied")
+		case errors.Is(out.err, context.DeadlineExceeded):
+			setStatus("timed-out")
+		case errors.Is(out.err, context.Canceled):
+			setStatus("canceled")
+		case out.err == nil, errors.Is(out.err, ErrScopeTooBroad), errors.Is(out.err, ErrScanLimit),
+			errors.Is(out.err, ErrPrivateMissing), errors.Is(out.err, ErrPrivateInvalid):
 			setStatus("last-success")
+		default:
+			setStatus("unavailable")
 		}
 		<-b.work
 		select {

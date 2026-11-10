@@ -25,6 +25,11 @@ var (
 	ErrApprovalTimeout  = errors.New("approval timed out")
 	ErrLoadTimeout      = errors.New("key load timed out")
 	ErrProvider         = errors.New("key provider failed")
+	ErrProviderExpired  = errors.New("key provider authorization expired")
+	ErrProviderDenied   = errors.New("key provider access denied")
+	ErrProviderBusy     = errors.New("key provider is busy")
+	ErrPrivateMissing   = errors.New("private key field is missing")
+	ErrPrivateInvalid   = errors.New("private key field is invalid")
 	ErrKeyMismatch      = errors.New("private key does not match the index")
 	ErrBusy             = errors.New("engine is busy")
 	ErrStale            = errors.New("request is stale")
@@ -73,6 +78,7 @@ type Peer struct {
 
 type Provider interface {
 	// Load transfers ownership of the returned PEM buffer, even on error.
+	// Known failure categories use the engine's provider errors or context errors.
 	Load(context.Context, Key) ([]byte, error)
 }
 

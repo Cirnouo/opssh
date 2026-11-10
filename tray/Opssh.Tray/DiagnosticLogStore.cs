@@ -42,11 +42,12 @@ internal sealed class DiagnosticLogStore(string directory)
 
     internal Guid? ReadGeneration() => Access<Guid?>(create: false, empty: Guid.Empty, failure: null, ownership => ReadGeneration(ownership));
 
-    internal bool Clear() => Access(create: false, empty: true, failure: false, ownership =>
+    internal Guid? Clear() => Access<Guid?>(create: false, empty: Guid.Empty, failure: null, ownership =>
     {
         // Advance the shared generation under the same lock used to append.
         Span<byte> marker = stackalloc byte[16];
-        Guid.NewGuid().TryWriteBytes(marker);
+        var generation = Guid.NewGuid();
+        generation.TryWriteBytes(marker);
         ownership.Write(marker);
         ownership.SetLength(marker.Length);
         ownership.Flush(flushToDisk: true);
@@ -56,12 +57,12 @@ internal sealed class DiagnosticLogStore(string directory)
             if (FileExists(path))
                 File.Delete(path);
         }
-        return true;
+        return generation;
     });
 
-    internal (bool Saved, Guid Generation)? Append(Guid generation, IReadOnlyList<DiagnosticEvent> entries)
+    internal (bool Saved, Guid Generation)? Append(Guid? generation, IReadOnlyList<DiagnosticEvent> entries, Func<bool>? isCurrent = null)
     {
-        if (entries.Count > 32 || entries.Any(entry => !entry.IsValid))
+        if (isCurrent?.Invoke() == false || entries.Count > 32 || entries.Any(entry => !entry.IsValid))
             return null;
         using var payload = new MemoryStream();
         foreach (var entry in entries)
@@ -70,11 +71,15 @@ internal sealed class DiagnosticLogStore(string directory)
             payload.WriteByte(10);
         }
 
-        return Access<(bool, Guid)?>(create: entries.Count != 0, empty: (generation == Guid.Empty, Guid.Empty), failure: null, ownership =>
+        return Access<(bool, Guid)?>(create: entries.Count != 0, empty: (generation is null || generation == Guid.Empty, Guid.Empty), failure: null, ownership =>
         {
+            if (isCurrent?.Invoke() == false)
+                return null;
             var current = ReadGeneration(ownership);
-            if (generation != current || entries.Count == 0)
-                return (generation == current, current);
+            if (generation is { } expected && expected != current)
+                return (false, current);
+            if (entries.Count == 0)
+                return (true, current);
             var active = Path.Combine(directory, FileNames[0]);
             var first = Path.Combine(directory, FileNames[1]);
             var second = Path.Combine(directory, FileNames[2]);

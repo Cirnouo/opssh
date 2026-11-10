@@ -173,7 +173,7 @@ func TestRejectsEd25519PrivateKeyWithInconsistentSeed(t *testing.T) {
 		return returned, nil
 	})
 	e := makeEngine(t, opts)
-	if err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrInvalidKey) {
+	if _, err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrInvalidKey) {
 		t.Fatalf("got %v for an inconsistent seed", err)
 	}
 	if state := e.Status(); state.Loaded[key.ID] || state.Errors[key.ID] != "invalid-key" {
@@ -303,7 +303,7 @@ func TestCacheExpiryAndInvalidationStayIndependent(t *testing.T) {
 	clock.Add(int64(5 * time.Minute))
 	sign(2, 1)
 	clock.Add(int64(5 * time.Minute))
-	if err := e.Preload(t.Context(), key.ID); err != nil {
+	if _, err := e.Preload(t.Context(), key.ID); err != nil {
 		t.Fatal(err)
 	}
 	sign(3, 2)
@@ -330,7 +330,10 @@ func TestLockRetiresLatePrivateKey(t *testing.T) {
 	})
 	e := makeEngine(t, opts)
 	result := make(chan error, 1)
-	go func() { result <- e.Preload(t.Context(), key.ID) }()
+	go func() {
+		_, err := e.Preload(t.Context(), key.ID)
+		result <- err
+	}()
 	<-started
 	if state := e.Status(); !state.Loading[key.ID] || state.Loaded[key.ID] {
 		t.Fatalf("pending provider request has the wrong status: %+v", state)
@@ -410,7 +413,10 @@ func TestCacheOffSharesOnlyTheActiveLoad(t *testing.T) {
 	result := make(chan error, 2)
 	for range 2 {
 		ctx := &waitingContext{Context: t.Context(), waiting: make(chan struct{})}
-		go func() { result <- e.Preload(ctx, key.ID) }()
+		go func() {
+			_, err := e.Preload(ctx, key.ID)
+			result <- err
+		}()
 		select {
 		case <-ctx.waiting:
 		case err := <-result:
@@ -428,7 +434,7 @@ func TestCacheOffSharesOnlyTheActiveLoad(t *testing.T) {
 	if e.Status().Loaded[key.ID] || loads.Load() != 1 {
 		t.Fatalf("concurrent waiters did not share only the active result: %d calls", loads.Load())
 	}
-	if err := e.Preload(t.Context(), key.ID); err != nil || loads.Load() != 2 {
+	if _, err := e.Preload(t.Context(), key.ID); err != nil || loads.Load() != 2 {
 		t.Fatalf("later preload did not fetch fresh material: %d calls, %v", loads.Load(), err)
 	}
 }
@@ -445,10 +451,10 @@ func TestLoadTimesOutWhileProviderStillRunning(t *testing.T) {
 		return nil, errors.New("raw provider detail")
 	})
 	e := makeEngine(t, opts)
-	if err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrLoadTimeout) {
+	if _, err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrLoadTimeout) {
 		t.Fatalf("got %v", err)
 	}
-	if state := e.Status(); state.Loaded[key.ID] || state.Errors[key.ID] != "load-timeout" {
+	if state := e.Status(); state.Loaded[key.ID] || state.Errors[key.ID] != "provider-timeout" {
 		t.Fatalf("unexpected status: %+v", state)
 	}
 }

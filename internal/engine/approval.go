@@ -80,9 +80,9 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 	if err := e.checkSign(ctx, request); err != nil {
 		return err
 	}
-	material, flight, err := e.getMaterial(ctx, request.entry, request.version, request.revision)
-	if flight != nil {
-		defer e.releaseFlight(flight)
+	material, waiter, err := e.getMaterial(ctx, request.entry, request.version, request.revision)
+	if waiter != nil {
+		defer e.releaseFlight(waiter, err)
 	}
 	if err != nil {
 		return err
