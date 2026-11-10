@@ -5,8 +5,6 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="DashboardButtonBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="#D6D6D6" />
-            <SolidColorBrush x:Key="DashboardFrameBrush" Color="#F2F2F2" />
-            <SolidColorBrush x:Key="DashboardLayerBrush" Color="#F9F9F9" />
             <SolidColorBrush x:Key="DashboardCardBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="DashboardSubtleBrush" Color="#F4F4F4" />
             <SolidColorBrush x:Key="DashboardLineBrush" Color="#E2E2E2" />
@@ -21,8 +19,6 @@
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="DashboardButtonBrush" Color="#333333" />
             <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="#494949" />
-            <SolidColorBrush x:Key="DashboardFrameBrush" Color="#202020" />
-            <SolidColorBrush x:Key="DashboardLayerBrush" Color="#272727" />
             <SolidColorBrush x:Key="DashboardCardBrush" Color="#2D2D2D" />
             <SolidColorBrush x:Key="DashboardSubtleBrush" Color="#242424" />
             <SolidColorBrush x:Key="DashboardLineBrush" Color="#3C3C3C" />
@@ -37,8 +33,6 @@
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="DashboardButtonBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DashboardButtonEdgeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-            <SolidColorBrush x:Key="DashboardFrameBrush" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="DashboardLayerBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DashboardCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DashboardSubtleBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DashboardLineBrush" Color="{ThemeResource SystemColorWindowTextColor}" />

@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 
 namespace Opssh.Tray;
@@ -49,6 +50,10 @@ public sealed partial class DashboardWindow : Window
     private bool changingIntegration;
     private bool receivedFirstState;
 
+    private Grid DashboardRoot => Shell.Root;
+    private NavigationView Navigation => Shell.Navigation;
+    private InfoBar Feedback => Shell.Feedback;
+
     internal DashboardWindow(Func<string, object?, bool, Task> send, Func<string, object?, Task> sendUrgent,
         Func<Task> start, UiPreferences preferences, Func<string, string, bool> applyAppearance,
         Func<Task> checkUpdates, Func<bool, bool> setAutoCheckUpdates, DashboardActions actions)
@@ -61,11 +66,11 @@ public sealed partial class DashboardWindow : Window
         if (AppWindowTitleBar.IsCustomizationSupported())
         {
             ExtendsContentIntoTitleBar = true;
-            SetTitleBar(DashboardTitleBar);
+            SetTitleBar(Shell.TitleBar);
         }
         else
         {
-            DashboardTitleBar.Visibility = Visibility.Collapsed;
+            Shell.UseSystemTitleBar();
         }
         ApplyTheme(preferences.Theme);
         ResizeToWorkArea();
@@ -114,9 +119,11 @@ public sealed partial class DashboardWindow : Window
                 ShowPage();
             }
         };
-        DashboardRoot.SizeChanged += (_, args) => SetPageMargin(args.NewSize.Width);
-        PageSurface.SizeChanged += (_, args) =>
+        Shell.Viewport.SizeChanged += (_, args) =>
+        {
             Feedback.Width = Math.Clamp(args.NewSize.Width - 28, 0, 480);
+            SetPageMargin(args.NewSize.Width);
+        };
         SelectPage("account");
         SetAvailability(false, false, Strings.Get("Settings.StartingCore"));
     }
@@ -169,35 +176,25 @@ public sealed partial class DashboardWindow : Window
                 UpdateKeysPage(null, displayedState);
         }
 
-        if (!ReferenceEquals(PageHost.Content, page))
+        if (!ReferenceEquals((Shell.Routes.Content as DashboardRoutePage)?.Content, page))
         {
-            PageHost.Content = page;
+            if (!Shell.Routes.Navigate(typeof(DashboardRoutePage), CurrentPage,
+                    new SlideNavigationTransitionInfo { Effect = SlideNavigationTransitionEffect.FromBottom }))
+                return;
+            ((DashboardRoutePage)Shell.Routes.Content).Content = page;
             if (CurrentPage == "activity" && HasAccount)
                 UpdateActivityPage(displayedState, displayedState);
         }
-        SetPageMargin(DashboardRoot.ActualWidth);
+        SetPageMargin(Shell.Viewport.ActualWidth);
         RefreshDiagnosticUsage();
     }
 
     private void SetPageMargin(double width)
     {
-        var keyPage = CurrentPage == "keys" && !SignedOutPage;
-        Navigation.OpenPaneLength = keyPage ? 134 : width <= 800 ? 152 : 186;
-        Navigation.CompactPaneLength = keyPage ? 45 : 48;
-        Navigation.ExpandedModeThresholdWidth = keyPage ? 780 : 620;
-        if (keyPage)
-        {
-            var inset = width < 780 ? 11 : 18;
-            if (keysHeading is not null)
-                keysHeading.FontSize = width < 780 ? 25 : 30;
-            PageHost.Margin = new Thickness(inset, width < 780 ? 13 : 18, inset, 0);
-            return;
-        }
-
         var padding = width <= 620 ? 14 : Math.Clamp(width * 0.032, 16, 32);
-        PageHost.Margin = SignedOutPage ? new Thickness(12, 12, 28, 12) : new Thickness(padding, Math.Max(0, padding - 4), padding + 14,
+        Shell.Routes.Margin = SignedOutPage ? new Thickness(12) : new Thickness(padding, Math.Max(0, padding - 4), padding,
             CurrentPage == "activity" ? padding : 0);
-        if (CurrentPage == "settings" && PageHost.Content is ScrollViewer { Content: Border settingsBody })
+        if (CurrentPage == "settings" && pages["settings"] is ScrollViewer { Content: Border settingsBody })
             settingsBody.Padding = new Thickness(0, 0, 0, padding);
     }
 
@@ -220,7 +217,7 @@ public sealed partial class DashboardWindow : Window
         };
     }
 
-    internal void ApplyTheme(string theme) => WindowTheme.Apply(this, DashboardRoot, theme);
+    internal void ApplyTheme(string theme) => WindowTheme.Apply(this, Shell, theme);
 
     internal void SelectAppearance() => SelectPage("settings");
 

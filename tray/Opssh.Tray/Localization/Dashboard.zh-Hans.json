@@ -1,5 +1,6 @@
 {
   "Dashboard.Navigation": "opssh 导航",
+  "Dashboard.ToggleNavigation": "切换导航窗格",
   "Dashboard.Keys": "SSH 密钥",
   "Dashboard.Activity": "活动",
   "Dashboard.AccountNavigation": "1Password",
