@@ -49,6 +49,7 @@ internal static class DiagnosticChecks
                 "a clear prevents old batches from another writer from re-creating logs");
 
             CheckPreload(Path.Combine(root, "preload"));
+            CheckSigningSteps(Path.Combine(root, "signing"));
         }
         finally
         {
@@ -76,7 +77,16 @@ internal static class DiagnosticChecks
 
         var single = new PreloadDiagnostic("preload", session, 1, Guid.Empty);
         var failed = single.Complete(new Result(false, "fixture-provider-detail", null, false, "private-field-missing",
-            JsonSerializer.SerializeToElement(new { selected = 1, loaded = 0, alreadyLoaded = 0, failed = 1, skipped = 0 })))
+            JsonSerializer.SerializeToElement(new
+            {
+                selected = 1, loaded = 0, alreadyLoaded = 0, failed = 1, skipped = 0, stepsEpoch = 1,
+                steps = new[]
+                {
+                    new { stage = "request", outcome = "accepted", elapsedMs = 0 },
+                    new { stage = "key-cache", outcome = "miss", elapsedMs = 0 },
+                    new { stage = "provider-read", outcome = "field-not-found", elapsedMs = 1 }
+                }
+            })))
             ?? throw new InvalidOperationException("Missing single preload completion.");
         Require(failed.IsVisibleAt("ERROR") && store.Append(Guid.Empty, [single.Started(), failed]) is { Saved: true },
             "a specific single-key failure is visible at ERROR");
@@ -103,6 +113,19 @@ internal static class DiagnosticChecks
             counts.GetProperty("failed").GetInt32() == 1 && counts.GetProperty("skipped").GetInt32() == 1 &&
             singleCompletion.RootElement.GetProperty("result").GetString() == "private-field-missing",
             "completion preserves elapsed time, bounded counts and the allowlisted failure code");
+        var singleRow = singleCompletion.RootElement;
+        Require(singleRow.TryGetProperty("steps", out var steps) && steps.GetArrayLength() == 3 &&
+            steps[2].GetProperty("outcome").GetString() == "field-not-found" &&
+            !singleRow.TryGetProperty("stepsEpoch", out _), "preload persists safe ordered steps without consent metadata");
+
+        var staleTrace = new PreloadDiagnostic("preload", session, 2, Guid.Empty).Complete(new Result(
+            false, null, null, false, "private-field-missing", JsonSerializer.SerializeToElement(new
+            {
+                selected = 1, loaded = 0, alreadyLoaded = 0, failed = 1, skipped = 0, stepsEpoch = 1,
+                steps = new[] { new { stage = "request", outcome = "accepted", elapsedMs = 0 } }
+            })));
+        Require(staleTrace is not null && !JsonSerializer.SerializeToElement(staleTrace, Protocol.Json).TryGetProperty("steps", out _),
+            "preload drops steps from a prior consent epoch");
 
         var malformed = new PreloadDiagnostic("preload", session, 1, Guid.Empty).Complete(new Result(
             false, null, null, false, "fixture-unrecognized-code",
@@ -124,6 +147,45 @@ internal static class DiagnosticChecks
         Require(store.Append(fresh, [failed]) is { Saved: true } &&
             new DiagnosticLogStore(directory).Append(null, [failed]) is { Saved: true },
             "post-clear commands and initial writers can record without waiting for the collector");
+    }
+
+    private static void CheckSigningSteps(string directory)
+    {
+        var store = new DiagnosticLogStore(directory);
+        var result = new Result(true, null, null, false, null, JsonSerializer.SerializeToElement(new
+        {
+            epoch = 1,
+            events = new[]
+            {
+                new
+                {
+                    sequence = 1, time = DateTimeOffset.UnixEpoch, result = "timeout", elapsedMs = 60001,
+                    steps = new[]
+                    {
+                        new { stage = "peer", outcome = "verified", elapsedMs = 0 },
+                        new { stage = "request", outcome = "accepted", elapsedMs = 1 },
+                        new { stage = "approval", outcome = "timeout", elapsedMs = 60000 }
+                    }
+                },
+                new
+                {
+                    sequence = 2, time = DateTimeOffset.UnixEpoch, result = "failed", elapsedMs = 1,
+                    steps = new[] { new { stage = "approval", outcome = "fixture-provider-detail", elapsedMs = 1 } }
+                }
+            }
+        }));
+        Require(DiagnosticEvent.TryReadCoreBatch(result, 1, 0, out var entries, out var latest) && latest == 2 &&
+            store.Append(Guid.Empty, entries) is { Saved: true }, "a sign trace keeps the valid summaries and safe steps");
+        var rows = File.ReadAllLines(Path.Combine(directory, "opssh.log"));
+        Require(rows.Length == 2 && !rows.Any(row => row.Contains("fixture-", StringComparison.Ordinal)),
+            "malformed steps cannot persist arbitrary text");
+        using var valid = JsonDocument.Parse(rows[0]);
+        using var invalid = JsonDocument.Parse(rows[1]);
+        Require(valid.RootElement.TryGetProperty("steps", out var steps) && steps.GetArrayLength() == 3 &&
+            steps[0].GetProperty("stage").GetString() == "peer" && steps[2].GetProperty("stage").GetString() == "approval" &&
+            steps[2].GetProperty("outcome").GetString() == "timeout" && steps[2].EnumerateObject().Count() == 3 &&
+            !invalid.RootElement.TryGetProperty("steps", out _) && invalid.RootElement.GetProperty("result").GetString() == "failed",
+            "sign summaries retain only bounded, allowlisted ordered details");
     }
 
     private static void Require(bool condition, string scenario)

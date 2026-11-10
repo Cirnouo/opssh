@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"opssh/internal/diagnostics"
 )
 
 type signRequest struct {
@@ -36,15 +38,20 @@ func (e *Engine) Sign(ctx context.Context, peer Peer, public, data []byte, flags
 // SignObserved reports the selected key and approval anchor outside the engine
 // lock before returning. A request without a reusable approval has no anchor.
 func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byte, flags uint32, publish func(*ssh.Signature) error, observe func(SignObservation)) error {
+	trace := diagnostics.FromContext(ctx)
+	requestStart := trace.Start()
 	if len(public) == 0 || len(public) > maxPublicKey || len(data) > maxSignData || publish == nil || !validPeer(peer) {
+		trace.Add(diagnostics.Request, "invalid", requestStart)
 		return ErrInvalidRequest
 	}
 	if !reserve(e.requests) {
+		trace.Add(diagnostics.Request, "busy", requestStart)
 		return ErrBusy
 	}
 	defer func() { <-e.requests }()
 	peer.Chain = slices.Clone(peer.Chain)
 	request, prompt, err := e.beginSign(ctx, peer, public, flags)
+	trace.Add(diagnostics.Request, requestOutcome(err), requestStart)
 	if observe != nil {
 		defer func() { observe(SignObservation{KeyName: request.keyName, Anchor: request.anchor()}) }()
 	}
@@ -60,6 +67,7 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 		defer stopGrant()
 	}
 	if prompt != nil {
+		approvalStart := trace.Start()
 		if peer.ApprovalApp != nil {
 			i, ownsWindow := peer.ApprovalApp(ctx)
 			if ownsWindow && i >= 0 && i < len(peer.Chain) && peer.Alive(peer.Chain[i].Instance) {
@@ -69,12 +77,15 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 		}
 		approval, err := e.ask(ctx, *prompt)
 		if currentErr := e.checkSign(ctx, request); currentErr != nil {
+			trace.Add(diagnostics.Approval, approvalOutcome(currentErr), approvalStart)
 			return currentErr
 		}
 		if err != nil {
+			trace.Add(diagnostics.Approval, approvalOutcome(err), approvalStart)
 			return err
 		}
 		request.grantID, err = approvedGrant(approval, peer, *prompt)
+		trace.Add(diagnostics.Approval, approvalOutcome(err), approvalStart)
 		if err != nil {
 			return err
 		}
@@ -83,11 +94,14 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 			request.approvedUntil = e.approvalPolicy.expiry(e.now())
 			e.mu.Unlock()
 		}
+	} else {
+		trace.Add(diagnostics.Approval, "cached", time.Time{})
 	}
 	if err := e.checkSign(ctx, request); err != nil {
+		trace.Add(diagnostics.KeyCache, interruptedOutcome(err), time.Time{})
 		return err
 	}
-	material, waiter, err := e.getMaterial(ctx, request.entry, request.version, request.revision)
+	material, waiter, err := e.getMaterial(ctx, request.entry, request.version, request.revision, trace)
 	if waiter != nil {
 		defer e.releaseFlight(waiter, err)
 	}
@@ -255,27 +269,38 @@ func (e *Engine) checkSignLocked(ctx context.Context, request signRequest) error
 }
 
 func (e *Engine) signAndPublish(ctx context.Context, request signRequest, material *keyMaterial, data []byte, publish func(*ssh.Signature) error) error {
+	trace := diagnostics.FromContext(ctx)
+	signStart := trace.Start()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := e.checkSignLocked(ctx, request); err != nil {
+		trace.Add(diagnostics.Crypto, interruptedOutcome(err), signStart)
 		return err
 	}
 	if material == nil || material.signer == nil {
+		trace.Add(diagnostics.Crypto, "stale", signStart)
 		return ErrStale
 	}
 	signature, err := material.signer.SignWithAlgorithm(rand.Reader, data, request.algorithm)
 	if err != nil {
+		trace.Add(diagnostics.Crypto, "invalid", signStart)
 		return ErrInvalidKey
 	}
+	trace.Add(diagnostics.Crypto, "signed", signStart)
+	publishStart := trace.Start()
 	if err := e.checkSignLocked(ctx, request); err != nil {
+		trace.Add(diagnostics.Publish, interruptedOutcome(err), publishStart)
 		return err
 	}
 	if material.signer == nil {
+		trace.Add(diagnostics.Publish, "stale", publishStart)
 		return ErrStale
 	}
 	if err := publish(signature); err != nil {
+		trace.Add(diagnostics.Publish, "failed", publishStart)
 		return ErrPublish
 	}
+	trace.Add(diagnostics.Publish, "published", publishStart)
 	now := e.now()
 	if e.keyPolicy.Mode == "idle" {
 		request.entry.keyExpiry = e.keyPolicy.expiry(now)

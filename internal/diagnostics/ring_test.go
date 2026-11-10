@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -41,7 +42,7 @@ func TestRingReturnsBoundedRetryableSnapshots(t *testing.T) {
 		t.Fatalf("expected the oldest 32 of 128 retained events, got %+v", first)
 	}
 	retry, _ := ring.Sync(true, 1, 0)
-	if retry.Events[0] != first.Events[0] {
+	if !reflect.DeepEqual(retry.Events[0], first.Events[0]) {
 		t.Fatal("reading a snapshot discarded events")
 	}
 	next, _ := ring.Sync(true, 1, first.Events[31].Sequence)

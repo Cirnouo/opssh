@@ -28,7 +28,7 @@
   "Keys.PreloadPartial": "Some private keys could not load. Check each failed key.",
   "Keys.AccessDenied": "1Password denied the private key request. Authorize a new request and retry.",
   "Keys.ProviderBusy": "1Password is still processing a request. Wait and retry.",
-  "Keys.PrivateMissing": "The private key is missing or unavailable. Check the item in 1Password.",
+  "Keys.PrivateMissing": "1Password did not return a private key. Check the selected SSH key item.",
   "Keys.PrivateInvalid": "The private key returned by 1Password is invalid.",
   "Keys.PrivateLookup": "Could not read the private key. Check 1Password access and the item, then retry.",
   "Keys.IndexChanged": "The key list changed. Retry using the current list.",

@@ -60,6 +60,8 @@ func (s *vaultSlot) Load(ctx context.Context, key engine.Key) ([]byte, error) {
 		err = engine.ErrProviderBusy
 	case errors.Is(err, desktop.ErrPrivateMissing):
 		err = engine.ErrPrivateMissing
+	case errors.Is(err, desktop.ErrPrivateEmpty):
+		err = engine.ErrPrivateEmpty
 	case errors.Is(err, desktop.ErrPrivateInvalid):
 		err = engine.ErrPrivateInvalid
 	}
@@ -309,6 +311,7 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	}
 	var err error
 	var preload *engine.PreloadReport
+	var preloadTrace *diagnostics.Trace
 	if a.restartRequired && msg.Type != "status" {
 		result := restartResult()
 		result.State = a.status()
@@ -365,8 +368,11 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 		}
 		var report engine.PreloadReport
 		preload = &report
+		preloadTrace = a.diagnostics.Begin().Trace()
+		ctx = diagnostics.WithTrace(ctx, preloadTrace)
 		if a.settings.KeyCache.Mode == "off" {
 			err = errKeyCacheOff
+			preloadTrace.Add(diagnostics.Request, "cache-off", time.Time{})
 		} else if single {
 			report, err = a.engine.Preload(ctx, body.KeyID)
 		} else {
@@ -484,6 +490,13 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 			result = control.Result{ErrorCode: "preload-partial", Error: "Some private keys could not be preloaded."}
 		}
 		result.Data = preload
+		if steps := preloadTrace.Steps(); len(steps) != 0 && (msg.Type == "preload" || !preload.Interrupted && preload.Failed > 0) {
+			result.Data = struct {
+				*engine.PreloadReport
+				StepsEpoch uint64             `json:"stepsEpoch"`
+				Steps      []diagnostics.Step `json:"steps"`
+			}{PreloadReport: preload, StepsEpoch: preloadTrace.Epoch(), Steps: steps}
+		}
 	}
 	result.State = a.status()
 	result.RestartRequired = a.restartRequired
@@ -687,8 +700,8 @@ func displayError(err error) (code, message string) {
 		return "desktop-access-denied", "1Password denied access. Check the 1Password authorization prompt and try again."
 	case errors.Is(err, engine.ErrProviderBusy):
 		return "desktop-busy", "A 1Password request is still running. Try again after it completes."
-	case errors.Is(err, engine.ErrPrivateMissing):
-		return "private-field-missing", "The item has no private key field. Check the selected SSH key item."
+	case errors.Is(err, engine.ErrPrivateMissing), errors.Is(err, engine.ErrPrivateEmpty):
+		return "private-field-missing", "1Password did not return a private key for this item. Check the selected SSH key item."
 	case errors.Is(err, engine.ErrPrivateInvalid):
 		return "private-field-invalid", "1Password could not export the item's private key in OpenSSH format."
 	case errors.Is(err, engine.ErrProvider):

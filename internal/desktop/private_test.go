@@ -54,8 +54,8 @@ func TestPrivateLookupSeparatesPublicIndexFromPrivateFailures(t *testing.T) {
 				}
 				return onepassword.ResolveAllResponse{IndividualResponses: public}, nil
 			}
-			if len(refs) != 1 || observed >= len(keys) || refs[0] != "op://"+keys[observed].ID()+"/private key?ssh-format=openssh" {
-				t.Error("private lookup did not use the documented single OpenSSH reference")
+			if len(refs) != 1 || observed >= len(keys) || refs[0] != "op://"+keys[observed].ID()+"/private_key?ssh-format=openssh" {
+				t.Error("private lookup did not select the stable private field ID")
 				return onepassword.ResolveAllResponse{}, unknown
 			}
 			observed++
@@ -100,11 +100,11 @@ func TestPrivateLookupChecksFieldSizeAndReturnedIdentity(t *testing.T) {
 	}{
 		{"exact", itemID, "synthetic private response", ""},
 		{"other item", "cccccccccccccccccccccccccc", "synthetic private response", "desktop request failed"},
-		{"empty", itemID, "", "private key field is missing"},
+		{"empty", itemID, "", "private key field is empty"},
 		{"oversized", itemID, strings.Repeat("x", 64*1024+1), "private key field is invalid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			const ref = "op://" + vaultID + "/" + itemID + "/private key?ssh-format=openssh"
+			const ref = "op://" + vaultID + "/" + itemID + "/private_key?ssh-format=openssh"
 			client := fakeBatchResolver{
 				fakeResolve: func(context.Context, string) (string, error) { return tc.secret, nil },
 				batch: func(refs []string) (onepassword.ResolveAllResponse, error) {
