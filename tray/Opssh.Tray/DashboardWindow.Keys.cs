@@ -44,7 +44,7 @@ public sealed partial class DashboardWindow
 
     private FrameworkElement BuildKeysPage()
     {
-        var title = TableHeading("Dashboard.Keys", "Keys.Description", out var headingActions, keyPage: true);
+        var title = TableHeading("Dashboard.Keys", "Keys.Description", out var headingActions);
         discoverKeys = KeysButton("Keys.Discover", DiscoverKeysAsync, "\uE721", primary: true);
         cancelDiscovery = KeysButton("Keys.CancelDiscovery", CancelDiscoveryAsync);
         cancelDiscovery.Visibility = Visibility.Collapsed;
@@ -467,15 +467,15 @@ public sealed partial class DashboardWindow
         return grid;
     }
 
-    private Grid TableHeading(string titleKey, string descriptionKey, out StackPanel actionsPanel, bool keyPage = false)
+    private Grid TableHeading(string titleKey, string descriptionKey, out StackPanel actionsPanel)
     {
         var grid = new Grid { ColumnSpacing = 10 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var heading = Heading(Strings.Get(titleKey), keyPage ? 30 : 28, AutomationHeadingLevel.Level1);
-        var title = new StackPanel { Spacing = keyPage ? 4 : 5, Children = { heading, Quiet(Strings.Get(descriptionKey)) } };
+        var title = new StackPanel { Spacing = 4,
+            Children = { PageHeading(Strings.Get(titleKey)), Quiet(Strings.Get(descriptionKey)) } };
         actionsPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Top };
         grid.Children.Add(title);
         Grid.SetColumn(actionsPanel, 1);
@@ -494,9 +494,9 @@ public sealed partial class DashboardWindow
 
     private Button TableButton(string key, Func<Task> execute, string? glyph = null, bool primary = false, bool compact = false)
     {
-        var button = DashboardButton(Strings.Get(key), async () => await execute());
+        var button = Ui.Button(Strings.Get(key), async () => await execute());
         if (primary)
-            button.Style = StyleFor("DashboardAccentButtonStyle");
+            button.Style = StyleFor("AccentButtonStyle");
         button.FontSize = compact ? 12 : 14;
         button.MinHeight = compact ? 29 : 34;
         button.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(10, 4, 10, 4);

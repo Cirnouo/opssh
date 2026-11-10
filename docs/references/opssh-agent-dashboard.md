@@ -1,6 +1,6 @@
 # Dashboard visual reference
 
-These archived references describe the dashboard content and interactions. The current workspace shell uses the [WSL Settings navigation template](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml) with a shared Mica Alt backdrop and native page transitions. Its title bar, navigation and breakpoint follow the [current behavior specification](../specs/windows-agent.md).
+These archived references describe the dashboard content and interactions. The current workspace shell uses the [WSL Settings navigation template](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/src/windows/wslsettings/Views/Settings/ShellPage.xaml) with a shared Mica backdrop and the default WinUI Frame transition. Its title bar, navigation and breakpoint follow the [current behavior specification](../specs/windows-agent.md). The workspace uses the same Windows Community Toolkit SettingsControls package as [WSL Settings](https://github.com/microsoft/WSL/blob/8585e23a45261be22e642562a315937a9562f1e8/packages.config).
 
 [The key table, diagnostic settings and signature notification preview](opssh-key-approval-preview.html) preserves the approved Visualize bytes. Its SHA-256 is `764DE30A7E3E82E58CE930E85966CB23BAE2A9CB8A7C2CAE59E394E1D92B9A42`. Pass `-Revision KeyApproval` with `-Page keys` or `-Page settings` to render that reference.
 

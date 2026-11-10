@@ -1,11 +1,11 @@
 using System.Runtime.InteropServices;
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 
 namespace Opssh.Tray;
@@ -95,10 +95,10 @@ public sealed partial class DashboardWindow : Window
         AddNavigationItem("settings", "Settings.Settings", "\uE713", footer: true);
         AddNavigationItem("about", "Settings.About", "\uE946", footer: true);
 
-        connectButton = DashboardButton(Strings.Get("Dashboard.Connect"), async () => await PickAccountAsync());
-        connectButton.Style = StyleFor("DashboardAccentButtonStyle");
+        connectButton = Ui.Button(Strings.Get("Dashboard.Connect"), async () => await PickAccountAsync());
+        connectButton.Style = StyleFor("AccentButtonStyle");
         connectButton.HorizontalAlignment = HorizontalAlignment.Center;
-        restartButton = DashboardButton(Strings.Get("Settings.RestartCore"), async () => await start());
+        restartButton = Ui.Button(Strings.Get("Settings.RestartCore"), async () => await start());
         restartButton.HorizontalAlignment = HorizontalAlignment.Center;
         restartButton.Visibility = Visibility.Collapsed;
         signedOut = BuildSignedOut();
@@ -120,10 +120,7 @@ public sealed partial class DashboardWindow : Window
             }
         };
         Shell.Viewport.SizeChanged += (_, args) =>
-        {
             Feedback.Width = Math.Clamp(args.NewSize.Width - 28, 0, 480);
-            SetPageMargin(args.NewSize.Width);
-        };
         SelectPage("account");
         SetAvailability(false, false, Strings.Get("Settings.StartingCore"));
     }
@@ -178,24 +175,13 @@ public sealed partial class DashboardWindow : Window
 
         if (!ReferenceEquals((Shell.Routes.Content as DashboardRoutePage)?.Content, page))
         {
-            if (!Shell.Routes.Navigate(typeof(DashboardRoutePage), CurrentPage,
-                    new SlideNavigationTransitionInfo { Effect = SlideNavigationTransitionEffect.FromBottom }))
+            if (!Shell.Routes.Navigate(typeof(DashboardRoutePage), page))
                 return;
-            ((DashboardRoutePage)Shell.Routes.Content).Content = page;
             if (CurrentPage == "activity" && HasAccount)
                 UpdateActivityPage(displayedState, displayedState);
         }
-        SetPageMargin(Shell.Viewport.ActualWidth);
+        Shell.Routes.Margin = SignedOutPage ? new Thickness(12) : (Thickness)Application.Current.Resources["ContentPageMargin"];
         RefreshDiagnosticUsage();
-    }
-
-    private void SetPageMargin(double width)
-    {
-        var padding = width <= 620 ? 14 : Math.Clamp(width * 0.032, 16, 32);
-        Shell.Routes.Margin = SignedOutPage ? new Thickness(12) : new Thickness(padding, Math.Max(0, padding - 4), padding,
-            CurrentPage == "activity" ? padding : 0);
-        if (CurrentPage == "settings" && pages["settings"] is ScrollViewer { Content: Border settingsBody })
-            settingsBody.Padding = new Thickness(0, 0, 0, padding);
     }
 
     private FrameworkElement BuildSignedOut()
@@ -319,7 +305,6 @@ public sealed partial class DashboardWindow : Window
     {
         if (closed || activeDialog is not null)
             return ContentDialogResult.None;
-        dialog.Style = StyleFor("DashboardDialogStyle");
         dialog.XamlRoot = DashboardRoot.XamlRoot;
         var width = Math.Clamp(DashboardRoot.ActualWidth - 24, 280, 420);
         dialog.Resources["ContentDialogMinWidth"] = width;
@@ -466,16 +451,17 @@ public sealed partial class DashboardWindow : Window
         TextWrapping = TextWrapping.Wrap
     };
 
-    private Button DashboardButton(string label, Action action)
+    private TextBlock PageHeading(string title) => new()
     {
-        var button = Ui.Button(label, action);
-        button.Style = StyleFor("DashboardButtonStyle");
-        return button;
-    }
+        Text = title,
+        Style = StyleFor("PageHeaderTextBlockStyle"),
+        Margin = new Thickness(0),
+        TextWrapping = TextWrapping.Wrap
+    };
 
     private StackPanel Page(string title, string description = "")
     {
-        var header = new StackPanel { Spacing = 4, Children = { Heading(title, 28, AutomationHeadingLevel.Level1) } };
+        var header = new StackPanel { Spacing = 4, Children = { PageHeading(title) } };
         if (description.Length > 0)
             header.Children.Add(Quiet(description));
         return new StackPanel { Spacing = 16, Children = { header } };
@@ -501,67 +487,37 @@ public sealed partial class DashboardWindow : Window
 
     private Border Divider() => new() { Style = StyleFor("DashboardDividerStyle") };
 
-    private Border Rows(params UIElement[] rows)
+    private static StackPanel Cards(params UIElement[] cards)
     {
-        var stack = new StackPanel();
-        foreach (var row in rows)
-        {
-            if (stack.Children.Count > 0)
-                stack.Children.Add(Divider());
-            stack.Children.Add(row);
-        }
-        return Card(stack);
+        var stack = new StackPanel { Spacing = 4 };
+        foreach (var card in cards)
+            stack.Children.Add(card);
+        return stack;
     }
 
-    private Grid SettingRow(string glyph, string title, string description, FrameworkElement? action = null,
-        FrameworkElement? detail = null, UIElement? symbol = null) =>
-        SettingRow(glyph, title, description.Length == 0 ? null : Quiet(description, 12), action, detail, symbol);
-
-    private static Grid SettingRow(string glyph, string title, FrameworkElement? description, FrameworkElement? action = null,
-        FrameworkElement? detail = null, UIElement? symbol = null)
+    private static SettingsCard SettingRow(string glyph, string title, object? description, FrameworkElement? action = null,
+        FrameworkElement? detail = null, IconElement? symbol = null)
     {
-        var heading = Ui.Heading(title, 14);
-        heading.TextWrapping = TextWrapping.Wrap;
-        var label = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { heading } };
-        if (description is not null)
-            label.Children.Add(description);
-
-        var row = new Grid { MinHeight = 52, Padding = new Thickness(13, 10, 13, 10), ColumnSpacing = 10, RowSpacing = 0 };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
-        row.ColumnDefinitions.Add(new ColumnDefinition());
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        row.Children.Add(symbol ?? Icon(glyph));
-        Grid.SetColumn(label, 1);
-        row.Children.Add(label);
-        if (action is not null)
-        {
-            action.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(action, 2);
-            row.Children.Add(action);
-        }
+        if (description is "")
+            description = null;
         if (detail is not null)
         {
-            detail.Margin = new Thickness(0, 8, 0, 0);
-            Grid.SetRow(detail, 2);
-            Grid.SetColumn(detail, 1);
-            Grid.SetColumnSpan(detail, 2);
-            row.Children.Add(detail);
+            var details = new StackPanel { Spacing = 8 };
+            if (description is UIElement element)
+                details.Children.Add(element);
+            else if (description is string text)
+                details.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap });
+            details.Children.Add(detail);
+            description = details;
         }
-
-        row.SizeChanged += (_, args) =>
+        var card = new SettingsCard
         {
-            if (action is null)
-                return;
-            var stack = args.NewSize.Width < 400;
-            Grid.SetColumnSpan(label, stack ? 2 : 1);
-            Grid.SetColumn(action, stack ? 1 : 2);
-            Grid.SetColumnSpan(action, stack ? 2 : 1);
-            Grid.SetRow(action, stack ? 1 : 0);
-            action.Margin = stack ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+            Header = title,
+            HeaderIcon = symbol ?? Icon(glyph),
+            Content = action
         };
-        return row;
+        if (description is not null)
+            card.Description = description;
+        return card;
     }
 }

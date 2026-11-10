@@ -74,6 +74,31 @@
   ],
   "nuget": [
     {
+      "name": "CommunityToolkit.Common",
+      "version": "8.2.1",
+      "directory": "nuget/communitytoolkit.common"
+    },
+    {
+      "name": "CommunityToolkit.WinUI.Controls.SettingsControls",
+      "version": "8.2.250402",
+      "directory": "nuget/communitytoolkit.winui.controls.settingscontrols"
+    },
+    {
+      "name": "CommunityToolkit.WinUI.Extensions",
+      "version": "8.2.250402",
+      "directory": "nuget/communitytoolkit.winui.extensions"
+    },
+    {
+      "name": "CommunityToolkit.WinUI.Helpers",
+      "version": "8.2.250402",
+      "directory": "nuget/communitytoolkit.winui.helpers"
+    },
+    {
+      "name": "CommunityToolkit.WinUI.Triggers",
+      "version": "8.2.250402",
+      "directory": "nuget/communitytoolkit.winui.triggers"
+    },
+    {
       "name": "Microsoft.NETCore.App.Runtime.win-x64",
       "version": "10.0.14",
       "directory": "nuget/microsoft.netcore.app.runtime.win-x64"
@@ -245,6 +270,36 @@
       "path": "go/stdlib/PATENTS",
       "size": 1303,
       "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "path": "nuget/communitytoolkit.common/License.md",
+      "size": 1158,
+      "sha256": "651997ef19dbb9ecb8dd660dbc86444a65af21f18cfe08daa69bf201cd5cfdfc"
+    },
+    {
+      "path": "nuget/communitytoolkit.common/ThirdPartyNotices.txt",
+      "size": 8600,
+      "sha256": "7774f8b0ab66bfb47ec154ce24a2d6d574febc44a74d940b8a037d1c56756163"
+    },
+    {
+      "path": "nuget/communitytoolkit.winui.controls.settingscontrols/License.md",
+      "size": 1161,
+      "sha256": "c12410935503a2c9c4d3d4d14fdfdff49d0a37ad0046dc761b07867e8d499e97"
+    },
+    {
+      "path": "nuget/communitytoolkit.winui.extensions/License.md",
+      "size": 1161,
+      "sha256": "c12410935503a2c9c4d3d4d14fdfdff49d0a37ad0046dc761b07867e8d499e97"
+    },
+    {
+      "path": "nuget/communitytoolkit.winui.helpers/License.md",
+      "size": 1161,
+      "sha256": "c12410935503a2c9c4d3d4d14fdfdff49d0a37ad0046dc761b07867e8d499e97"
+    },
+    {
+      "path": "nuget/communitytoolkit.winui.triggers/License.md",
+      "size": 1161,
+      "sha256": "c12410935503a2c9c4d3d4d14fdfdff49d0a37ad0046dc761b07867e8d499e97"
     },
     {
       "path": "nuget/microsoft.netcore.app.runtime.win-x64/LICENSE.TXT",

@@ -133,8 +133,7 @@ public sealed partial class DashboardWindow
             Children = { diagnosticUsage, clear }
         };
         var usageRow = SettingRow("\uEDA2", Strings.Get("Settings.LogUsage"), "", usage);
-        usageRow.MinHeight = 58;
-        var section = Section(Strings.Get("Settings.Logs"), Rows(
+        var section = Section(Strings.Get("Settings.Logs"), Cards(
             SettingRow("\uE838", Strings.Get("Settings.LogDirectory"), Mono(@"logs\"), open),
             SettingRow("\uE8A5", Strings.Get("Settings.EnableLogs"), Strings.Get("Settings.EnableLogsDescription"), enabled),
             SettingRow("\uE71C", Strings.Get("Settings.LogLevel"), levelDescription, level),
