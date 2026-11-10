@@ -1,4 +1,3 @@
-using System.Text;
 using Opssh.Tray;
 
 internal static class WindowsIntegrationChecks
@@ -33,14 +32,16 @@ internal static class WindowsIntegrationChecks
 
     private static void CheckAccounts()
     {
-        const string id = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
-        var result = OnePasswordAccounts.Parse(Encoding.UTF8.GetBytes("""
-            [{"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","url":"team.1password.test","email":"person@example.test"},
-             {"user_uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbb","url":"other.1password.test"},
-             {"account_uuid":"cccccccccccccccccccccccccc","url":"https://person@example.test/"}]
-            """));
-        Require(result is { Status: AccountListStatus.Ready, Accounts.Count: 1 } &&
-            result.Accounts[0] == new DesktopAccount(id, "team.1password.test"), "account UUID and safe label only");
+        const string id = "ZZZZZZZZZZZZZZZZZZZZZZZZZZ";
+        var result = OnePasswordAccounts.Parse("""
+            [{"account_uuid":"ZZZZZZZZZZZZZZZZZZZZZZZZZZ","url":"z.1password.test","email":"person@example.test"},
+             {"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","url":"a.1password.test","email":"alex@example.test","user_name":"Alex Chen"},
+             {"user_uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbb","url":"other.1password.test","email":"other@example.test"},
+             {"account_uuid":"cccccccccccccccccccccccccc","url":"https://person@example.test/","email":"person@example.test"}]
+            """u8.ToArray());
+        Require(result is { Status: AccountListStatus.Ready, Accounts.Count: 2 } &&
+            result.Accounts[0] == new DesktopAccount(id, "person@example.test") &&
+            result.Accounts[1].Label == "Alex Chen(alex@example.test)", "account UUID, label and CLI order");
         Require(OnePasswordAccounts.Parse("[]"u8.ToArray()).Status == AccountListStatus.Empty,
             "empty account list");
         Require(OnePasswordAccounts.Parse("{}"u8.ToArray()).Status == AccountListStatus.InvalidResponse,
@@ -50,12 +51,12 @@ internal static class WindowsIntegrationChecks
         Require(OnePasswordAccounts.Parse(new byte[] { (byte)'[', 0xff, (byte)']' }).Status == AccountListStatus.InvalidResponse,
             "malformed account response encoding");
         Require(OnePasswordAccounts.Parse("""
-            [{"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","account_uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbb","url":"team.1password.test"}]
-            """u8.ToArray()).Status == AccountListStatus.Empty, "ambiguous UUID row");
+            [{"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","account_uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbb","url":"team.1password.test","email":"a@example.test"}]
+            """u8.ToArray()).Status == AccountListStatus.InvalidResponse, "ambiguous UUID row");
         Require(OnePasswordAccounts.Parse("""
-            [{"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","url":"team.1password.test"},
-             {"account_uuid":"AAAAAAAAAAAAAAAAAAAAAAAAAA","url":"other.1password.test"}]
-            """u8.ToArray()).Status == AccountListStatus.Empty, "ambiguous account identity");
+            [{"account_uuid":"aaaaaaaaaaaaaaaaaaaaaaaaaa","url":"team.1password.test","email":"a@example.test"},
+             {"account_uuid":"AAAAAAAAAAAAAAAAAAAAAAAAAA","url":"other.1password.test","email":"b@example.test"}]
+            """u8.ToArray()).Status == AccountListStatus.InvalidResponse, "ambiguous account identity");
         var start = OnePasswordAccounts.StartInfo(@"C:\Fixture\op.exe", @"C:\Fixture\empty");
         Require(!start.UseShellExecute && start.CreateNoWindow &&
             start.ArgumentList.SequenceEqual(new[] { "account", "list", "--format=json" }), "fixed CLI action");
@@ -64,6 +65,9 @@ internal static class WindowsIntegrationChecks
             start.Environment["OP_CACHE"] == "false" &&
             start.Environment.Keys.Count(key => key.StartsWith("OP_", StringComparison.OrdinalIgnoreCase)) == 3,
             "isolated CLI environment");
+        Require(OnePasswordAccounts.CliCandidates(@"C:\Fixture\process", @"C:\Fixture\user", @"c:\fixture\PROCESS;C:\Fixture\machine")
+            .SequenceEqual(new[] { @"C:\Fixture\process\op.exe", @"C:\Fixture\user\op.exe", @"C:\Fixture\machine\op.exe" }),
+            "CLI candidates include fresh user and machine paths without duplicates");
     }
 
     private static void CheckStartup()

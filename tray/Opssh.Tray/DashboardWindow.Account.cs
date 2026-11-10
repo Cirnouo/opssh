@@ -8,6 +8,11 @@ namespace Opssh.Tray;
 public sealed partial class DashboardWindow
 {
     private readonly Dictionary<string, ToggleSwitch> vaultChecks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (StackPanel Host, TextBlock Status, Button Retry)> vaultFeedback = new(StringComparer.Ordinal);
+    private readonly List<(StackPanel Host, InfoBar Notice, Button Retry)> pickerNotices = [];
+    private (string Id, bool Enabled, string Feedback)? failedVault;
+    private string? savingVault;
+    private bool pickerForAuthorization;
     private TextBlock accountName = null!;
     private TextBlock providerStatus = null!;
     private TextBlock providerTime = null!;
@@ -50,13 +55,13 @@ public sealed partial class DashboardWindow
         AutomationProperties.SetHelpText(providerTime, Strings.Get("Dashboard.ProviderTime"));
         var request = new StackPanel { Spacing = 3, Children = { provider, providerTime }, MaxWidth = 210 };
         page.Children.Add(Rows(
-            SettingRow("\uE77B", Strings.Get("Settings.Account"), accountName, accountActions),
+            SettingRow("\uE77B", Strings.Get("Dashboard.SelectedAccount"), accountName, accountActions),
             SettingRow("\uE72E", Strings.Get("Dashboard.DesktopAccess"), Strings.Get("Dashboard.DesktopAccessDescription"), request)));
+        page.Children.Insert(1, BuildPickerNotice());
 
         vaultCount = Quiet("", 12);
         vaultCount.VerticalAlignment = VerticalAlignment.Center;
         reloadVaults = DashboardButton(Strings.Get("Dashboard.ReloadVaults"), async () => await send("reload-vaults", null, false));
-        reloadVaults.Visibility = Visibility.Collapsed;
         var vaultActions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -87,7 +92,7 @@ public sealed partial class DashboardWindow
     }
 
     private static string DisplayedAccountName(CoreState state) =>
-        string.IsNullOrEmpty(state.AccountName) ? state.Account : state.AccountName;
+        DesktopAccount.IsLabel(state.AccountName) ? state.AccountName! : Strings.Get("Dashboard.SelectedAccount");
 
     private void UpdateAccountPage(CoreState? previous, CoreState? state)
     {
@@ -95,6 +100,8 @@ public sealed partial class DashboardWindow
         {
             vaultRows.Children.Clear();
             vaultChecks.Clear();
+            vaultFeedback.Clear();
+            failedVault = null;
             accountName.Text = "";
             providerStatus.Text = "";
             providerTime.Text = "";
@@ -110,8 +117,8 @@ public sealed partial class DashboardWindow
             var (label, style) = provider switch
             {
                 "last-success" => ("Settings.ProviderLastSuccess", "DashboardSuccessIconStyle"),
-                "denied" => ("Settings.ProviderDenied", "DashboardErrorIconStyle"),
-                "unavailable" => ("Settings.Unavailable", "DashboardErrorIconStyle"),
+                "denied" or "expired" => ("Dashboard.ProviderNotAuthorized", "DashboardWarningIconStyle"),
+                "unavailable" => ("Dashboard.ProviderFailed", "DashboardErrorIconStyle"),
                 "timed-out" => ("Settings.ProviderTimedOut", "DashboardErrorIconStyle"),
                 "canceled" => ("Settings.ProviderCanceled", "DashboardWarningIconStyle"),
                 "reading" => ("Settings.ProviderReading", "DashboardWarningIconStyle"),
@@ -125,6 +132,8 @@ public sealed partial class DashboardWindow
         }
 
         var vaults = ManageableVaults(state);
+        if (previous?.Account != state.Account)
+            failedVault = null;
         if (previous is null || previous.Account != state.Account ||
             !ManageableVaults(previous).Select(vault => (vault.Id, vault.Name)).SequenceEqual(vaults.Select(vault => (vault.Id, vault.Name))))
             PopulateVaults(vaults);
@@ -134,7 +143,7 @@ public sealed partial class DashboardWindow
 
     private static DiscoveredVault[] ManageableVaults(CoreState state)
     {
-        var visible = state.Vaults ?? [];
+        var visible = state.VaultCatalog ?? state.Vaults ?? [];
         if (state.Scope is not { } scope)
             return visible;
         var known = visible.Select(vault => vault.Id).ToHashSet(StringComparer.Ordinal);
@@ -148,6 +157,7 @@ public sealed partial class DashboardWindow
     {
         vaultRows.Children.Clear();
         vaultChecks.Clear();
+        vaultFeedback.Clear();
         var labels = SettingsLabels.ById(vaults.Select(vault =>
             (vault.Id, vault.Name.Length > 0 ? vault.Name : Strings.Get("Scope.UnnamedVault"))));
         foreach (var vault in vaults)
@@ -164,7 +174,17 @@ public sealed partial class DashboardWindow
             vaultChecks.Add(vault.Id, check);
             if (vaultRows.Children.Count > 0)
                 vaultRows.Children.Add(Divider());
-            var row = SettingRow("\uE8B7", label, "", check);
+            var status = Quiet("", 12);
+            AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
+            var retry = DashboardButton(Strings.Get("Dashboard.Retry"), async () =>
+            {
+                if (failedVault is { } failure && failure.Id == vault.Id)
+                    await SetVaultAsync(vault.Id, failure.Enabled);
+            });
+            var detail = new StackPanel { Spacing = 4, Children = { status, retry } };
+            var row = SettingRow("\uE8B7", label, "", check, detail);
+            detail.Visibility = Visibility.Collapsed;
+            vaultFeedback.Add(vault.Id, (detail, status, retry));
             row.Padding = new Thickness(13, 5, 13, 5);
             vaultRows.Children.Add(row);
         }
@@ -187,8 +207,6 @@ public sealed partial class DashboardWindow
                 allowed++;
         }
         paintingVaults = false;
-        reloadVaults.Visibility = state.Vaults is { Length: > 0 } && allowed > 0
-            ? Visibility.Collapsed : Visibility.Visible;
         vaultCount.Text = Strings.Get("Dashboard.AllowedVaultCount", allowed);
         goToKeys.Visibility = allowed > 0 ? Visibility.Visible : Visibility.Collapsed;
         vaultHint.Text = Strings.Get(vaultChecks.Count == 0 ? "Dashboard.NoVaults" :
@@ -199,23 +217,49 @@ public sealed partial class DashboardWindow
     {
         var enabled = HasAccount && CanManageAccount;
         switchAccount.IsEnabled = logout.IsEnabled = reloadVaults.IsEnabled = enabled && !changingVault;
-        foreach (var check in vaultChecks.Values)
-            check.IsEnabled = enabled && !changingVault;
+        var known = displayedState?.VaultCatalog ?? displayedState?.Vaults ?? [];
+        foreach (var (id, check) in vaultChecks)
+        {
+            var present = known.Any(vault => vault.Id == id);
+            check.IsEnabled = enabled && !changingVault && (present || check.IsOn);
+            var (host, status, retry) = vaultFeedback[id];
+            var failed = failedVault is { } failure && failure.Id == id;
+            status.Text = savingVault == id ? Strings.Get("Dashboard.VaultSaving") :
+                failed ? Strings.Get("Dashboard.VaultSaveFailed", Strings.Get(failedVault!.Value.Feedback)) : "";
+            host.Visibility = status.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            retry.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
+            retry.IsEnabled = enabled && !changingVault && (present || failedVault?.Enabled == false);
+        }
     }
 
     private async Task SetVaultAsync(string vaultId, bool enabled)
     {
         if (closed || !HasAccount || !CanManageAccount || changingVault)
             return;
+        var account = displayedState!.Account;
         changingVault = true;
+        savingVault = vaultId;
+        failedVault = null;
         UpdateAccountAvailability();
         try
         {
-            await send("set-vault", new { vaultId, enabled }, false);
+            var reply = await actions.Request("set-vault", new { vaultId, enabled }, windowLifetime.Token);
+            if (closed || displayedState?.Account != account)
+                return;
+            if (reply.State is { } latest && latest.Account == account)
+                ShowState(latest, false);
+            if (!reply.Ok)
+                failedVault = (vaultId, enabled, CoreFeedback.ResultKey(reply.ErrorCode, reply.Error));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException)
+        {
+            if (!closed && displayedState?.Account == account)
+                failedVault = (vaultId, enabled, "Error.ControlRequestFailed");
         }
         finally
         {
             changingVault = false;
+            savingVault = null;
             if (!closed && displayedState is { } state)
             {
                 UpdateVaultChoices(state);
@@ -224,120 +268,129 @@ public sealed partial class DashboardWindow
         }
     }
 
-    internal Task ShowAccountPickerAsync() => PickAccountAsync();
-
-    private async Task PickAccountAsync()
+    private StackPanel BuildPickerNotice()
     {
-        if (closed || !CanManageAccount || activeDialog is not null)
+        var notice = new InfoBar { IsOpen = true, IsClosable = false };
+        var retry = DashboardButton(Strings.Get("Dashboard.Retry"), async () => await PickAccountAsync(pickerForAuthorization));
+        retry.Style = StyleFor("DashboardAccentButtonStyle");
+        retry.HorizontalAlignment = HorizontalAlignment.Left;
+        var host = new StackPanel { Spacing = 8, Visibility = Visibility.Collapsed, Children = { notice, retry } };
+        pickerNotices.Add((host, notice, retry));
+        return host;
+    }
+
+    private void SetPickerNotice(string? key, bool canRetry)
+    {
+        foreach (var (host, notice, retry) in pickerNotices)
+        {
+            host.Visibility = key is null ? Visibility.Collapsed : Visibility.Visible;
+            notice.Message = key is null ? "" : Strings.Get(key);
+            notice.Severity = canRetry ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
+            retry.Visibility = canRetry ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    internal Task ShowAccountPickerAsync(bool authorizeCurrent = false) => PickAccountAsync(authorizeCurrent);
+
+    private async Task PickAccountAsync(bool authorizeCurrent = false)
+    {
+        if (closed || !CanManageAccount || activeDialog is not null || changingVault)
             return;
         var opener = HasAccount ? switchAccount : connectButton;
+        var currentId = displayedState?.Account;
+        var token = windowLifetime.Token;
+        pickerForAuthorization = authorizeCurrent;
         changingAccount = true;
         UpdateAvailability();
-        using var listLifetime = CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
+        SetPickerNotice("Dashboard.AccountsLoading", false);
         try
         {
-            var currentId = displayedState?.Account;
+            var result = await actions.ListAccounts(token);
+            if (closed || !connected || displayedState?.Account != currentId)
+                return;
+            var choices = result.Accounts.Where(account => authorizeCurrent || !DesktopAccount.SameId(account.Id, currentId)).ToArray();
+            var key = result.Status switch
+            {
+                AccountListStatus.Ready => choices.Length == 0 ? "Dashboard.NoOtherAccount" : null,
+                AccountListStatus.Empty => "Dashboard.NoAccounts",
+                AccountListStatus.NotInstalled => "Dashboard.AccountsCliMissing",
+                AccountListStatus.Untrusted => "Dashboard.AccountsCliUntrusted",
+                AccountListStatus.TimedOut => "Dashboard.AccountsTimedOut",
+                AccountListStatus.Busy => "Dashboard.AccountsBusy",
+                AccountListStatus.InvalidResponse => "Dashboard.AccountsInvalidResponse",
+                _ => "Dashboard.AccountsUnavailable"
+            };
+            if (result.Accounts.FirstOrDefault(account => DesktopAccount.SameId(account.Id, currentId)) is { } saved &&
+                displayedState!.AccountName != saved.Label)
+            {
+                var updated = await actions.Request("update-account-label", new { account = saved.Id, name = saved.Label }, token);
+                if (closed || !connected || displayedState?.Account != currentId)
+                    return;
+                if (updated.Ok && updated.State is { } latest)
+                    ShowState(latest, false);
+            }
+
+            SetPickerNotice(key, key is not null);
+            if (key is not null)
+                return;
+
             var picker = new ComboBox
             {
                 Header = Strings.Get("Settings.Account"),
-                PlaceholderText = Strings.Get("Dashboard.ChooseAccount"),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Visibility = Visibility.Collapsed
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
             AutomationProperties.SetName(picker, Strings.Get("Dashboard.ChooseAccount"));
-            var status = Quiet(Strings.Get("Dashboard.AccountsLoading"));
-            AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-            var retry = new HyperlinkButton
-            {
-                Content = Strings.Get("Dashboard.Retry"),
-                Padding = new Thickness(0),
-                Visibility = Visibility.Collapsed
-            };
+            foreach (var account in choices)
+                picker.Items.Add(new ComboBoxItem { Content = account.Label, Tag = account });
+            picker.SelectedIndex = 0;
+            var switchNotice = Quiet(Strings.Get("Dashboard.SwitchAccountDescription"));
             var contents = new StackPanel
             {
                 Spacing = 10,
-                Children = { picker, status, Quiet(Strings.Get("Dashboard.EnableSdk")), retry }
+                Children = { picker, Quiet(Strings.Get("Dashboard.EnableSdk")), switchNotice }
             };
-            var switchNotice = Quiet(Strings.Get("Dashboard.SwitchAccountDescription"));
-            switchNotice.Visibility = Visibility.Collapsed;
-            if (!string.IsNullOrEmpty(currentId))
-                contents.Children.Add(switchNotice);
             var dialog = new ContentDialog
             {
-                Title = Strings.Get(string.IsNullOrEmpty(currentId) ? "Dashboard.ConnectAccount" : "Dashboard.SwitchAccountTitle"),
+                Title = Strings.Get(authorizeCurrent ? "Dashboard.AuthorizeAccountTitle" :
+                    string.IsNullOrEmpty(currentId) ? "Dashboard.ConnectAccount" : "Dashboard.SwitchAccountTitle"),
                 Content = contents,
                 PrimaryButtonText = Strings.Get("Dashboard.ContinueInPassword"),
                 CloseButtonText = Strings.Get("Dashboard.Cancel"),
-                DefaultButton = ContentDialogButton.Primary,
-                IsPrimaryButtonEnabled = false
+                DefaultButton = ContentDialogButton.Primary
             };
             DesktopAccount? SelectedAccount() => (picker.SelectedItem as ComboBoxItem)?.Tag as DesktopAccount;
-            picker.SelectionChanged += (_, _) =>
+            void UpdateSwitchNotice()
             {
-                dialog.IsPrimaryButtonEnabled = SelectedAccount() is { } account && account.Id != currentId;
-                switchNotice.Visibility = dialog.IsPrimaryButtonEnabled && !string.IsNullOrEmpty(currentId)
+                switchNotice.Visibility = !string.IsNullOrEmpty(currentId) && !DesktopAccount.SameId(SelectedAccount()?.Id, currentId)
                     ? Visibility.Visible : Visibility.Collapsed;
-            };
-
-            async Task LoadAsync()
-            {
-                retry.Visibility = Visibility.Collapsed;
-                picker.Visibility = Visibility.Collapsed;
-                picker.Items.Clear();
-                status.Text = Strings.Get("Dashboard.AccountsLoading");
-                status.Visibility = Visibility.Visible;
-                try
-                {
-                    var result = await actions.ListAccounts(listLifetime.Token);
-                    if (listLifetime.IsCancellationRequested)
-                        return;
-                    foreach (var account in result.Accounts)
-                        picker.Items.Add(new ComboBoxItem { Content = account.Label, Tag = account, IsEnabled = account.Id != currentId });
-                    var choices = picker.Items.OfType<ComboBoxItem>().Where(item =>
-                        (item.Tag as DesktopAccount)?.Id != currentId).ToArray();
-                    picker.Visibility = picker.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                    var key = result.Status switch
-                    {
-                        AccountListStatus.Ready => choices.Length == 0 ? "Dashboard.NoOtherAccount" : null,
-                        AccountListStatus.Empty => "Dashboard.NoAccounts",
-                        AccountListStatus.NotInstalled => "Dashboard.AccountsCliMissing",
-                        AccountListStatus.Untrusted => "Dashboard.AccountsCliUntrusted",
-                        AccountListStatus.TimedOut => "Dashboard.AccountsTimedOut",
-                        AccountListStatus.Busy => "Dashboard.AccountsBusy",
-                        _ => "Dashboard.AccountsUnavailable"
-                    };
-                    status.Text = key is null ? "" : Strings.Get(key);
-                    status.Visibility = key is null ? Visibility.Collapsed : Visibility.Visible;
-                    retry.Visibility = key is null ? Visibility.Collapsed : Visibility.Visible;
-                    if (picker.Visibility == Visibility.Visible)
-                        picker.Focus(FocusState.Programmatic);
-                }
-                catch (OperationCanceledException) when (listLifetime.IsCancellationRequested) { }
             }
-
-            Task listing = Task.CompletedTask;
-            retry.Click += (_, _) => listing = LoadAsync();
-            dialog.Opened += (_, _) => listing = LoadAsync();
-            ContentDialogResult selectedResult;
-            try
-            {
-                selectedResult = await ShowDialogAsync(dialog);
-            }
-            finally
-            {
-                await listLifetime.CancelAsync();
-                await listing;
-            }
-
+            UpdateSwitchNotice();
+            picker.SelectionChanged += (_, _) => UpdateSwitchNotice();
+            dialog.Opened += (_, _) => picker.Focus(FocusState.Programmatic);
+            var selectedResult = await ShowDialogAsync(dialog);
             if (closed || !connected || displayedState?.Account != currentId ||
-                selectedResult != ContentDialogResult.Primary || SelectedAccount() is not { } selected || selected.Id == currentId)
+                selectedResult != ContentDialogResult.Primary || SelectedAccount() is not { } selected)
                 return;
 
-            var failure = await actions.SwitchAccount(selected.Id, selected.Label, windowLifetime.Token);
+            string? failure;
+            if (DesktopAccount.SameId(selected.Id, currentId))
+            {
+                var deadline = DateTimeOffset.UtcNow.AddSeconds(39).ToUnixTimeMilliseconds();
+                var reply = await actions.Request("authorize-desktop", new { account = currentId, deadline }, token);
+                if (!closed && displayedState?.Account == currentId && reply.State is { } latest)
+                    ShowState(latest, false);
+                failure = reply.Ok ? null : CoreFeedback.ResultKey(reply.ErrorCode, reply.Error);
+            }
+            else
+                failure = await actions.SwitchAccount(selected.Id, selected.Label, token);
             if (!closed && failure is not null)
                 ShowMessage(Strings.Get(failure), InfoBarSeverity.Warning);
         }
-        catch (OperationCanceledException) when (closed) { }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException)
+        {
+            if (!closed && displayedState?.Account == currentId)
+                SetPickerNotice("Dashboard.AccountsUnavailable", true);
+        }
         finally
         {
             changingAccount = false;
@@ -363,7 +416,7 @@ public sealed partial class DashboardWindow
         var result = await ShowDialogAsync(new ContentDialog
         {
             Title = Strings.Get("Dashboard.LogoutTitle"),
-            Content = Ui.Text(Strings.Get("Dashboard.LogoutDescription")),
+            Content = Ui.Text(Strings.Get("Dashboard.LogoutDescription", DisplayedAccountName(displayedState!))),
             PrimaryButtonText = Strings.Get("Dashboard.Logout"),
             CloseButtonText = Strings.Get("Dashboard.Cancel"),
             DefaultButton = ContentDialogButton.Close

@@ -67,7 +67,8 @@ internal sealed record CoreState(
     string? AccountName = null,
     string? LastProvider = null,
     DateTimeOffset? ProviderAt = null,
-    bool DefaultAgent = false);
+    bool DefaultAgent = false,
+    DiscoveredVault[]? VaultCatalog = null);
 
 internal sealed record Result([property: JsonRequired] bool Ok, string? Error, CoreState? State, bool RestartRequired, string? ErrorCode = null,
     JsonElement? Data = null);
@@ -82,6 +83,10 @@ internal static class CoreFeedback
     {
         "pipe-unavailable" => "Error.PipeUnavailable",
         "account-changed" or "unknown-grant" => "Error.RequestRejected",
+        "vault-unavailable" => "Dashboard.VaultUnavailable",
+        "vault-scope-limit" => "Dashboard.VaultScopeLimit",
+        "desktop-session-expired" => "Dashboard.DesktopSessionExpired",
+        "discovery-canceled" => "Keys.DiscoveryCanceled",
         "invalid-command" or "Invalid command or settings." => "Error.InvalidCommand",
         "configuration-write" or "Could not save the public configuration." => "Error.ConfigurationWrite",
         "already-selected" or "This item is already selected." => "Error.AlreadySelected",
@@ -372,7 +377,8 @@ internal sealed class CoreSession : IDisposable
     {
         if ((state.Scope is null && body.TryGetProperty("scope", out _)) ||
             (state.Vaults is null && body.TryGetProperty("vaults", out _)) ||
-            (state.Index is null && body.TryGetProperty("index", out _)))
+            (state.Index is null && body.TryGetProperty("index", out _)) ||
+            (state.VaultCatalog is null && body.TryGetProperty("vaultCatalog", out _)))
             throw new IOException("Invalid discovery state.");
 
         if (state.Index is not (null or "not-indexed" or "ready" or "partial" or "unavailable" or "scope-too-broad"))
@@ -387,7 +393,15 @@ internal sealed class CoreSession : IDisposable
                  !ValidItemId(rule.Key[..26]) || !ValidItemId(rule.Key[27..]) || !ValidRule(rule.Value))))
             throw new IOException("Invalid discovery scope.");
 
-        if (state.Vaults is not { } vaults)
+        if (state.VaultCatalog is { } catalog)
+            ValidateVaults(catalog, 0);
+        if (state.Vaults is { } vaults)
+            ValidateVaults(vaults, DiscoveryScope.MaxItems);
+    }
+
+    private static void ValidateVaults(DiscoveredVault[] vaults, int maxItems)
+    {
+        if (vaults.Length == 0)
             return;
         if (vaults.Length > DiscoveryScope.MaxVaults)
             throw new IOException("Too many discovered vaults.");
@@ -398,7 +412,7 @@ internal sealed class CoreSession : IDisposable
         {
             if (vault is null || !ValidItemId(vault.Id) || !vaultIds.Add(vault.Id) ||
                 !ValidText(vault.Name, 256) || vault.Items is null ||
-                vault.Items.Length > DiscoveryScope.MaxItems - itemCount)
+                vault.Items.Length > maxItems - itemCount)
                 throw new IOException("Invalid discovered vault.");
 
             itemCount += vault.Items.Length;

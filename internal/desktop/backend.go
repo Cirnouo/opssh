@@ -9,18 +9,26 @@ import (
 	"time"
 
 	onepassword "github.com/1password/onepassword-sdk-go"
-	"golang.org/x/crypto/ssh"
 
 	"opssh/internal/config"
-	"opssh/internal/engine"
 )
 
 var (
-	ErrBusy         = errors.New("desktop call already in progress")
-	ErrUnconfigured = errors.New("desktop account is not configured")
-	ErrUnavailable  = errors.New("desktop request failed")
-	ErrPublic       = errors.New("public key is unavailable or unsupported")
+	ErrBusy           = errors.New("desktop call already in progress")
+	ErrUnconfigured   = errors.New("desktop account is not configured")
+	ErrUnavailable    = errors.New("desktop request failed")
+	ErrSessionExpired = errors.New("desktop authorization expired")
+	ErrPublic         = errors.New("public key is unavailable or unsupported")
 )
+
+// SDKError maps vendor errors to safe categories before they cross the adapter.
+func SDKError(err error) error {
+	var expired *onepassword.DesktopSessionExpiredError
+	if errors.As(err, &expired) {
+		return ErrSessionExpired
+	}
+	return ErrUnavailable
+}
 
 type resolver interface {
 	Resolve(context.Context, string) (string, error)
@@ -80,22 +88,7 @@ func (b *Backend) Observation() (status, last string, at time.Time) {
 }
 
 func (b *Backend) Public(ctx context.Context, vault, item string) ([]byte, error) {
-	return b.resolve(ctx, vault, item, "public key", func(value string) ([]byte, error) {
-		if len(value) > 8192 {
-			return nil, ErrPublic
-		}
-		buf := []byte(value)
-		defer clear(buf)
-		key, _, options, rest, err := ssh.ParseAuthorizedKey(buf)
-		if err != nil || len(options) > 0 || len(rest) > 0 {
-			return nil, ErrPublic
-		}
-		blob := key.Marshal()
-		if !engine.ValidPublic(blob) {
-			return nil, ErrPublic
-		}
-		return blob, nil
-	})
+	return b.resolve(ctx, vault, item, "public key", parsePublic)
 }
 
 func (b *Backend) Private(ctx context.Context, vault, item string) ([]byte, error) {
@@ -114,7 +107,7 @@ func (b *Backend) resolve(ctx context.Context, vault, item, field string, conver
 	return execute(ctx, b, func(client resolver) ([]byte, error) {
 		value, err := client.Resolve(ctx, "op://"+vault+"/"+item+"/"+field)
 		if err != nil {
-			return nil, ErrUnavailable
+			return nil, SDKError(err)
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -169,7 +162,7 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 			if b.client == nil {
 				client, err := b.init(ctx, b.account)
 				if err != nil {
-					return result{err: ErrUnavailable}
+					return result{err: SDKError(err)}
 				}
 				if err := ctx.Err(); err != nil {
 					return result{err: err}
@@ -183,6 +176,8 @@ func execute[T any](ctx context.Context, b *Backend, read func(resolver) (T, err
 		// A new reader can inherit this outcome before this waiter resumes.
 		if ctx.Err() != nil {
 			cancelStatus()
+		} else if errors.Is(out.err, ErrSessionExpired) {
+			setStatus("expired")
 		} else if out.err != nil && !errors.Is(out.err, ErrScopeTooBroad) && !errors.Is(out.err, ErrScanLimit) {
 			setStatus("unavailable")
 		} else {

@@ -1,6 +1,12 @@
 {
   "Keys.Description": "Discover keys, manage loaded private keys, and review process approvals.",
   "Keys.Discover": "Discover SSH keys",
+  "Keys.CancelDiscovery": "Cancel discovery",
+  "Keys.ScanVaults": "Scanning vaults",
+  "Keys.ReadPublic": "Reading SSH public keys",
+  "Keys.DiscoveryCanceled": "Discovery canceled. The previous result was kept.",
+  "Keys.DiscoveryCancelRetry": "Could not cancel discovery yet. Try again.",
+  "Keys.DiscoveryFinished": "Discovery finished. {0} public keys updated.",
   "Keys.PreloadAll": "Preload all private keys",
   "Keys.EvictAll": "Clear loaded private keys",
   "Keys.RevokeAll": "Revoke all approvals",

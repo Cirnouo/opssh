@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
+using System.Net.Mail;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.AccessControl;
@@ -11,7 +13,32 @@ using Microsoft.Win32.SafeHandles;
 namespace Opssh.Tray;
 
 internal enum AccountListStatus { Ready, Empty, NotInstalled, Untrusted, Unavailable, TimedOut, InvalidResponse, Busy }
-internal sealed record DesktopAccount(string Id, string Label);
+internal sealed record DesktopAccount(string Id, string Label)
+{
+    internal static bool IsId(string? value) => value is { Length: 26 } && value.All(char.IsAsciiLetterOrDigit);
+
+    internal static bool SameId(string? left, string? right) =>
+        string.Equals(left, right, IsId(left) && IsId(right) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    internal static bool IsLabel(string? value)
+    {
+        if (value is null || !SafeText(value, 256))
+            return false;
+        var email = value;
+        var open = value.LastIndexOf('(');
+        if (open > 0 && value.EndsWith(')'))
+            email = value[(open + 1)..^1];
+        return IsEmail(email);
+    }
+
+    internal static bool SafeText(string value, int maxBytes) =>
+        value.Length > 0 && value.Trim() == value && Encoding.UTF8.GetByteCount(value) <= maxBytes &&
+        !value.Any(ch => char.IsControl(ch) || char.GetUnicodeCategory(ch) == UnicodeCategory.Format);
+
+    internal static bool IsEmail(string value) =>
+        SafeText(value, 254) && !value.Any(char.IsWhiteSpace) && value.Contains('@') &&
+        MailAddress.TryCreate(value, out var address) && address.DisplayName.Length == 0 && address.Address == value;
+}
 internal sealed record AccountListResult(AccountListStatus Status, IReadOnlyList<DesktopAccount> Accounts);
 
 internal static class OnePasswordAccounts
@@ -56,10 +83,14 @@ internal static class OnePasswordAccounts
                 if (!File.Exists(path))
                     continue;
                 found = true;
-                using var file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                var executable = LocalExecutable(file);
-                if (executable is not null && OnePasswordSignature.Verify(executable, file))
-                    return await RunAsync(executable, token).ConfigureAwait(false);
+                try
+                {
+                    using var file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    var executable = LocalExecutable(file);
+                    if (executable is not null && OnePasswordSignature.Verify(executable, file))
+                        return await RunAsync(executable, token).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
             }
             return Result(found ? AccountListStatus.Untrusted : AccountListStatus.NotInstalled);
         }
@@ -86,11 +117,18 @@ internal static class OnePasswordAccounts
 
     private static IEnumerable<string> CliCandidates()
     {
-        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+        return CliCandidates(Environment.GetEnvironmentVariable("PATH"),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine));
+    }
+
+    internal static IEnumerable<string> CliCandidates(params string?[] paths)
+    {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in path.Split(';', 129).Take(128))
+        foreach (var path in paths)
+        foreach (var entry in (path ?? "").Split(';', 129).Take(128))
         {
-            var directory = entry.Trim().Trim('"');
+            var directory = Environment.ExpandEnvironmentVariables(entry.Trim().Trim('"'));
             if (directory.Length is < 3 or > 1024 || directory[1] != ':' ||
                 !Path.IsPathFullyQualified(directory) || directory.Any(char.IsControl))
                 continue;
@@ -249,28 +287,26 @@ internal static class OnePasswordAccounts
             if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() > MaxAccounts)
                 return Result(AccountListStatus.InvalidResponse);
 
-            var accounts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (root.GetArrayLength() == 0)
+                return Result(AccountListStatus.Empty);
+            var accounts = new List<(DesktopAccount Account, string Host)>();
+            var first = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in root.EnumerateArray())
             {
-                if (!ReadAccount(row, out var id, out var host))
+                if (ReadAccount(row, out var host) is not { } account)
                     continue;
-                if (accounts.TryGetValue(id, out var oldHost) && oldHost != host)
-                    ambiguous.Add(id);
-                accounts.TryAdd(id, host);
+                if (first.TryAdd(account.Id, accounts.Count))
+                    accounts.Add((account, host));
+                else
+                {
+                    var existing = accounts[first[account.Id]];
+                    if (existing.Host != host || existing.Account.Label != account.Label)
+                        ambiguous.Add(account.Id);
+                }
             }
-            foreach (var id in ambiguous)
-                accounts.Remove(id);
-            if (accounts.Count == 0)
-                return Result(AccountListStatus.Empty);
-
-            var repeated = accounts.Values.GroupBy(host => host, StringComparer.Ordinal)
-                .Where(group => group.Count() > 1).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
-            return new(AccountListStatus.Ready, accounts.OrderBy(row => row.Value, StringComparer.Ordinal)
-                .ThenBy(row => row.Key, StringComparer.Ordinal)
-                .Select(row => new DesktopAccount(row.Key, repeated.Contains(row.Value)
-                    ? $"{row.Value} · {row.Key[..8]}"
-                    : row.Value)).ToArray());
+            var valid = accounts.Select(row => row.Account).Where(account => !ambiguous.Contains(account.Id)).ToArray();
+            return valid.Length == 0 ? Result(AccountListStatus.InvalidResponse) : new(AccountListStatus.Ready, valid);
         }
         catch (Exception e) when (e is JsonException or DecoderFallbackException or InvalidOperationException or UriFormatException)
         {
@@ -278,41 +314,51 @@ internal static class OnePasswordAccounts
         }
     }
 
-    private static bool ReadAccount(JsonElement row, out string id, out string host)
+    private static DesktopAccount? ReadAccount(JsonElement row, out string host)
     {
-        id = host = "";
+        host = "";
         if (row.ValueKind != JsonValueKind.Object)
-            return false;
-        string? uuid = null, url = null;
+            return null;
+        string? uuid = null, url = null, email = null, userName = null;
         foreach (var property in row.EnumerateObject())
         {
             if (property.NameEquals("account_uuid"))
             {
                 if (uuid is not null || property.Value.ValueKind != JsonValueKind.String)
-                    return false;
+                    return null;
                 uuid = property.Value.GetString();
             }
             else if (property.NameEquals("url"))
             {
                 if (url is not null || property.Value.ValueKind != JsonValueKind.String)
-                    return false;
+                    return null;
                 url = property.Value.GetString();
             }
+            else if (property.NameEquals("email"))
+            {
+                if (email is not null || property.Value.ValueKind != JsonValueKind.String)
+                    return null;
+                email = property.Value.GetString();
+            }
+            else if (property.NameEquals("user_name") && property.Value.ValueKind == JsonValueKind.String)
+                userName = property.Value.GetString()?.Trim();
         }
-        if (uuid is not { Length: 26 } || !uuid.All(char.IsAsciiLetterOrDigit) ||
+        if (uuid is null || !DesktopAccount.IsId(uuid) || email is null || !DesktopAccount.IsEmail(email) ||
             url is not { Length: > 0 and <= 128 } || url.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)))
-            return false;
+            return null;
         var address = url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url;
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) || uri.HostNameType != UriHostNameType.Dns ||
             uri.UserInfo.Length != 0 || !uri.IsDefaultPort || uri.AbsolutePath != "/" ||
             uri.Query.Length != 0 || uri.Fragment.Length != 0)
-            return false;
+            return null;
         host = uri.IdnHost;
         if (host.Length is < 3 or > 100 || !host.Contains('.') ||
             !host.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-'))
-            return false;
-        id = uuid;
-        return true;
+            return null;
+        var label = userName is { Length: > 0 } && DesktopAccount.SafeText(userName, 128) &&
+            !userName.Contains('(') && !userName.Contains(')') &&
+            DesktopAccount.SafeText($"{userName}({email})", 256) ? $"{userName}({email})" : email;
+        return new DesktopAccount(uuid, label);
     }
 
     private static AccountListResult Result(AccountListStatus status) => new(status, []);

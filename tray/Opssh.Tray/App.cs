@@ -137,7 +137,8 @@ public sealed partial class App : Application
             settings = new DashboardWindow(RunCommandAsync, RunUrgentAsync, StartCoreAsync, preferences, ApplyAppearance,
                 () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates,
                 new DashboardActions(OnePasswordAccounts.ListAsync, SwitchAccountAsync, RequestDashboardAsync,
-                    LoginStartup.Read, SetLoginStartup, SetStartupPolicy, () => defaultAgentDesired, SetDefaultAgentAsync, () => defaultAgentActive));
+                    LoginStartup.Read, SetLoginStartup, SetStartupPolicy, () => defaultAgentDesired, SetDefaultAgentAsync,
+                    () => defaultAgentActive, RequestDiscoveryControlAsync));
             settings.Closed += SettingsClosed;
             settings.ShowReleaseCheck(releaseCheck);
             settings.ShowMessage(message is null ? "" : Strings.Get(message));
@@ -437,7 +438,7 @@ public sealed partial class App : Application
             settings?.SetBusy(true);
             if (command == "reload-vaults")
                 ShowMessage("App.ProviderVerification");
-            else if (command is "discover" or "set-scope" or "refresh-index")
+            else if (command is "set-scope" or "refresh-index")
                 ShowMessage("App.Discovering");
         }
         var revision = stateRevision;
@@ -464,7 +465,9 @@ public sealed partial class App : Application
                 icon.SetTip(latest.Locked ? "Tray.Locked" : "Tray.Connected");
             }
             restart = result.Ok && result.RestartRequired && (command == "logout" || command == "connect" && !afterAccountRestart);
-            if (!result.Ok)
+            if (command == "discover" && result.Ok && result.State is { } discovered)
+                settings?.ShowMessage(Strings.Get("Keys.DiscoveryFinished", discovered.Keys.Length));
+            else if (!result.Ok)
                 ShowMessage(CoreFeedback.ResultKey(result.ErrorCode, result.Error));
             else if (!background)
                 ShowMessage(restart ? "App.RestartingAccount" :
@@ -514,8 +517,13 @@ public sealed partial class App : Application
         urgentComplete = completed;
         stateRevision++;
         settings?.SetUrgentBusy(true);
+        var ownsSlot = false;
         try
         {
+            await discoveryControls.WaitAsync(timeout.Token);
+            ownsSlot = true;
+            if (current != session || quitting)
+                return;
             var result = await current.RequestAsync(command, body, timeout.Token);
             if (current != session || quitting)
                 return;
@@ -530,6 +538,8 @@ public sealed partial class App : Application
         }
         finally
         {
+            if (ownsSlot)
+                discoveryControls.Release();
             if (urgentOperation == timeout)
             {
                 stateRevision++;

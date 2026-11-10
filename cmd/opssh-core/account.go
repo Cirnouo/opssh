@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 
@@ -13,6 +14,27 @@ import (
 type accountChoice struct {
 	Account string `json:"account"`
 	Name    string `json:"name"`
+}
+
+var (
+	errVaultUnavailable = errors.New("vault is no longer available")
+	errVaultScopeLimit  = errors.New("vault scope limit reached")
+)
+
+func validAccountUUID(value string) bool {
+	if len(value) != 26 {
+		return false
+	}
+	for _, ch := range value {
+		if !(ch >= 'A' && ch <= 'Z') && !(ch >= 'a' && ch <= 'z') && !(ch >= '0' && ch <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func sameAccount(left, right string) bool {
+	return left == right || validAccountUUID(left) && validAccountUUID(right) && strings.EqualFold(left, right)
 }
 
 type vaultCatalog interface {
@@ -52,8 +74,8 @@ func savedVaults(rows []config.Vault) []desktop.Vault {
 func (a *application) prepareAccount(ctx context.Context, msg control.Message) error {
 	var choice accountChoice
 	if a.attempted || control.DecodeBody(msg, &choice) != nil ||
-		!config.ValidID(choice.Account) || !config.ValidLabel(choice.Name) || choice.Name == "" ||
-		choice.Account == a.settings.Account {
+		!validAccountUUID(choice.Account) || !config.ValidLabel(choice.Name) || choice.Name == "" ||
+		sameAccount(choice.Account, a.settings.Account) {
 		return errCommand
 	}
 	// Desktop integration can pin the account in this process on first use.
@@ -74,6 +96,20 @@ func (a *application) prepareAccount(ctx context.Context, msg control.Message) e
 	a.vault.set(provider)
 	a.prepared = &next
 	return nil
+}
+
+func (a *application) updateAccountLabel(msg control.Message) error {
+	var choice accountChoice
+	if control.DecodeBody(msg, &choice) != nil || !validAccountUUID(choice.Account) ||
+		!config.ValidLabel(choice.Name) || choice.Name == "" {
+		return errCommand
+	}
+	if !sameAccount(choice.Account, a.settings.Account) {
+		return errAccountChanged
+	}
+	next := a.copySettings()
+	next.AccountName = choice.Name
+	return a.persist(next)
 }
 
 func (a *application) activateAccount(ctx context.Context) error {
@@ -135,7 +171,7 @@ func (a *application) setVault(msg control.Message) error {
 		}
 	}
 	if !known && (*form.Enabled || (!overridden && !legacyItem)) {
-		return errCommand
+		return errVaultUnavailable
 	}
 	rule := "exclude"
 	if *form.Enabled {
@@ -145,6 +181,9 @@ func (a *application) setVault(msg control.Message) error {
 		delete(next.Scope.Vaults, form.VaultID)
 	} else {
 		next.Scope.Vaults[form.VaultID] = rule
+	}
+	if len(next.Scope.Vaults) > config.MaxVaults {
+		return errVaultScopeLimit
 	}
 	next.Keys = slices.DeleteFunc(next.Keys, func(k config.Key) bool { return !next.Scope.Includes(k.VaultID, k.ItemID) })
 	return a.persist(next)

@@ -29,6 +29,13 @@ public sealed partial class DashboardWindow
     private TextBlock? keysCount;
     private TextBlock? keysNotice;
     private Button? discoverKeys;
+    private Button? cancelDiscovery;
+    private Border? discoveryCard;
+    private TextBlock? discoveryPhase;
+    private TextBlock? discoveryCount;
+    private ProgressBar? discoveryBar;
+    private string? discoveryId;
+    private bool discoveryCancelRequested;
     private Button? preloadKeys;
     private Button? evictKeys;
     private Button? revokeKeys;
@@ -39,9 +46,25 @@ public sealed partial class DashboardWindow
     private FrameworkElement BuildKeysPage()
     {
         var title = TableHeading("Dashboard.Keys", "Keys.Description", out var headingActions);
-        discoverKeys = KeysButton("Keys.Discover", async () => await send("discover", null, false), "\uE721", primary: true);
+        discoverKeys = KeysButton("Keys.Discover", DiscoverKeysAsync, "\uE721", primary: true);
+        cancelDiscovery = KeysButton("Keys.CancelDiscovery", CancelDiscoveryAsync);
+        cancelDiscovery.Visibility = Visibility.Collapsed;
         headingActions.VerticalAlignment = VerticalAlignment.Center;
         headingActions.Children.Add(discoverKeys);
+        headingActions.Children.Add(cancelDiscovery);
+        discoveryPhase = Ui.Heading(Strings.Get("Keys.ScanVaults"), 14);
+        AutomationProperties.SetLiveSetting(discoveryPhase, AutomationLiveSetting.Polite);
+        discoveryCount = Quiet("");
+        discoveryCount.HorizontalAlignment = HorizontalAlignment.Right;
+        var progressHeader = new Grid { Children = { discoveryPhase, discoveryCount } };
+        discoveryBar = new ProgressBar { IsIndeterminate = true };
+        discoveryCard = Card(new StackPanel
+        {
+            Padding = new Thickness(13, 10, 13, 10),
+            Spacing = 8,
+            Children = { progressHeader, discoveryBar }
+        });
+        discoveryCard.Visibility = Visibility.Collapsed;
         keysNotice = Quiet("", 13);
         keysCount = Quiet("");
         preloadKeys = KeysButton("Keys.PreloadAll", () => PreloadAsync(null), "\uE896");
@@ -52,7 +75,94 @@ public sealed partial class DashboardWindow
         void SurfaceSizeChanged(object sender, SizeChangedEventArgs args) => ResizeKeysTables();
         PageSurface.SizeChanged += SurfaceSizeChanged;
         Closed += (_, _) => PageSurface.SizeChanged -= SurfaceSizeChanged;
-        return new StackPanel { Spacing = 15, Children = { title, keysNotice, keysCount, actionsRow, keysBody } };
+        return new StackPanel { Spacing = 15, Children = { title, discoveryCard, keysNotice, keysCount, actionsRow, keysBody } };
+    }
+
+    private async Task DiscoverKeysAsync()
+    {
+        if (closed || !Ready || discoveryId is not null)
+            return;
+        var operationId = Guid.NewGuid().ToString("N");
+        discoveryId = operationId;
+        discoveryCancelRequested = false;
+        using var pollLifetime = CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
+        discoverKeys!.Visibility = Visibility.Collapsed;
+        cancelDiscovery!.Visibility = Visibility.Visible;
+        cancelDiscovery.IsEnabled = false;
+        discoveryCard!.Visibility = Visibility.Visible;
+        ShowDiscoveryProgress("vaults", 0, 0);
+        ShowMessage("");
+        var command = send("discover", new { operationId }, false);
+        var poll = TrackDiscoveryAsync(operationId, pollLifetime.Token);
+        try
+        {
+            await command;
+        }
+        finally
+        {
+            pollLifetime.Cancel();
+            await poll;
+            discoveryId = null;
+            if (!closed)
+            {
+                discoveryCard.Visibility = Visibility.Collapsed;
+                discoverKeys.Visibility = Visibility.Visible;
+                cancelDiscovery.Visibility = Visibility.Collapsed;
+                UpdateKeysAvailability();
+                if (CurrentPage == "keys")
+                    discoverKeys.Focus(FocusState.Programmatic);
+            }
+        }
+    }
+
+    private async Task TrackDiscoveryAsync(string operationId, CancellationToken token)
+    {
+        if (actions.DiscoveryControl is not { } control)
+            return;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                var reply = await control("discovery-progress", new { operationId });
+                if (!token.IsCancellationRequested && reply.Ok && reply.Data is { ValueKind: JsonValueKind.Object } data &&
+                    data.TryGetProperty("phase", out var phase) && phase.ValueKind == JsonValueKind.String &&
+                    phase.GetString() is "vaults" or "public" &&
+                    data.TryGetProperty("completed", out var done) && done.ValueKind == JsonValueKind.Number && done.TryGetInt32(out var completed) &&
+                    data.TryGetProperty("total", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var total) &&
+                    completed >= 0 && total >= completed && total <= 256)
+                {
+                    ShowDiscoveryProgress(phase.GetString()!, completed, total);
+                    cancelDiscovery!.IsEnabled = !discoveryCancelRequested;
+                }
+                await Task.Delay(180, token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
+    private void ShowDiscoveryProgress(string phase, int completed, int total)
+    {
+        var scanning = phase == "vaults";
+        discoveryPhase!.Text = Strings.Get(scanning ? "Keys.ScanVaults" : "Keys.ReadPublic");
+        discoveryCount!.Text = scanning && total > 0 ? $"{completed} / {total}" : "";
+        discoveryBar!.IsIndeterminate = !scanning || total == 0;
+        discoveryBar.Maximum = Math.Max(total, 1);
+        discoveryBar.Value = completed;
+    }
+
+    private async Task CancelDiscoveryAsync()
+    {
+        if (closed || discoveryCancelRequested || discoveryId is not { } operationId || actions.DiscoveryControl is not { } control)
+            return;
+        discoveryCancelRequested = true;
+        cancelDiscovery!.IsEnabled = false;
+        var reply = await control("cancel-discovery", new { operationId });
+        if (!closed && discoveryId == operationId && !reply.Ok && reply.ErrorCode != "discovery-not-active")
+        {
+            discoveryCancelRequested = false;
+            cancelDiscovery.IsEnabled = true;
+            ShowMessage(Strings.Get("Keys.DiscoveryCancelRetry"), InfoBarSeverity.Warning);
+        }
     }
 
     partial void UpdateKeysPage(CoreState? previous, CoreState? current)

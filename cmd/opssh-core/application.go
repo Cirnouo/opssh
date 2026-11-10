@@ -7,6 +7,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -67,6 +68,7 @@ type application struct {
 	prepared        *config.Settings
 	paused          bool
 	defaultAgent    bool
+	discovery       atomic.Pointer[discoveryOperation]
 }
 
 func newApplication(path, endpoint string, cfg config.Settings, ch *control.Channel, factory func(string) vault) (*application, error) {
@@ -179,6 +181,7 @@ type appState struct {
 	Pending       int             `json:"pending"`
 	Scope         config.Scope    `json:"scope"`
 	Vaults        []desktop.Vault `json:"vaults"`
+	VaultCatalog  []desktop.Vault `json:"vaultCatalog"`
 	Index         string          `json:"index"`
 	AccountName   string          `json:"accountName,omitempty"`
 	LastProvider  string          `json:"lastProvider,omitempty"`
@@ -191,7 +194,8 @@ func (a *application) status() appState {
 		Pipe: a.endpoint, Locked: s.Locked, Account: a.settings.Account, AccountName: a.settings.AccountName, DefaultAgent: a.defaultAgent,
 		Keys:     make([]keyDisplay, 0, len(a.settings.Keys)),
 		KeyCache: a.settings.KeyCache, ApprovalCache: a.settings.ApprovalCache,
-		Provider: a.vault.get().Status(), Scope: a.settings.Scope, Vaults: a.vaults, Index: a.settings.Index,
+		Provider: a.vault.get().Status(), Scope: a.settings.Scope, Vaults: a.vaults,
+		VaultCatalog: savedVaults(a.settings.Vaults), Index: a.settings.Index,
 	}
 	if observer, ok := a.vault.get().(interface {
 		Observation() (string, string, time.Time)
@@ -237,6 +241,8 @@ func fingerprint(blob []byte) string {
 // the regular command worker is waiting on 1Password.
 func (a *application) priority(msg control.Message) (control.Result, bool) {
 	switch msg.Type {
+	case "discovery-progress", "cancel-discovery":
+		return a.discoveryControl(msg), true
 	case "lock":
 		a.engine.Lock()
 	case "unlock":
@@ -321,6 +327,8 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 		}
 	case "set-vault":
 		err = a.setVault(msg)
+	case "update-account-label":
+		err = a.updateAccountLabel(msg)
 	case "logout":
 		if len(msg.Body) != 0 {
 			err = errCommand
@@ -379,11 +387,7 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 	case "connect":
 		err = a.connect(ctx, msg)
 	case "discover":
-		if len(msg.Body) != 0 {
-			err = errCommand
-		} else {
-			err = a.scanIndex(ctx, a.copySettings(), true)
-		}
+		err = a.discover(ctx, msg)
 	case "refresh-index":
 		if len(msg.Body) != 0 {
 			err = errCommand
@@ -623,6 +627,14 @@ func displayError(err error) (code, message string) {
 		return "pipe-unavailable", "The SSH agent pipe is unavailable or already in use."
 	case errors.Is(err, errAccountChanged):
 		return "account-changed", "The active account changed during the request."
+	case errors.Is(err, errVaultUnavailable):
+		return "vault-unavailable", "This vault is no longer available. Refresh the vault list."
+	case errors.Is(err, errVaultScopeLimit):
+		return "vault-scope-limit", "The maximum number of vault rules has been reached."
+	case errors.Is(err, errDiscoveryCanceled):
+		return "discovery-canceled", "Discovery canceled. The previous index was restored."
+	case errors.Is(err, desktop.ErrSessionExpired):
+		return "desktop-session-expired", "1Password access has expired. Authorize the next request in 1Password."
 	case errors.Is(err, engine.ErrUnknownGrant):
 		return "unknown-grant", "The process approval is no longer active."
 	case errors.Is(err, errSettingsWrite):
