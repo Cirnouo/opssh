@@ -22,6 +22,7 @@ public sealed partial class App
     private Guid? diagnosticGeneration;
     private bool diagnosticPolling;
     private bool diagnosticClearing;
+    private PreloadDiagnostic? preloadDiagnostic;
 
     private DiagnosticActions CreateDiagnosticActions() => new(
         SetDiagnosticPolicy, () => diagnosticStore.RunAsync(diagnosticStore.Read, null),
@@ -66,10 +67,13 @@ public sealed partial class App
             return false;
         diagnosticClearing = true;
         AdvanceDiagnosticEpoch();
-        try { return await diagnosticStore.RunAsync(diagnosticStore.Clear, false); }
+        try
+        {
+            diagnosticGeneration = await diagnosticStore.RunAsync(diagnosticStore.Clear, null);
+            return diagnosticGeneration is not null;
+        }
         finally
         {
-            diagnosticGeneration = null;
             diagnosticClearing = false;
             _ = CollectDiagnosticsAsync();
         }
@@ -159,11 +163,11 @@ public sealed partial class App
         finally { diagnosticPolling = false; }
     }
 
-    private (long Epoch, long Start, Guid Generation) BeginTrayDiagnostic() => preferences.DiagnosticLogging && !diagnosticClearing
-        ? (diagnosticEpoch, Stopwatch.GetTimestamp(), diagnosticGeneration ?? Guid.Empty)
+    private (long Epoch, long Start, Guid? Generation) BeginTrayDiagnostic() => preferences.DiagnosticLogging && !diagnosticClearing
+        ? (diagnosticEpoch, Stopwatch.GetTimestamp(), diagnosticGeneration)
         : default;
 
-    private void RecordTrayDiagnostic((long Epoch, long Start, Guid Generation) observation, string phase, string outcome)
+    private void RecordTrayDiagnostic((long Epoch, long Start, Guid? Generation) observation, string phase, string outcome)
     {
         if (quitting || diagnosticClearing || !preferences.DiagnosticLogging || observation.Epoch != diagnosticEpoch)
             return;
@@ -173,22 +177,47 @@ public sealed partial class App
             _ = AppendDiagnosticsAsync(observation.Epoch, observation.Generation, [entry]);
     }
 
-    private async Task<bool> AppendDiagnosticsAsync(long epoch, Guid generation, DiagnosticEvent[] entries, CoreSession? current = null)
+    private PreloadDiagnostic? BeginPreloadDiagnostic(CoreSession current, string phase)
     {
-        var result = await diagnosticStore.RunAsync<(bool Saved, Guid Generation)?>(() =>
+        var scope = BeginTrayDiagnostic();
+        if (scope.Epoch == 0)
+            return null;
+        var observation = new PreloadDiagnostic(phase, current, scope.Epoch, scope.Generation);
+        preloadDiagnostic = observation;
+        RecordPreloadDiagnostic(observation, observation.Started());
+        return observation;
+    }
+
+    private void RecordPreloadDiagnostic(PreloadDiagnostic? observation, DiagnosticEvent? entry)
+    {
+        if (observation is null || entry is null || observation.Session != session || quitting || diagnosticClearing ||
+            !preferences.DiagnosticLogging || observation.Epoch != diagnosticEpoch || !entry.IsVisibleAt(preferences.DiagnosticLevel))
+            return;
+
+        // A completed request or observed disconnect can finish writing while the
+        // tray has no core. An event from a replaced session is never accepted.
+        _ = AppendDiagnosticsAsync(observation.Epoch, observation.Generation, [entry], observation.Session, allowNoSession: true);
+    }
+
+    private async Task<bool> AppendDiagnosticsAsync(long epoch, Guid? generation, DiagnosticEvent[] entries,
+        CoreSession? current = null, bool allowNoSession = false)
+    {
+        bool IsCurrent()
         {
-            if (Volatile.Read(ref quitting) || Interlocked.Read(ref diagnosticEpoch) != epoch ||
-                (current is not null && current != Volatile.Read(ref session)))
-                return null;
-            return diagnosticStore.Append(generation, entries);
-        }, null);
-        if (quitting || epoch != diagnosticEpoch || (current is not null && current != session) || result is null)
+            var active = Volatile.Read(ref session);
+            return !Volatile.Read(ref quitting) && Interlocked.Read(ref diagnosticEpoch) == epoch &&
+                (current is null || current == active || allowNoSession && active is null);
+        }
+        var result = await diagnosticStore.RunAsync(() => diagnosticStore.Append(generation, entries, IsCurrent), null);
+        if (!IsCurrent() || result is null)
             return false;
         if (!result.Value.Saved)
         {
             diagnosticGeneration = result.Value.Generation;
             AdvanceDiagnosticEpoch();
         }
+        else
+            diagnosticGeneration ??= result.Value.Generation;
         if (entries.Length != 0)
             settings?.RefreshDiagnosticUsage();
         return result.Value.Saved;

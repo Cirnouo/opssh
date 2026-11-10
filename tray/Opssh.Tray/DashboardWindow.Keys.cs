@@ -22,7 +22,7 @@ public sealed partial class DashboardWindow
     private readonly Dictionary<string, Border> grantHosts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<Button>> grantActions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, KeysTable> grantTables = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, (Button Load, Button Evict, Button Revoke)> keyActions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Button Load, Button Evict, Button Revoke, Border LoadStatus, TextBlock? Failure)> keyActions = new(StringComparer.Ordinal);
     private readonly HashSet<string> fetchingGrants = new(StringComparer.Ordinal);
     private StackPanel? keysBody;
     private KeysTable? keysTable;
@@ -245,17 +245,26 @@ public sealed partial class DashboardWindow
                     await RefreshGrantsAsync(key.Id);
             }, expanded ? "\uE70D" : "\uE76C", compact: true, text: Strings.Get("Keys.GrantCount", key.Grants));
             AutomationProperties.SetName(expand, Strings.Get("Keys.ExpandFor", key.Name, key.Grants));
-            var load = KeysButton("Keys.Preload", () => PreloadAsync(key.Id), compact: true);
+            var load = KeysButton(key.Error is null or "" || key.Loaded ? "Keys.Preload" : "Keys.RetryPreload",
+                () => PreloadAsync(key.Id), compact: true);
             var evict = KeysButton("Keys.Evict", async () => await sendUrgent("evict-keys", new { keyId = key.Id }), compact: true);
             var revoke = KeysButton("Keys.RevokeKey", async () => await sendUrgent("revoke", new { keyId = key.Id }), compact: true);
-            keyActions[key.Id] = (load, evict, revoke);
+            var status = new Border { Child = KeyLoadStatus(key) };
+            var failure = key.Error is { Length: > 0 } code ? Quiet(Strings.Get(CoreFeedback.ResultKey(code, null)), 12) : null;
+            keyActions[key.Id] = (load, evict, revoke, status, failure);
             load.IsEnabled = Ready && !preloading && current.KeyCache.Mode != "off" && !key.Loaded && !key.Loading && key.Fingerprint.Length > 0;
             evict.IsEnabled = CanEvict(key);
             revoke.IsEnabled = connected && !urgentBusy && key.Grants != 0;
             var buttons = new KeysWrapPanel(5) { Children = { load, evict, revoke } };
-            var status = key.Loaded ? "Keys.Loaded" : key.Loading ? "Keys.LoadingNow" : "Keys.NotLoaded";
-            content.Children.Add(KeysRow(widths, columns, 79, keyText,
-                TableStatus(Strings.Get(status), key.Loaded ? "success" : "neutral", wrap: true), expand, buttons));
+            content.Children.Add(KeysRow(widths, columns, 79, keyText, status, expand, buttons));
+            if (failure is not null)
+            {
+                failure.Margin = new Thickness(14, 0, 14, 11);
+                failure.Style = StyleFor("DashboardErrorTextStyle");
+                AutomationProperties.SetLiveSetting(failure, AutomationLiveSetting.Polite);
+                UpdatePreloadFailure(key, failure);
+                content.Children.Add(failure);
+            }
             if (!expanded)
                 continue;
             content.Children.Add(Divider());
@@ -298,6 +307,7 @@ public sealed partial class DashboardWindow
             return;
         preloading = true;
         preloadingKey = keyId;
+        UpdateKeyLoadStatuses();
         UpdateKeysAvailability();
         try
         {
@@ -311,12 +321,43 @@ public sealed partial class DashboardWindow
             preloading = false;
             preloadingKey = null;
             if (!closed)
+            {
+                UpdateKeyLoadStatuses();
                 UpdateKeysAvailability();
+            }
         }
     }
 
+    private void UpdateKeyLoadStatuses()
+    {
+        foreach (var key in displayedState?.Keys ?? [])
+            if (keyActions.TryGetValue(key.Id, out var row))
+            {
+                row.LoadStatus.Child = KeyLoadStatus(key);
+                if (row.Failure is { } failure)
+                    UpdatePreloadFailure(key, failure);
+            }
+    }
+
+    private void UpdatePreloadFailure(PublicKey key, TextBlock failure) =>
+        failure.Visibility = key.Loaded || key.Loading || IsPreloading(key) ? Visibility.Collapsed : Visibility.Visible;
+
+    private FrameworkElement KeyLoadStatus(PublicKey key)
+    {
+        if (key.Loaded)
+            return TableStatus(Strings.Get("Keys.Loaded"), "success", wrap: true);
+        if (key.Loading || IsPreloading(key))
+            return TableStatus(Strings.Get("Keys.LoadingNow"), "neutral", wrap: true);
+        if (key.Error is { Length: > 0 })
+            return TableStatus(Strings.Get("Keys.LoadFailed"), "error", wrap: true);
+        return TableStatus(Strings.Get("Keys.NotLoaded"), "neutral", wrap: true);
+    }
+
+    private bool IsPreloading(PublicKey key) =>
+        preloading && (preloadingKey is null || preloadingKey == key.Id);
+
     private bool CanEvict(PublicKey key) => connected && !urgentBusy &&
-        (key.Loaded || key.Loading || preloading && (preloadingKey is null || preloadingKey == key.Id));
+        (key.Loaded || key.Loading || IsPreloading(key));
 
     private void PaintGrants(string keyId, int count)
     {

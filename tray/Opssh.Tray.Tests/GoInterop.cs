@@ -70,6 +70,13 @@ internal static class GoInterop
             vaults = new Dictionary<string, string> { [vault] = "exclude" },
             items = new Dictionary<string, string> { [item] = "include" }
         }, token)) is { Ok: true, State: { Keys: [{ Loaded: false }] } }, "explicit item inclusion overrides the vault exclusion");
+        var preload = await session.RequestAsync("preload", new { keyId = item }, token);
+        Require(preload is { Ok: true, State.Keys: [{ Loaded: true, Grants: 0 }] } &&
+            preload.Data?.GetProperty("loaded").GetInt32() == 1 && !request.Task.IsCompleted,
+            "preload caches only private material through the real control channel");
+        var repeated = await session.RequestAsync("preload-all", null, token);
+        Require(repeated is { Ok: true, State.Keys: [{ Loaded: true, Grants: 0 }] } &&
+            repeated.Data?.GetProperty("alreadyLoaded").GetInt32() == 1, "bulk preload skips already loaded keys");
         var logging = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 1, after = 0 }, token);
         Require(DiagnosticEvent.TryReadCoreBatch(logging, 1, 0, out var initialLogs, out _) && initialLogs.Count == 0,
             "enable diagnostics without replaying requests made before consent");

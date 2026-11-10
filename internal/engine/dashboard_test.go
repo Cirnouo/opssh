@@ -37,18 +37,119 @@ func TestPreloadAllSkipsAKeyEvictedDuringAnEarlierLoad(t *testing.T) {
 		return secondSecret(), nil
 	})
 	e := makeEngine(t, opts)
-	result := make(chan error, 1)
-	go func() { result <- e.PreloadAll(t.Context()) }()
+	type batchResult struct {
+		report engine.PreloadReport
+		err    error
+	}
+	result := make(chan batchResult, 1)
+	go func() {
+		report, err := e.PreloadAll(t.Context())
+		result <- batchResult{report, err}
+	}()
 	<-started
 	if err := e.EvictKey(second.ID); err != nil {
 		t.Fatal(err)
 	}
 	release()
-	if err := <-result; !errors.Is(err, engine.ErrStale) {
-		t.Fatalf("preload with an evicted key returned %v", err)
+	if got := <-result; !errors.Is(got.err, engine.ErrStale) || got.report != (engine.PreloadReport{Selected: 2, Loaded: 1, Failed: 1}) {
+		t.Fatalf("preload with an evicted key returned %+v", got)
 	}
 	if state := e.Status(); !state.Loaded[first.ID] || state.Loaded[second.ID] {
 		t.Fatalf("preload used a stale snapshot: %+v", state)
+	}
+}
+
+func TestPreloadAllReportsUnattemptedKeysAfterCancellation(t *testing.T) {
+	first, secret, _ := edFixture(t)
+	second, _, _ := edFixture(t)
+	second.ID = "second"
+	third, _, _ := edFixture(t)
+	third.ID = "third"
+	started := make(chan struct{})
+	opts := engine.DefaultOptions()
+	opts.Keys = []engine.Key{first, second, third}
+	opts.Provider = providerFunc(func(ctx context.Context, key engine.Key) ([]byte, error) {
+		if key.ID != first.ID {
+			t.Error("preload read a later key after cancellation")
+			return nil, engine.ErrProvider
+		}
+		close(started)
+		<-ctx.Done()
+		return secret(), nil
+	})
+	e := makeEngine(t, opts)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() {
+		<-started
+		cancel()
+	}()
+	report, err := e.PreloadAll(ctx)
+	if !errors.Is(err, context.Canceled) || report != (engine.PreloadReport{Selected: 3, Failed: 1, Skipped: 2, Interrupted: true}) {
+		t.Fatalf("canceled preload returned %+v and %v", report, err)
+	}
+	state := e.Status()
+	if state.Loaded[first.ID] || state.Loading[first.ID] || state.Errors[first.ID] != "canceled" || len(state.Errors) != 1 {
+		t.Fatalf("cancellation changed unattempted keys or published a result: %+v", state)
+	}
+}
+
+type gatedDoneContext struct {
+	context.Context
+	waiting chan struct{}
+	proceed chan struct{}
+}
+
+func (ctx gatedDoneContext) Done() <-chan struct{} {
+	close(ctx.waiting)
+	<-ctx.proceed
+	return ctx.Context.Done()
+}
+
+func TestPreloadDiscardsMaterialWhenCancellationPrecedesProviderCompletion(t *testing.T) {
+	key, secret, _ := edFixture(t)
+	returnKey := make(chan struct{})
+	releaseProvider := sync.OnceFunc(func() { close(returnKey) })
+	defer releaseProvider()
+	opts := engine.DefaultOptions()
+	opts.Keys = []engine.Key{key}
+	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) {
+		<-returnKey
+		return secret(), nil
+	})
+	e := makeEngine(t, opts)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	waiter := gatedDoneContext{Context: ctx, waiting: make(chan struct{}), proceed: make(chan struct{})}
+	releaseWaiter := sync.OnceFunc(func() { close(waiter.proceed) })
+	defer releaseWaiter()
+	result := make(chan error, 1)
+	go func() {
+		_, err := e.Preload(waiter, key.ID)
+		result <- err
+	}()
+	<-waiter.waiting
+	// Make the cancellation observable while holding the waiter outside its select.
+	// The provider must finalize the flight before the waiter can release it.
+	cancel()
+	releaseProvider()
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for e.Status().Loading[key.ID] {
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			t.Fatal("provider did not finish the load")
+		}
+	}
+	releaseWaiter()
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled waiter returned %v", err)
+	}
+	if state := e.Status(); state.Loaded[key.ID] || state.Errors[key.ID] != "canceled" {
+		t.Fatalf("abandoned load published material or lost cancellation: %+v", state)
 	}
 }
 
@@ -254,7 +355,7 @@ func TestIndexSuspensionRetainsStateOnlyForUnchangedIdentity(t *testing.T) {
 	if err := sign(); !errors.Is(err, engine.ErrStale) {
 		t.Fatalf("signing during discovery returned %v", err)
 	}
-	if err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrStale) {
+	if _, err := e.Preload(t.Context(), key.ID); !errors.Is(err, engine.ErrStale) {
 		t.Fatalf("preload during discovery returned %v", err)
 	}
 	key.Name = "Renamed"

@@ -50,7 +50,20 @@ func (s *vaultSlot) set(v vault) {
 	s.v = v
 }
 func (s *vaultSlot) Load(ctx context.Context, key engine.Key) ([]byte, error) {
-	return s.get().Private(ctx, key.VaultID, key.ItemID)
+	private, err := s.get().Private(ctx, key.VaultID, key.ItemID)
+	switch {
+	case errors.Is(err, desktop.ErrSessionExpired):
+		err = engine.ErrProviderExpired
+	case errors.Is(err, desktop.ErrAccessDenied):
+		err = engine.ErrProviderDenied
+	case errors.Is(err, desktop.ErrBusy):
+		err = engine.ErrProviderBusy
+	case errors.Is(err, desktop.ErrPrivateMissing):
+		err = engine.ErrPrivateMissing
+	case errors.Is(err, desktop.ErrPrivateInvalid):
+		err = engine.ErrPrivateInvalid
+	}
+	return private, err
 }
 
 type application struct {
@@ -294,6 +307,7 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 		return commandResult(engine.ErrBusy)
 	}
 	var err error
+	var preload *engine.PreloadReport
 	if a.restartRequired && msg.Type != "status" {
 		result := restartResult()
 		result.State = a.status()
@@ -339,13 +353,25 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 			next.Account = ""
 			err = a.applySettings(next)
 		}
-	case "preload-all":
-		if len(msg.Body) != 0 {
+	case "preload", "preload-all":
+		var body struct {
+			KeyID string `json:"keyId"`
+		}
+		single := msg.Type == "preload"
+		if (single && control.DecodeBody(msg, &body) != nil) || (!single && len(msg.Body) != 0) {
 			err = errCommand
+			break
+		}
+		var report engine.PreloadReport
+		preload = &report
+		if a.settings.KeyCache.Mode == "off" {
+			err = errKeyCacheOff
+		} else if single {
+			report, err = a.engine.Preload(ctx, body.KeyID)
 		} else {
 			ctx, cancel := context.WithTimeout(ctx, indexTimeout)
 			defer cancel()
-			err = a.engine.PreloadAll(ctx)
+			report, err = a.engine.PreloadAll(ctx)
 		}
 	case "grants":
 		var body struct {
@@ -425,7 +451,7 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 		}
 	case "add-key":
 		err = a.addKey(ctx, msg)
-	case "refresh", "remove-key", "preload":
+	case "refresh", "remove-key":
 		var body struct {
 			KeyID string `json:"keyId"`
 		}
@@ -447,13 +473,17 @@ func (a *application) command(ctx context.Context, msg control.Message) control.
 			next.Scope.Items[body.KeyID] = "exclude"
 			next.Index = config.IndexPartial
 			err = a.persist(next)
-		case "preload":
-			err = a.engine.Preload(ctx, body.KeyID)
 		}
 	default:
 		err = errCommand
 	}
 	result := commandResult(err)
+	if preload != nil {
+		if !preload.Interrupted && preload.Loaded+preload.AlreadyLoaded > 0 && preload.Failed+preload.Skipped > 0 {
+			result = control.Result{ErrorCode: "preload-partial", Error: "Some private keys could not be preloaded."}
+		}
+		result.Data = preload
+	}
 	result.State = a.status()
 	result.RestartRequired = a.restartRequired
 	return result
@@ -624,6 +654,7 @@ var (
 	errAlreadySelected = errors.New("item already selected")
 	errAccountChanged  = errors.New("active account changed during handover")
 	errPipeUnavailable = errors.New("SSH agent pipe unavailable")
+	errKeyCacheOff     = errors.New("private key cache is off")
 )
 
 func commandResult(err error) control.Result {
@@ -649,8 +680,22 @@ func displayError(err error) (code, message string) {
 		return "vault-scope-limit", "The maximum number of vault rules has been reached."
 	case errors.Is(err, errDiscoveryCanceled):
 		return "discovery-canceled", "Discovery canceled. The previous index was restored."
-	case errors.Is(err, desktop.ErrSessionExpired):
+	case errors.Is(err, desktop.ErrSessionExpired), errors.Is(err, engine.ErrProviderExpired):
 		return "desktop-session-expired", "1Password access has expired. Authorize the next request in 1Password."
+	case errors.Is(err, desktop.ErrAccessDenied), errors.Is(err, engine.ErrProviderDenied):
+		return "desktop-access-denied", "1Password denied access. Check the 1Password authorization prompt and try again."
+	case errors.Is(err, engine.ErrProviderBusy):
+		return "desktop-busy", "A 1Password request is still running. Try again after it completes."
+	case errors.Is(err, engine.ErrPrivateMissing):
+		return "private-field-missing", "The item has no private key field. Check the selected SSH key item."
+	case errors.Is(err, engine.ErrPrivateInvalid):
+		return "private-field-invalid", "1Password could not export the item's private key in OpenSSH format."
+	case errors.Is(err, engine.ErrProvider):
+		return "private-lookup", "The private key lookup failed. Check 1Password desktop access and the selected item."
+	case errors.Is(err, errKeyCacheOff):
+		return "cache-off", "Turn on private key caching before preloading keys."
+	case errors.Is(err, engine.ErrStale), errors.Is(err, engine.ErrClosed):
+		return "stale", "The key or index changed during the request. Try again with the current key."
 	case errors.Is(err, engine.ErrUnknownGrant):
 		return "unknown-grant", "The process approval is no longer active."
 	case errors.Is(err, errSettingsWrite):

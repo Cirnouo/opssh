@@ -33,11 +33,18 @@ type loadFlight struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	done      chan struct{}
-	waiters   int
+	waiters   map[*loadWaiter]struct{}
 	completed bool
 	transient bool
 	material  *keyMaterial
 	err       error
+}
+
+type loadWaiter struct {
+	flight   *loadFlight
+	ctx      context.Context
+	version  context.Context // nil for an explicit preload
+	revision uint64
 }
 
 type materialSnapshot struct {
@@ -45,34 +52,59 @@ type materialSnapshot struct {
 	revision uint64
 }
 
-func (e *Engine) Preload(ctx context.Context, keyID string) error {
+type PreloadReport struct {
+	Selected      int  `json:"selected"`
+	Loaded        int  `json:"loaded"`
+	AlreadyLoaded int  `json:"alreadyLoaded"`
+	Failed        int  `json:"failed"`
+	Skipped       int  `json:"skipped"`
+	Interrupted   bool `json:"-"`
+}
+
+func (report *PreloadReport) record(alreadyLoaded bool, err error) {
+	switch {
+	case err != nil:
+		report.Failed++
+	case alreadyLoaded:
+		report.AlreadyLoaded++
+	default:
+		report.Loaded++
+	}
+}
+
+func (e *Engine) Preload(ctx context.Context, keyID string) (PreloadReport, error) {
+	report := PreloadReport{Selected: 1}
 	if !reserve(e.requests) {
-		return ErrBusy
+		report.record(false, ErrBusy)
+		return report, ErrBusy
 	}
 	defer func() { <-e.requests }()
 	e.mu.Lock()
 	entry := e.state[keyID]
 	if err := e.keyErrorLocked(entry); err != nil {
 		e.mu.Unlock()
-		return err
+		report.record(false, err)
+		return report, err
 	}
 	snapshot := materialSnapshot{entry: entry, revision: entry.materialRevision}
 	e.mu.Unlock()
-	return e.preload(ctx, snapshot)
+	alreadyLoaded, err := e.preload(ctx, snapshot)
+	report.record(alreadyLoaded, err)
+	return report, err
 }
 
 // PreloadAll loads the catalog in order using one request slot. Capturing
 // every revision before the first load prevents a batch from restoring
 // material evicted while an earlier key was loading.
-func (e *Engine) PreloadAll(ctx context.Context) error {
+func (e *Engine) PreloadAll(ctx context.Context) (PreloadReport, error) {
 	if !reserve(e.requests) {
-		return ErrBusy
+		return PreloadReport{}, ErrBusy
 	}
 	defer func() { <-e.requests }()
 	e.mu.Lock()
 	if err := e.indexErrorLocked(); err != nil {
 		e.mu.Unlock()
-		return err
+		return PreloadReport{}, err
 	}
 	keys := make([]materialSnapshot, 0, len(e.keys.entries))
 	for _, key := range e.keys.entries {
@@ -80,30 +112,36 @@ func (e *Engine) PreloadAll(ctx context.Context) error {
 		keys = append(keys, materialSnapshot{entry: entry, revision: entry.materialRevision})
 	}
 	e.mu.Unlock()
+	report := PreloadReport{Selected: len(keys)}
 	var firstErr error
-	for _, snapshot := range keys {
-		if ctx.Err() != nil {
-			break
+	for i, snapshot := range keys {
+		if err := ctx.Err(); err != nil {
+			report.Skipped = len(keys) - i
+			report.Interrupted = true
+			return report, err
 		}
-		if err := e.preload(ctx, snapshot); err != nil && firstErr == nil {
+		alreadyLoaded, err := e.preload(ctx, snapshot)
+		report.record(alreadyLoaded, err)
+		if err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		report.Interrupted = true
+		return report, err
 	}
-	return firstErr
+	return report, firstErr
 }
 
-func (e *Engine) preload(ctx context.Context, snapshot materialSnapshot) error {
-	_, flight, err := e.getMaterial(ctx, snapshot.entry, nil, snapshot.revision)
-	if flight != nil {
-		e.releaseFlight(flight)
+func (e *Engine) preload(ctx context.Context, snapshot materialSnapshot) (alreadyLoaded bool, err error) {
+	material, waiter, err := e.getMaterial(ctx, snapshot.entry, nil, snapshot.revision)
+	if waiter != nil {
+		e.releaseFlight(waiter, err)
 	}
-	return err
+	return material != nil && waiter == nil, err
 }
 
-func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version context.Context, revision uint64) (*keyMaterial, *loadFlight, error) {
+func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version context.Context, revision uint64) (*keyMaterial, *loadWaiter, error) {
 	e.mu.Lock()
 	if err := e.checkMaterialLocked(ctx, entry, version, revision); err != nil {
 		e.mu.Unlock()
@@ -117,16 +155,18 @@ func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version conte
 	flight := entry.flight
 	if flight == nil {
 		if !reserve(e.loads) {
+			entry.loadError = LoadErrorCode(ErrBusy)
 			e.mu.Unlock()
 			return nil, nil, ErrBusy
 		}
 		loadCtx, cancel := context.WithTimeout(context.Background(), e.loadTimeout)
-		flight = &loadFlight{entry: entry, key: entry.key, ctx: loadCtx, cancel: cancel, done: make(chan struct{})}
+		flight = &loadFlight{entry: entry, key: entry.key, ctx: loadCtx, cancel: cancel, done: make(chan struct{}), waiters: make(map[*loadWaiter]struct{})}
 		e.flights[flight] = struct{}{}
 		entry.flight = flight
 		go e.load(flight)
 	}
-	flight.waiters++
+	waiter := &loadWaiter{flight: flight, ctx: ctx, version: version, revision: revision}
+	flight.waiters[waiter] = struct{}{}
 	e.mu.Unlock()
 
 	select {
@@ -138,12 +178,12 @@ func (e *Engine) getMaterial(ctx context.Context, entry *keyEntry, version conte
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := e.checkMaterialLocked(ctx, entry, version, revision); err != nil {
-		return nil, flight, err
+		return nil, waiter, err
 	}
 	if !flight.completed {
 		e.finishFlightLocked(flight, nil, ErrLoadTimeout)
 	}
-	return flight.material, flight, flight.err
+	return flight.material, waiter, flight.err
 }
 
 func (e *Engine) checkMaterialLocked(ctx context.Context, entry *keyEntry, version context.Context, revision uint64) error {
@@ -164,7 +204,7 @@ func (e *Engine) load(flight *loadFlight) {
 	material, err := e.fetch(flight.ctx, flight.key)
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if flight.completed {
+	if flight.completed || e.discardInactiveFlightLocked(flight) {
 		if material != nil {
 			material.dispose()
 		}
@@ -179,13 +219,44 @@ func (e *Engine) load(flight *loadFlight) {
 	e.finishFlightLocked(flight, material, err)
 }
 
+// A provider can finish after its waiters cancel and before they acquire mu
+// to release the flight. Check the current waiters before publishing a result.
+func (e *Engine) discardInactiveFlightLocked(flight *loadFlight) bool {
+	var interruptedPreload error
+	for waiter := range flight.waiters {
+		err := e.checkMaterialLocked(waiter.ctx, flight.entry, waiter.version, waiter.revision)
+		if err == nil {
+			return false
+		}
+		if waiter.version == nil && (err == context.DeadlineExceeded || (err == context.Canceled && interruptedPreload == nil)) {
+			interruptedPreload = err
+		}
+	}
+	if interruptedPreload != nil {
+		flight.entry.loadError = LoadErrorCode(interruptedPreload)
+	}
+	e.discardFlightLocked(flight)
+	return true
+}
+
 func (e *Engine) fetch(ctx context.Context, key Key) (*keyMaterial, error) {
 	if e.provider == nil {
 		return nil, ErrProvider
 	}
 	private, err := e.provider.Load(ctx, cloneKey(key))
 	defer clear(private)
-	if err != nil || ctx.Err() != nil {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		// Keep only known categories. Provider errors can contain key material
+		// and other values that must not cross the engine boundary.
+		for _, allowed := range []error{ErrProviderExpired, ErrProviderDenied, ErrProviderBusy,
+			ErrPrivateMissing, ErrPrivateInvalid, context.Canceled, context.DeadlineExceeded} {
+			if errors.Is(err, allowed) {
+				return nil, allowed
+			}
+		}
 		return nil, ErrProvider
 	}
 	return parsePrivateKey(private, key.Public)
@@ -195,7 +266,7 @@ func (e *Engine) finishFlightLocked(flight *loadFlight, material *keyMaterial, e
 	entry := flight.entry
 	entry.flight = nil
 	flight.completed, flight.material, flight.err = true, material, err
-	entry.loadError = loadStatus(err)
+	entry.loadError = LoadErrorCode(err)
 	if material != nil {
 		if e.keyPolicy.Mode == "off" {
 			flight.transient = true
@@ -211,11 +282,15 @@ func (e *Engine) finishFlightLocked(flight *loadFlight, material *keyMaterial, e
 	close(flight.done)
 }
 
-func (e *Engine) releaseFlight(flight *loadFlight) {
+func (e *Engine) releaseFlight(waiter *loadWaiter, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	flight.waiters--
-	if flight.waiters == 0 {
+	flight := waiter.flight
+	delete(flight.waiters, waiter)
+	if len(flight.waiters) == 0 {
+		if waiter.version == nil && !flight.completed && flight.entry.flight == flight && (err == context.Canceled || err == context.DeadlineExceeded) {
+			flight.entry.loadError = LoadErrorCode(err)
+		}
 		e.discardFlightLocked(flight)
 	}
 }
@@ -251,18 +326,34 @@ func (e *Engine) clearMaterialLocked(entry *keyEntry) {
 	}
 }
 
-func loadStatus(err error) string {
+func LoadErrorCode(err error) string {
 	switch err {
 	case nil:
 		return ""
-	case ErrLoadTimeout:
-		return "load-timeout"
+	case ErrProviderExpired:
+		return "desktop-session-expired"
+	case ErrProviderDenied:
+		return "desktop-access-denied"
+	case ErrProviderBusy:
+		return "desktop-busy"
+	case ErrPrivateMissing:
+		return "private-field-missing"
+	case ErrPrivateInvalid:
+		return "private-field-invalid"
+	case ErrLoadTimeout, context.DeadlineExceeded:
+		return "provider-timeout"
+	case context.Canceled:
+		return "canceled"
+	case ErrStale, ErrClosed:
+		return "stale"
+	case ErrBusy:
+		return "busy"
 	case ErrInvalidKey:
 		return "invalid-key"
 	case ErrKeyMismatch:
 		return "key-mismatch"
 	default:
-		return "provider"
+		return "private-lookup"
 	}
 }
 

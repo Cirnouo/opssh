@@ -154,11 +154,11 @@ func TestTimedOutNativeCallRemainsBounded(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	defer close(release)
 	b := newBackend("Test", func(context.Context, string) (resolver, error) {
-		return fakeResolve(func(context.Context, string) (string, error) {
+		return fakeBatchResolver{batch: func([]string) (onepassword.ResolveAllResponse, error) {
 			close(started)
 			<-release
-			return "late-test-value", nil
-		}), nil
+			return onepassword.ResolveAllResponse{}, nil
+		}}, nil
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -83,7 +83,7 @@ After adding, rotating, archiving, or deleting a key in 1Password, run **Discove
 
 In **Settings → Cache policy**, configure the private key and process approval caches independently. Choose **Do not cache**, **Fixed duration**, **Idle timeout**, or **Until opssh exits**. The defaults are five minutes for loaded private keys and ten minutes for process approvals. Idle time renews after successful signing. A process approval expires when its process ends.
 
-Use **SSH keys** to preload or clear one or all private keys. Expand a public key to view the process name, PID and local expiry of each approval. Revoke an individual approval, all approvals for that key, or all approvals from the toolbar. Locking 1Password ends its permission for new reads. Cached private keys follow the opssh policy.
+Use **SSH keys** to preload or clear one or all private keys. If a preload fails, check the reason beside the key and retry after resolving it. Bulk preload keeps keys that loaded successfully. To diagnose a failed request, enable logs at **DEBUG** before retrying. Expand a public key to view the process name, PID and local expiry of each approval. Revoke an individual approval, all approvals for that key, or all approvals from the toolbar. Locking 1Password ends its permission for new reads. Cached private keys follow the opssh policy.
 
 ## Review activity
 
