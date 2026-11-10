@@ -21,19 +21,20 @@ internal static class SigningNotificationChecks
         var prompt = new SigningPrompt(approval);
         Require(prompt.Process.Pid == 200 && prompt.Application == "app.exe", "toast uses the selected executable basename");
         Require(prompt.Fingerprint == "SHA256:fixture-fingerprint", "toast keeps the full fingerprint");
-        Require(prompt.Scopes.SequenceEqual(["all", "app", "once", "deny"]), "cache-enabled toast action order");
+        Require(prompt.Scopes.SequenceEqual(["app", "once", "deny"]), "cache-enabled toast action order");
         Require(!prompt.TryConsume("wrong-nonce", "app", now), "an invalid nonce cannot consume the prompt");
         Require(!prompt.TryConsume(prompt.Nonce, "host", now), "unknown choices cannot consume the prompt");
+        Require(!prompt.TryConsume(prompt.Nonce, "all", now), "legacy all-apps choices cannot consume the prompt");
         Require(prompt.TryConsume(prompt.Nonce, "app", now), "selected application can be approved");
-        Require(!prompt.TryConsume(prompt.Nonce, "all", now), "a consumed nonce cannot be replayed");
+        Require(!prompt.TryConsume(prompt.Nonce, "once", now), "a consumed nonce cannot be replayed");
 
         var uncached = new SigningPrompt(approval with { CacheAllowed = false });
         Require(uncached.Nonce != prompt.Nonce && !uncached.TryConsume(prompt.Nonce, "once", now),
             "different pending requests use different nonces");
         Require(uncached.Scopes.SequenceEqual(["once", "deny"]), "cache-off offers only once and deny");
         var chinese = Strings.ReadCatalog("zh-Hans");
-        Require(new[] { "Approval.AllowAll", "Approval.AllowApp", "Approval.AllowOnce", "Approval.Deny" }
-            .Select(key => chinese[key]).SequenceEqual(["为所有应用授权", "授权此应用", "仅授权请求", "拒绝"]),
+        Require(new[] { "Approval.AllowApp", "Approval.AllowOnce", "Approval.Deny" }
+            .Select(key => chinese[key]).SequenceEqual(["授权此应用", "仅授权请求", "拒绝"]),
             "Simplified Chinese notification actions use the approved labels");
         Require(!uncached.TryConsume(uncached.Nonce, "app", now), "forged cache action is rejected");
         Require(!uncached.TryConsume(uncached.Nonce, "deny", approval.Deadline), "expired nonce is rejected");

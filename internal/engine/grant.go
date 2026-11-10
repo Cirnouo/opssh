@@ -21,10 +21,8 @@ type Grant struct {
 }
 
 type grantID struct {
-	scope       string
 	instance    Instance
 	descendants bool
-	logon       [32]byte
 }
 
 type grant struct {
@@ -49,11 +47,11 @@ func (e *Engine) Grants(keyID string) ([]Grant, error) {
 	grants := make([]Grant, 0, len(entry.grants))
 	for id, current := range entry.grants {
 		grants = append(grants, Grant{
-			ID: current.id, Name: current.name, PID: id.instance.PID, Scope: id.scope, ExpiresAt: current.expiry,
+			ID: current.id, Name: current.name, PID: id.instance.PID, Scope: "app", ExpiresAt: current.expiry,
 		})
 	}
 	slices.SortFunc(grants, func(a, b Grant) int {
-		return cmp.Or(cmp.Compare(a.PID, b.PID), cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.ID, b.ID))
+		return cmp.Or(cmp.Compare(a.PID, b.PID), cmp.Compare(a.ID, b.ID))
 	})
 	return grants, nil
 }
@@ -109,7 +107,7 @@ func (e *Engine) useGrantLocked(request signRequest, now time.Time) {
 	if current == nil {
 		var alive func() bool
 		var release func()
-		if request.grantID.scope == "app" && request.peer.Retain != nil {
+		if request.peer.Retain != nil {
 			var ok bool
 			alive, release, ok = request.peer.Retain(request.grantID.instance)
 			if !ok {

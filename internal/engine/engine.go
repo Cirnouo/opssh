@@ -70,7 +70,6 @@ type Process struct {
 // Its callbacks make bounded, synchronous checks against the retained handles.
 type Peer struct {
 	Chain     []Process
-	Logon     [32]byte // opaque identity supplied by the verified transport
 	Alive     func(Instance) bool
 	Connected func() bool
 	// ApprovalApp returns the index of a verified window owner in Chain, or

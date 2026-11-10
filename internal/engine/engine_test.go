@@ -252,31 +252,26 @@ func TestFreshFixedApprovalExpiresDuringLoad(t *testing.T) {
 }
 
 func TestFailedPublicationDoesNotCommitApproval(t *testing.T) {
-	for _, scope := range []string{"app", "all"} {
-		t.Run(scope, func(t *testing.T) {
-			key, secret, _ := edFixture(t)
-			opts := engine.DefaultOptions()
-			opts.Keys = []engine.Key{key}
-			opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
-			var prompts atomic.Int32
-			opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
-				if prompts.Add(1) == 1 {
-					return engine.Approval{Scope: scope}, nil
-				}
-				return engine.Approval{Scope: "deny"}, nil
-			}
-			e := makeEngine(t, opts)
-			p := peer(process(1, 1))
-			p.Logon = [32]byte{1}
-			data := []byte("sign me")
-			err := e.Sign(t.Context(), p, key.Public, data, 0, func(*ssh.Signature) error { return errors.New("connection gone") })
-			if !errors.Is(err, engine.ErrPublish) {
-				t.Fatalf("got %v", err)
-			}
-			if err := e.Sign(t.Context(), p, key.Public, data, 0, accept); !errors.Is(err, engine.ErrDenied) {
-				t.Fatalf("failed publication seeded an approval: %v", err)
-			}
-		})
+	key, secret, _ := edFixture(t)
+	opts := engine.DefaultOptions()
+	opts.Keys = []engine.Key{key}
+	opts.Provider = providerFunc(func(context.Context, engine.Key) ([]byte, error) { return secret(), nil })
+	var prompts atomic.Int32
+	opts.Approve = func(context.Context, engine.Prompt) (engine.Approval, error) {
+		if prompts.Add(1) == 1 {
+			return engine.Approval{Scope: "app"}, nil
+		}
+		return engine.Approval{Scope: "deny"}, nil
+	}
+	e := makeEngine(t, opts)
+	p := peer(process(1, 1))
+	data := []byte("sign me")
+	err := e.Sign(t.Context(), p, key.Public, data, 0, func(*ssh.Signature) error { return errors.New("connection gone") })
+	if !errors.Is(err, engine.ErrPublish) {
+		t.Fatalf("got %v", err)
+	}
+	if err := e.Sign(t.Context(), p, key.Public, data, 0, accept); !errors.Is(err, engine.ErrDenied) {
+		t.Fatalf("failed publication seeded an approval: %v", err)
 	}
 }
 

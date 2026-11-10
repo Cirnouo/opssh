@@ -57,7 +57,6 @@ func (p pinnedProcess) duplicate() (pinnedProcess, bool) {
 // ancestors. The caller closes it when the request is retired.
 type Peer struct {
 	Chain []Process
-	Logon [32]byte
 	state *peerState
 }
 
@@ -225,7 +224,7 @@ func (c *Conn) Peer() (Peer, error) {
 	if err != nil {
 		return Peer{}, err
 	}
-	peer := Peer{Chain: []Process{requester.Process}, Logon: c.identity.digest,
+	peer := Peer{Chain: []Process{requester.Process},
 		state: &peerState{processes: []pinnedProcess{requester}}}
 	parents := processParents()
 	child := requester

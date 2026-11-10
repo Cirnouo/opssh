@@ -40,10 +40,8 @@
   "Keys.NoGrants": "This key has no signing approvals.",
   "Keys.LoadingGrants": "Loading signing approvals…",
   "Keys.Process": "Application",
-  "Keys.AllApps": "All apps",
   "Keys.Pid": "PID",
   "Keys.Expires": "Expires (local)",
   "Keys.RevokeGrant": "Revoke approval",
-  "Keys.UntilAppExit": "Until the app exits",
-  "Keys.UntilExit": "Until opssh exits"
+  "Keys.UntilAppExit": "Until the app exits"
 }

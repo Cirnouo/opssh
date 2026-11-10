@@ -142,6 +142,7 @@ static async Task ApprovalLifetimeAsync(CancellationToken token)
     var replacement = await approvals.Reader.ReadAsync(token);
     Assert(replacement.Id == decideRequest.Id && !await session.DecideAsync(decideRequest, "deny", 0, token),
         "a reused ID cannot reactivate a retired approval object");
+    Assert(!await session.DecideAsync(replacement, "all", 0, token), "the tray control session rejects a legacy all-apps decision");
     Assert(await session.DecideAsync(replacement, "unavailable", 0, token), "replacement can report unavailable");
     decision = await Protocol.ReadAsync(peer, token);
     Assert(decision.Body!.Value.GetProperty("scope").GetString() == "unavailable", "unavailable is a distinct result");
@@ -185,10 +186,11 @@ static async Task SigningNotificationQueueAsync(CancellationToken token)
     queue.Enqueue(session, await incoming.Reader.ReadAsync(token));
     queue.Enqueue(session, await incoming.Reader.ReadAsync(token));
     Assert(shown == 1 && first is not null, "one notification is shown while the next request waits");
-    Assert(!queue.Invoke("fabricated", "all"), "fake activation cannot approve a pending request");
-    Assert(queue.Invoke(first!.Nonce, "all"), "active notification can approve all apps");
+    Assert(!queue.Invoke("fabricated", "app"), "fake activation cannot approve a pending request");
+    Assert(!queue.Invoke(first!.Nonce, "all"), "old all-apps activation cannot consume an active request");
+    Assert(queue.Invoke(first.Nonce, "app"), "active notification can approve the application");
     var decision = await Protocol.ReadAsync(peer, token);
-    Assert(decision.Id == "first" && decision.Body!.Value.GetProperty("scope").GetString() == "all",
+    Assert(decision.Id == "first" && decision.Body!.Value.GetProperty("scope").GetString() == "app",
         "first activation is bound to its own request");
     await retiring.Started.Task.WaitAsync(token);
     Assert(shown == 1 && !queue.Invoke(first.Nonce, "once"), "the old nonce retires before removal completes");

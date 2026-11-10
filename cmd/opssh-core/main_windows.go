@@ -286,7 +286,6 @@ func (h sshHandler) Sign(ctx context.Context, public, data []byte, flags uint32,
 	}()
 	peer := engine.Peer{
 		Chain:       make([]engine.Process, 0, len(client.Chain)),
-		Logon:       client.Logon,
 		Alive:       func(p engine.Instance) bool { return client.Alive(p.PID, p.Created) },
 		Connected:   h.conn.Connected,
 		ApprovalApp: client.ApprovalApp,

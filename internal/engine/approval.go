@@ -78,7 +78,7 @@ func (e *Engine) SignObserved(ctx context.Context, peer Peer, public, data []byt
 		if err != nil {
 			return err
 		}
-		if request.grantID.scope != "" {
+		if request.grantID.instance.PID != 0 {
 			e.mu.Lock()
 			request.approvedUntil = e.approvalPolicy.expiry(e.now())
 			e.mu.Unlock()
@@ -145,20 +145,13 @@ func (e *Engine) beginSign(ctx context.Context, peer Peer, public []byte, flags 
 			continue
 		}
 		if i == 0 {
-			id := grantID{scope: "app", instance: process.Instance}
+			id := grantID{instance: process.Instance}
 			if cached := entry.grants[id]; cached != nil {
 				request.grantID, request.grant = id, cached
 				return request, nil, nil
 			}
 		}
-		id := grantID{scope: "app", instance: process.Instance, descendants: true}
-		if cached := entry.grants[id]; cached != nil {
-			request.grantID, request.grant = id, cached
-			return request, nil, nil
-		}
-	}
-	if peer.Logon != ([32]byte{}) {
-		id := grantID{scope: "all", logon: peer.Logon}
+		id := grantID{instance: process.Instance, descendants: true}
 		if cached := entry.grants[id]; cached != nil {
 			request.grantID, request.grant = id, cached
 			return request, nil, nil
@@ -222,11 +215,7 @@ func approvedGrant(approval Approval, peer Peer, prompt Prompt) (grantID, error)
 		return grantID{}, nil
 	case "app":
 		if prompt.CacheAllowed && approval.Candidate == prompt.AppCandidate {
-			return grantID{scope: "app", instance: peer.Chain[prompt.AppCandidate].Instance, descendants: prompt.appOwnsWindow}, nil
-		}
-	case "all":
-		if prompt.CacheAllowed && peer.Logon != ([32]byte{}) {
-			return grantID{scope: "all", logon: peer.Logon}, nil
+			return grantID{instance: peer.Chain[prompt.AppCandidate].Instance, descendants: prompt.appOwnsWindow}, nil
 		}
 	case "unavailable":
 		return grantID{}, ErrUnavailable
@@ -291,7 +280,7 @@ func (e *Engine) signAndPublish(ctx context.Context, request signRequest, materi
 	if e.keyPolicy.Mode == "idle" {
 		request.entry.keyExpiry = e.keyPolicy.expiry(now)
 	}
-	if request.grantID.scope != "" {
+	if request.grantID.instance.PID != 0 {
 		e.useGrantLocked(request, now)
 	}
 	return nil

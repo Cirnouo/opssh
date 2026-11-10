@@ -62,12 +62,11 @@ Connect to a host that accepts one of the listed public keys with your usual `ss
 
 | Choice | What you approve |
 | --- | --- |
-| **Allow all apps** | Reuse the displayed key for verified clients in the same Windows logon, within your approval cache policy. |
-| **Allow this app** | Reuse the displayed key for the running app and its verified descendants. If opssh shows the requester itself, reuse covers only that process instance. |
+| **Allow this app** | Reuse the displayed key for the running app and its verified descendants. If opssh finds no eligible window owner, reuse covers only the verified requester process. |
 | **Allow once** | The pending signature. |
 | **Deny** | Reject the pending signature. |
 
-Turn approval caching off to show only the request and deny options. You can revoke an all-apps approval by expanding that key in **SSH keys**. If Windows disables or rejects the notification, opssh refuses the request and records the outcome in Activity. A notification that you dismiss expires at the request deadline.
+Turn approval caching off to show only the request and deny options. To revoke an app approval, expand that key in **SSH keys**. If Windows disables or rejects the notification, opssh refuses the request and records the outcome in Activity. A notification that you dismiss expires at the request deadline.
 
 If the approved request needs a private key, opssh fetches it from 1Password. Complete a separate authorization in the 1Password window if prompted. Closing the opssh Settings window leaves the tray and agent running. **Quit opssh** stops both.
 

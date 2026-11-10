@@ -24,6 +24,9 @@ internal sealed record DashboardActions(
 
 public sealed partial class DashboardWindow : Window
 {
+    private const int MinimumWindowWidth = 540;
+    private const int MinimumWindowHeight = 420;
+
     private readonly Func<string, object?, bool, Task> send;
     private readonly Func<string, object?, Task> sendUrgent;
     private readonly DashboardActions actions;
@@ -35,6 +38,7 @@ public sealed partial class DashboardWindow : Window
     private readonly Button restartButton;
     private CoreState? displayedState;
     private ContentDialog? activeDialog;
+    private XamlRoot? windowSizingRoot;
     private string? pipe;
     private bool closed;
     private bool connected;
@@ -65,9 +69,16 @@ public sealed partial class DashboardWindow : Window
         }
         ApplyTheme(preferences.Theme);
         ResizeToWorkArea();
+        DashboardRoot.Loaded += BindWindowSizing;
         Closed += (_, _) =>
         {
             closed = true;
+            DashboardRoot.Loaded -= BindWindowSizing;
+            if (windowSizingRoot is { } root)
+            {
+                root.Changed -= OnWindowScaleChanged;
+                AppWindow.Changed -= OnWindowPositionChanged;
+            }
             windowLifetime.Cancel();
             windowLifetime.Dispose();
         };
@@ -174,13 +185,6 @@ public sealed partial class DashboardWindow : Window
         Navigation.OpenPaneLength = keyPage ? 134 : width <= 800 ? 152 : 186;
         Navigation.CompactPaneLength = keyPage ? 45 : 48;
         Navigation.ExpandedModeThresholdWidth = keyPage ? 780 : 620;
-        foreach (var item in navigationItems.Values)
-        {
-            if (keyPage)
-                item.FontSize = 13;
-            else
-                item.ClearValue(Control.FontSizeProperty);
-        }
         if (keyPage)
         {
             var inset = width < 780 ? 11 : 18;
@@ -376,6 +380,39 @@ public sealed partial class DashboardWindow : Window
         AppWindow.Resize(new SizeInt32(
             Math.Min(workArea.Width, (int)Math.Round(1060 * scale)),
             Math.Min(workArea.Height, (int)Math.Round(642 * scale))));
+    }
+
+    private void BindWindowSizing(object sender, RoutedEventArgs args)
+    {
+        if (DashboardRoot.XamlRoot is not { } root)
+            return;
+        DashboardRoot.Loaded -= BindWindowSizing;
+        windowSizingRoot = root;
+        root.Changed += OnWindowScaleChanged;
+        AppWindow.Changed += OnWindowPositionChanged;
+        ApplyWindowMinimumSize(root.RasterizationScale);
+    }
+
+    private void OnWindowScaleChanged(XamlRoot root, XamlRootChangedEventArgs args) =>
+        ApplyWindowMinimumSize(root.RasterizationScale);
+
+    private void OnWindowPositionChanged(AppWindow window, AppWindowChangedEventArgs args)
+    {
+        if (args.DidPositionChange && windowSizingRoot is { } root)
+            ApplyWindowMinimumSize(root.RasterizationScale);
+    }
+
+    private void ApplyWindowMinimumSize(double scale)
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter presenter)
+            return;
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+        var width = Math.Min(workArea.Width, (int)Math.Ceiling(MinimumWindowWidth * scale));
+        var height = Math.Min(workArea.Height, (int)Math.Ceiling(MinimumWindowHeight * scale));
+        if (presenter.PreferredMinimumWidth != width)
+            presenter.PreferredMinimumWidth = width;
+        if (presenter.PreferredMinimumHeight != height)
+            presenter.PreferredMinimumHeight = height;
     }
 
     [DllImport("user32.dll")]

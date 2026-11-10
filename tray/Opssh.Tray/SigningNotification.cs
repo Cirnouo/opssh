@@ -34,7 +34,6 @@ internal sealed class SigningNotification(AppNotifications notifications)
                 {
                     var label = scope switch
                     {
-                        "all" => "Approval.AllowAll",
                         "app" => "Approval.AllowApp",
                         "once" => "Approval.AllowOnce",
                         _ => "Approval.Deny"

@@ -7,7 +7,6 @@
   "App.RestartingAccount": "Restarting with the new account…",
   "App.Starting": "Starting the core…",
   "App.Stopped": "Core stopped",
-  "Approval.AllowAll": "Allow all apps",
   "Approval.AllowApp": "Allow this app",
   "Approval.AllowOnce": "Allow once",
   "Approval.Application": "{0} · PID {1}",
