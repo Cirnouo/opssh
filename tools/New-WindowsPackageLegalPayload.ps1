@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$manifest = Get-Content -Raw -LiteralPath (Join-Path $root 'licenses/manifest.json') | ConvertFrom-Json
+$manifest = Get-Content -Raw -LiteralPath (Join-Path $root 'third_party/licenses/manifest.json') | ConvertFrom-Json
 $wix = $manifest.wix
 if ($wix.version -cne '7.0.1' -or
     $wix.source -cne 'https://github.com/wixtoolset/wix/archive/642f1a0f7c857ffa4fc9fa3f9d1433aab895dd29.zip' -or
@@ -16,9 +16,11 @@ if ($wix.version -cne '7.0.1' -or
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory, $PWD.ProviderPath)
 if (Test-Path -LiteralPath $OutputDirectory) { throw 'Choose a fresh legal payload directory.' }
 [void][IO.Directory]::CreateDirectory($OutputDirectory)
-foreach ($name in @('LICENSE','THIRD-PARTY-NOTICES.md','licenses')) {
-    Copy-Item -LiteralPath (Join-Path $root $name) -Destination (Join-Path $OutputDirectory $name) -Recurse
-}
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'third_party/licenses') -Destination (Join-Path $OutputDirectory 'licenses') -Recurse
+$notices = [IO.File]::ReadAllText((Join-Path $root 'THIRD-PARTY-NOTICES.md'))
+[IO.File]::WriteAllText((Join-Path $OutputDirectory 'THIRD-PARTY-NOTICES.md'),
+    $notices.Replace('](third_party/licenses/', '](licenses/'))
 $archive = Join-Path $OutputDirectory 'licenses/wix/wix-7.0.1-source.zip'
 if ($WixSourceArchive) {
     Copy-Item -LiteralPath $WixSourceArchive -Destination $archive

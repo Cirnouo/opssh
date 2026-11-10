@@ -80,6 +80,26 @@ internal static class WindowsIntegrationChecks
             LoginStartup.Classify(@"C:\Other\opssh.exe", command) == LoginStartupStatus.Conflict &&
             LoginStartup.Command(@"relative\opssh-tray.exe") is null &&
             LoginStartup.Command("C:\\" + new string('a', 260) + ".exe") is null, "registration ownership");
+
+        var portable = Directory.CreateTempSubdirectory("opssh-portable-startup-");
+        var launcher = Path.Combine(portable.FullName, "opssh-tray.exe");
+        var runtime = Path.Combine(portable.FullName, "opssh-runtime", "opssh-tray.exe");
+        try
+        {
+            Require(LoginStartup.CommandForProcess(runtime) == LoginStartup.Command(runtime), "standalone tray startup path");
+            File.WriteAllText(launcher, "fixture");
+            var portableCommand = LoginStartup.CommandForProcess(runtime);
+            Require(portableCommand == LoginStartup.Command(launcher) &&
+                LoginStartup.Classify(LoginStartup.Command(launcher), portableCommand) == LoginStartupStatus.On &&
+                LoginStartup.Classify(command, portableCommand) == LoginStartupStatus.Conflict,
+                "the portable tray recognizes only its own root launcher registration");
+            Require(LoginStartup.CommandForProcess(exe) == command, "installed tray startup path");
+        }
+        finally
+        {
+            File.Delete(launcher);
+            portable.Delete();
+        }
     }
 
     private static async Task CheckReadinessAsync(CancellationToken token)

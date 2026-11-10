@@ -29,6 +29,16 @@ Add-Type -TypeDefinition $trayAssembly -OutputAssembly (Join-Path $release 'opss
 Set-Content -LiteralPath (Join-Path $legal 'LICENSE') -Value 'synthetic license'
 Set-Content -LiteralPath (Join-Path $legal 'THIRD-PARTY-NOTICES.md') -Value 'synthetic notices'
 Set-Content -LiteralPath (Join-Path $legal 'licenses/fixture/LICENSE') -Value 'synthetic third-party license'
+New-Item -ItemType Directory -Path (Join-Path $legal 'licenses/wix') | Out-Null
+Set-Content -LiteralPath (Join-Path $legal 'licenses/wix/wix-7.0.1-source.zip') -Value 'synthetic corresponding source'
+$repo = Split-Path -Parent $PSScriptRoot
+Push-Location -LiteralPath $repo
+try {
+    & go build -mod=readonly -trimpath '-ldflags=-H windowsgui' -o (Join-Path $release 'opssh-portable.exe') ./cmd/opssh-portable
+    if ($LASTEXITCODE -ne 0) { throw 'Could not build the launcher for the package fixture.' }
+} finally {
+    Pop-Location
+}
 
 $builder = Join-Path $PSScriptRoot 'Build-WindowsPackages.ps1'
 if (!(Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'The Windows packaging entry point is missing.' }
@@ -57,7 +67,7 @@ $expectedPaths = @(
     'coreclr.dll', 'hostfxr.dll', 'LICENSE', 'Microsoft.UI.Xaml.dll', 'opssh-core.exe',
     'opssh-tray.deps.json', 'opssh-tray.dll', 'opssh-tray.exe', 'opssh-tray.pri',
     'opssh-tray.runtimeconfig.json', 'THIRD-PARTY-NOTICES.md', 'zh-Hans/Microsoft.UI.Xaml.dll.mui',
-    'licenses/fixture/LICENSE'
+    'licenses/fixture/LICENSE', 'licenses/wix/wix-7.0.1-source.zip'
 )
 if ((Compare-Object $expectedPaths @($manifest.files.path) -CaseSensitive) -or $manifest.version -cne '255.255.65534') {
     throw 'The payload manifest differs from the expected curated Release files.'

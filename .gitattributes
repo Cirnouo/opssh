@@ -4,7 +4,7 @@ go.mod text eol=lf
 go.sum text eol=lf
 /.githooks/* text eol=lf
 /LICENSE -text
-/licenses/** -text -whitespace
+/third_party/licenses/** -text -whitespace linguist-vendored
 docs/evidences/** -text whitespace=trailing-space,space-before-tab,cr-at-eol
 docs/references/opssh-agent-dashboard.html -text
 docs/references/opssh-desktop-ux-review.html -text

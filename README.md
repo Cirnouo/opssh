@@ -13,7 +13,7 @@ opssh is an SSH agent for the built-in Windows x64 OpenSSH client. It uses SSH k
 
 ## Install
 
-When a stable release is available, download the Windows x64 MSI, offline installer EXE, or portable ZIP. The MSI and EXE install for the current user. Open **opssh** from the Start menu, or extract the ZIP and run `opssh-tray.exe` from the extracted folder. The installers and opssh binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
+When a stable release is available, download the Windows x64 MSI, offline installer EXE, or portable ZIP. The MSI and EXE install for the current user. Open **opssh** from the Start menu, or extract the ZIP and run the top-level `opssh-tray.exe`. Keep the `opssh-runtime` folder beside it. The installers and opssh binaries are unsigned. [GitHub Releases](https://github.com/Cirnouo/opssh/releases)
 
 To run opssh before the first stable release, follow the [source build steps](CONTRIBUTING.md#verify-and-submit).
 

@@ -4,7 +4,7 @@ param([string]$ReleaseDirectory)
 $ErrorActionPreference = 'Stop'
 if ($ReleaseDirectory) { $ReleaseDirectory = (Get-Item -LiteralPath $ReleaseDirectory).FullName }
 $root = Split-Path -Parent $PSScriptRoot
-$licenseRoot = Join-Path $root 'licenses'
+$licenseRoot = Join-Path $root 'third_party/licenses'
 $manifestPath = Join-Path $licenseRoot 'manifest.json'
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 if ($manifest.schema -ne 1) { throw 'Unexpected distribution notice manifest schema.' }
@@ -14,7 +14,7 @@ if ((Get-FileHash -LiteralPath (Join-Path $root 'LICENSE') -Algorithm SHA256).Ha
 }
 $notices = Get-Content -Raw -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md')
 if ([string]::IsNullOrWhiteSpace($manifest.wix.source) -or !$notices.Contains($manifest.wix.source) -or
-    !$notices.Contains('licenses/wix/LICENSE.TXT')) {
+    !$notices.Contains('third_party/licenses/wix/LICENSE.TXT')) {
     throw 'The distribution notices omit the WiX license or its pinned corresponding source.'
 }
 

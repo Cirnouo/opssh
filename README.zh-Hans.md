@@ -13,7 +13,7 @@ opssh 是面向 Windows x64 系统 OpenSSH 客户端的 SSH 代理。它使用 1
 
 ## 安装
 
-正式发行版发布后，可下载 Windows x64 MSI、离线 EXE 安装器或便携 ZIP。MSI 和 EXE 按当前用户安装，安装后可从开始菜单打开 **opssh**。使用 ZIP 时，解压后运行其中的 `opssh-tray.exe`。安装器和 opssh 二进制文件均未签名。[GitHub 发行版](https://github.com/Cirnouo/opssh/releases)
+正式发行版发布后，可下载 Windows x64 MSI、离线 EXE 安装器或便携 ZIP。MSI 和 EXE 按当前用户安装，安装后可从开始菜单打开 **opssh**。使用 ZIP 时，请完整解压并运行顶层的 `opssh-tray.exe`，同时保留同一目录下的 `opssh-runtime` 文件夹。安装器和 opssh 二进制文件均未签名。[GitHub 发行版](https://github.com/Cirnouo/opssh/releases)
 
 首个正式发行版发布前，可按[源码构建步骤](CONTRIBUTING.md#verify-and-submit)运行 opssh。
 

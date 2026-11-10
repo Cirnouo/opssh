@@ -6,7 +6,7 @@ Use a separately authorized release task. Confirm the latest published stable re
 
 Use a source commit already on remote `main` with successful push CI at that exact SHA. Set the tray project `Version` to the intended `M.m.p` and verify the packages from that commit. Use numeric components in the common MSI and .NET range up to `255.255.65534`. The build gives the same version to the Go core and checks the tray assembly, production core handshake, MSI and Burn versions. [Windows verification](verification.md)
 
-Before creating a release tag, confirm the attribution requirements for the exact embedded 1Password WASM. Record the reviewed upstream notice inventory or confirmed redistribution basis in `licenses/manifest.json`, including the WASM SHA-256 and a public evidence or sanitized review link. Add any corresponding notice files to the verified inventory. Tag admission rejects absent or stale evidence. [Third-party notices](../../THIRD-PARTY-NOTICES.md)
+Before creating a release tag, confirm the attribution requirements for the exact embedded 1Password WASM. Record the reviewed upstream notice inventory or confirmed redistribution basis in `third_party/licenses/manifest.json`, including the WASM SHA-256 and a public evidence or sanitized review link. Add any corresponding notice files to the verified inventory. Tag admission rejects absent or stale evidence. [Third-party notices](../../THIRD-PARTY-NOTICES.md)
 
 Review the distribution requirements of the pinned Windows App SDK and Windows SDK for all three formats before public publication. Record how the applicable terms are presented to and accepted by downstream distributors and end users. [Third-party notices](../../THIRD-PARTY-NOTICES.md)
 
