@@ -7,10 +7,12 @@ internal sealed record UiPreferences(string Language, string Theme, bool AutoChe
 {
     private const int MaxSize = 4096;
     private const int CurrentVersion = 3;
+    public bool DiagnosticLogging { get; init; }
+    public string DiagnosticLevel { get; init; } = "INFO";
     public bool WaitForPassword { get; init; }
     public int Version { get; init; } = CurrentVersion;
 
-    internal bool IsValid => Version == CurrentVersion &&
+    internal bool IsValid => Version == CurrentVersion && DiagnosticEvent.ValidLevel(DiagnosticLevel) &&
         (Language is "system" or "en" or "zh-Hans") && (Theme is "system" or "light" or "dark");
 
     private static string SettingsPath =>

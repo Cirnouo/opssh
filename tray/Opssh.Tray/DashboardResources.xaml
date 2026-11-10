@@ -89,6 +89,11 @@
         <Setter Property="Background" Value="{ThemeResource DashboardAccentBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource DashboardOnAccentBrush}" />
     </Style>
+    <Style x:Key="DashboardDialogStyle" TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
+        <Setter Property="Background" Value="{ThemeResource DashboardCardBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource DashboardButtonEdgeBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
     <Style x:Key="DashboardTableHeaderStyle" TargetType="Grid">
         <Setter Property="Background" Value="{ThemeResource DashboardSubtleBrush}" />
     </Style>

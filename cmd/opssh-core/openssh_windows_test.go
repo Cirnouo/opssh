@@ -84,7 +84,7 @@ func TestWindowsOpenSSHListsAndSignsFromNewHostChildren(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	done := make(chan struct{})
-	go func() { defer close(done); acceptSSH(ctx, listener, agent, nil) }()
+	go func() { defer close(done); acceptSSH(ctx, listener, agent, nil, nil) }()
 	defer func() { cancel(); listener.Close(); <-done }()
 	env := make([]string, 0)
 	for _, v := range os.Environ() {

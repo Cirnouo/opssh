@@ -70,6 +70,9 @@ internal static class GoInterop
             vaults = new Dictionary<string, string> { [vault] = "exclude" },
             items = new Dictionary<string, string> { [item] = "include" }
         }, token)) is { Ok: true, State: { Keys: [{ Loaded: false }] } }, "explicit item inclusion overrides the vault exclusion");
+        var logging = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 1, after = 0 }, token);
+        Require(DiagnosticEvent.TryReadCoreBatch(logging, 1, 0, out var initialLogs, out _) && initialLogs.Count == 0,
+            "enable diagnostics without replaying requests made before consent");
         await SendPacketAsync(ssh, sign.ToArray(), token);
         var approval = await request.Task.WaitAsync(token);
         var fingerprint = "SHA256:" + Convert.ToBase64String(SHA256.HashData(blob)).TrimEnd('=');
@@ -95,6 +98,14 @@ internal static class GoInterop
                 break;
             await Task.Delay(40, token);
         }
+        var diagnostics = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 1, after = 0 }, token);
+        Require(DiagnosticEvent.TryReadCoreBatch(diagnostics, 1, 0, out var logs, out var lastSequence) &&
+            lastSequence == 1 && logs is [{ Source: "core", Phase: "sign", Result: "published" }] &&
+            diagnostics.Data!.Value.GetProperty("events")[0].EnumerateObject().Count() == 4,
+            "the core reports a bounded event without signing or requester metadata");
+        var cleared = await session.RequestAsync("diagnostics", new { enabled = true, epoch = 2, after = 0 }, token);
+        Require(DiagnosticEvent.TryReadCoreBatch(cleared, 2, 0, out var remainingLogs, out _) && remainingLogs.Count == 0,
+            "the new log generation starts empty");
         Require((await session.RequestAsync("clear-activity", null, token)).Ok, "clear activity");
         using var replacement = await CoreProcess.StartAsync(token, candidate: true);
         using var candidate = new CoreSession(replacement.Pipe);

@@ -65,6 +65,7 @@ public sealed partial class App : Application
         icon.OpenRequested += OpenSettings;
         icon.RestartRequested += () => _ = StartCoreAsync();
         icon.QuitRequested += () => _ = QuitAsync();
+        StartDiagnostics();
         _ = StartCoreAsync();
         if (preferences.AutoCheckUpdates)
             _ = CheckForUpdatesAsync(atStartup: true);
@@ -138,7 +139,7 @@ public sealed partial class App : Application
                 () => CheckForUpdatesAsync(atStartup: false), SetAutoCheckUpdates,
                 new DashboardActions(OnePasswordAccounts.ListAsync, SwitchAccountAsync, RequestDashboardAsync,
                     LoginStartup.Read, SetLoginStartup, SetWaitForPassword, () => defaultAgentDesired, SetDefaultAgentAsync,
-                    () => defaultAgentActive, RequestDiscoveryControlAsync));
+                    () => defaultAgentActive, RequestDiscoveryControlAsync, CreateDiagnosticActions()));
             settings.Closed += SettingsClosed;
             settings.ShowReleaseCheck(releaseCheck);
             settings.ShowMessage(message is null ? "" : Strings.Get(message));
@@ -341,6 +342,7 @@ public sealed partial class App : Application
         transitioning = true;
         SetAvailability(false, false, "App.Starting");
         icon.SetTip("Tray.Starting");
+        var diagnostic = BeginTrayDiagnostic();
         CoreProcess? child = null;
         CoreSession? candidate = null;
         try
@@ -363,6 +365,7 @@ public sealed partial class App : Application
             settings?.SetHello(greeting);
             SetAvailability(true, false, "App.Connected");
             icon.SetTip("Tray.Connected");
+            RecordTrayDiagnostic(diagnostic, "core-start", "completed");
             await RestoreDefaultAgentAsync(current);
             ConfigureStartupWait();
         }
@@ -377,6 +380,7 @@ public sealed partial class App : Application
             }
             if (!quitting)
             {
+                RecordTrayDiagnostic(diagnostic, "core-start", e is OperationCanceledException ? "timeout" : "failed");
                 var key = e switch
                 {
                     FileNotFoundException => "Error.CoreMissing",
@@ -442,6 +446,13 @@ public sealed partial class App : Application
             else if (command is "set-scope" or "refresh-index")
                 ShowMessage("App.Discovering");
         }
+        var diagnosticPhase = command switch
+        {
+            "discover" or "refresh-index" => "discover",
+            "reload-vaults" or "authorize-desktop" => "provider-access",
+            _ => null
+        };
+        var diagnostic = diagnosticPhase is null ? default : BeginTrayDiagnostic();
         var revision = stateRevision;
         var restart = false;
         var refresh = false;
@@ -450,6 +461,13 @@ public sealed partial class App : Application
             var result = await RequestNormalAsync(current, command, body, timeout.Token);
             if (current != session || quitting)
                 return;
+            if (diagnosticPhase is not null)
+                RecordTrayDiagnostic(diagnostic, diagnosticPhase, result.Ok ? "completed" : result.ErrorCode switch
+                {
+                    "provider-timeout" => "timeout",
+                    "canceled" => "canceled",
+                    _ => "failed"
+                });
             if (revision != stateRevision || urgentOperation is not null)
                 refresh = true;
             else if (result.Ok && command == "unlock" && result.State is null)
@@ -477,7 +495,11 @@ public sealed partial class App : Application
         catch (Exception e) when (IsControlFailure(e))
         {
             if (current == session && !quitting)
+            {
+                if (diagnosticPhase is not null)
+                    RecordTrayDiagnostic(diagnostic, diagnosticPhase, e is OperationCanceledException ? "timeout" : "failed");
                 ShowMessage("Error.ControlRequestFailed");
+            }
         }
         finally
         {
@@ -564,6 +586,7 @@ public sealed partial class App : Application
         ShowMessage(null);
         SetAvailability(false, false, "App.Stopped");
         icon.SetTip("Tray.Stopped");
+        RecordTrayDiagnostic(BeginTrayDiagnostic(), "core-session", "disconnected");
         await StopCoreAsync();
         transitioning = false;
         if (!quitting)
@@ -687,6 +710,7 @@ public sealed partial class App : Application
         if (quitting)
             return;
         quitting = true;
+        StopDiagnostics();
         updateCancellation?.Cancel();
         accountTransition?.Cancel();
         CancelStartupWait();

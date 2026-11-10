@@ -23,7 +23,7 @@ func (s *sshEndpoint) setDefaultAgent(enabled bool) error {
 		go func() {
 			defer close(done)
 			defer listener.Close()
-			acceptSSH(ctx, listener, s.app.engine, s.app.activity)
+			acceptSSH(ctx, listener, s.app.engine, s.app.activity, &s.app.diagnostics)
 		}()
 		return nil
 	}

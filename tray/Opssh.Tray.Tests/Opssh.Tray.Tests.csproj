@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Opssh.Tray/ActivityWheel.cs" Link="ActivityWheel.cs" />
+    <Compile Include="../Opssh.Tray/DiagnosticEvent.cs" Link="DiagnosticEvent.cs" />
+    <Compile Include="../Opssh.Tray/DiagnosticLogStore.cs" Link="DiagnosticLogStore.cs" />
     <Compile Include="../Opssh.Tray/Protocol.cs" Link="Protocol.cs" />
     <Compile Include="../Opssh.Tray/CoreProcess.cs" Link="CoreProcess.cs" />
     <Compile Include="../Opssh.Tray/CoreSession.cs" Link="CoreSession.cs" />

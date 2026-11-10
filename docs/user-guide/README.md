@@ -89,6 +89,12 @@ Use **SSH keys** to preload or clear one or all private keys. Expand a public ke
 
 The **Activity** page displays recent signing outcomes in this opssh session. Select multiple values for application, key, result or local date. Values within a filter group are alternatives. All active groups must match. Hold Shift while wheeling over a long command to scroll it horizontally, then continue at its edge to move the table. Command lines can contain sensitive values and only appear in the local activity window. **Clear activity** discards the session history.
 
+<a name="diagnostic-logs"></a>
+
+## Inspect diagnostic logs
+
+Open **Settings → Logs** to turn on local diagnostics. Logging starts off and uses **INFO** by default. The log records operating phases, durations, and outcomes, with private keys, account details, process details and SSH inputs excluded. Use **Open directory** to inspect the current log and up to two rotations. Select the path in the dialog to open the directory in File Explorer. Each file is capped at 1 MiB. **Clear logs** removes the existing files after confirmation. Turn logging off to stop new entries.
+
 <a name="appearance-and-updates"></a>
 
 ## Set appearance and check for updates

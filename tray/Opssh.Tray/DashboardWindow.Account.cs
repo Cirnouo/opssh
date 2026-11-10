@@ -8,7 +8,7 @@ namespace Opssh.Tray;
 public sealed partial class DashboardWindow
 {
     private readonly Dictionary<string, ToggleSwitch> vaultChecks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, (StackPanel Host, TextBlock Status, Button Retry)> vaultFeedback = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (StackPanel Host, TextBlock Status, HyperlinkButton Retry)> vaultFeedback = new(StringComparer.Ordinal);
     private readonly List<(StackPanel Host, InfoBar Notice, Button Retry)> pickerNotices = [];
     private (string Id, bool Enabled, string Feedback)? failedVault;
     private string? savingVault;
@@ -54,9 +54,11 @@ public sealed partial class DashboardWindow
         providerTime.Visibility = Visibility.Collapsed;
         AutomationProperties.SetHelpText(providerTime, Strings.Get("Dashboard.ProviderTime"));
         var request = new StackPanel { Spacing = 3, Children = { provider, providerTime }, MaxWidth = 210 };
-        page.Children.Add(Rows(
-            SettingRow("\uE77B", Strings.Get("Dashboard.SelectedAccount"), accountName, accountActions),
-            SettingRow("\uE72E", Strings.Get("Dashboard.DesktopAccess"), Strings.Get("Dashboard.DesktopAccessDescription"), request)));
+        var selected = SettingRow("\uE77B", Strings.Get("Dashboard.SelectedAccount"), accountName, accountActions);
+        selected.MinHeight = 61;
+        var access = SettingRow("\uE72E", Strings.Get("Dashboard.DesktopAccess"), Strings.Get("Dashboard.DesktopAccessDescription"), request);
+        access.MinHeight = 62;
+        page.Children.Add(Rows(selected, access));
         page.Children.Insert(1, BuildPickerNotice());
 
         vaultCount = Quiet("", 12);
@@ -116,7 +118,7 @@ public sealed partial class DashboardWindow
             var provider = state.Provider == "reading" ? state.Provider : state.LastProvider ?? state.Provider;
             var (label, style) = provider switch
             {
-                "last-success" => ("Settings.ProviderLastSuccess", "DashboardSuccessIconStyle"),
+                "last-success" => ("Dashboard.ProviderLastSuccess", "DashboardSuccessIconStyle"),
                 "denied" or "expired" => ("Dashboard.ProviderNotAuthorized", "DashboardWarningIconStyle"),
                 "unavailable" => ("Dashboard.ProviderFailed", "DashboardErrorIconStyle"),
                 "timed-out" => ("Settings.ProviderTimedOut", "DashboardErrorIconStyle"),
@@ -176,11 +178,12 @@ public sealed partial class DashboardWindow
                 vaultRows.Children.Add(Divider());
             var status = Quiet("", 12);
             AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-            var retry = DashboardButton(Strings.Get("Dashboard.Retry"), async () =>
+            var retry = new HyperlinkButton { Content = Strings.Get("Dashboard.Retry"), Padding = new Thickness(0) };
+            retry.Click += async (_, _) =>
             {
                 if (failedVault is { } failure && failure.Id == vault.Id)
                     await SetVaultAsync(vault.Id, failure.Enabled);
-            });
+            };
             var detail = new StackPanel { Spacing = 4, Children = { status, retry } };
             var row = SettingRow("\uE8B7", label, "", check, detail);
             detail.Visibility = Visibility.Collapsed;
@@ -226,6 +229,7 @@ public sealed partial class DashboardWindow
             var failed = failedVault is { } failure && failure.Id == id;
             status.Text = savingVault == id ? Strings.Get("Dashboard.VaultSaving") :
                 failed ? Strings.Get("Dashboard.VaultSaveFailed", Strings.Get(failedVault!.Value.Feedback)) : "";
+            status.Style = StyleFor(failed ? "DashboardErrorTextStyle" : "DashboardQuietTextStyle");
             host.Visibility = status.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
             retry.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
             retry.IsEnabled = enabled && !changingVault && (present || failedVault?.Enabled == false);
